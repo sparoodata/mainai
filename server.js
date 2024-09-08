@@ -1,37 +1,84 @@
-
-
-
+require('dotenv').config(); // Load environment variables from .env file
 const express = require('express');
-const mongoose = require('mongoose');
+const axios = require('axios');
 const bodyParser = require('body-parser');
-const path = require('path'); // For serving static files
+const path = require('path');
 const app = express();
-require('dotenv').config();
 
-// Middlewares
+// Middleware
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
-// MongoDB connection
-mongoose.connect('mongodb+srv://ece1saikumar:hyaDfmoR4xRStmYe@tenants.orhtp.mongodb.net/?retryWrites=true&w=majority&appName=Tenants', { useNewUrlParser: true, useUnifiedTopology: true });
+// WhatsApp API Configuration
+const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
+const WHATSAPP_API_KEY = process.env.WHATSAPP_API_KEY; // Store your API key in .env file
 
-// Routes
-const authRoutes = require('./routes/auth');
-const dashboardRoutes = require('./routes/dashboard');
+// Send WhatsApp Authentication Message
+const sendAuthMessage = async (phoneNumber) => {
+    try {
+        const response = await axios.post(WHATSAPP_API_URL, {
+            messaging_product: 'whatsapp',
+            to: phoneNumber,
+            type: 'template',
+            template: {
+                name: 'authorize',
+                language: {
+                    code: 'en',
+                },
+            },
+        }, {
+            headers: {
+                'Authorization': `Bearer ${WHATSAPP_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        return response.data;
+    } catch (error) {
+        console.error('Error sending WhatsApp message:', error.response ? error.response.data : error.message);
+        throw error;
+    }
+};
+
+// Handle Authentication Request
+app.post('/auth', async (req, res) => {
+    const { phoneNumber } = req.body;
+
+    if (!phoneNumber) {
+        return res.status(400).send('Phone number is required');
+    }
+
+    try {
+        await sendAuthMessage(phoneNumber);
+        res.status(200).send('Authentication message sent');
+    } catch (error) {
+        res.status(500).send('Failed to send authentication message');
+    }
+});
+
+// Handle WhatsApp Response (Simplified for this example)
+app.post('/auth/verify', (req, res) => {
+    const { phoneNumber, response } = req.body;
+
+    if (response === 'Yes') {
+        // Authenticate user and redirect to dashboard (simplified)
+        res.redirect('/dashboard');
+    } else {
+        res.redirect('/');
+    }
+});
 
 // Serve static HTML files
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'views', 'login.html'));
 });
 
-app.use('/auth', authRoutes);
-
-// Catch-all route for dashboard to serve the HTML file
 app.get('/dashboard', (req, res) => {
     res.sendFile(path.join(__dirname, 'views', 'dashboard.html'));
 });
 
 // Start server
-app.listen(process.env.PORT || 3000, () => {
-    console.log('Server is running...');
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
 });
