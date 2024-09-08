@@ -12,6 +12,10 @@
         <input type="text" id="phoneNumber" placeholder="Enter phone number" required>
         <button type="submit">Send Authentication Request</button>
     </form>
+    <div id="loading" style="display:none;">Loading...</div>
+    <div id="resend" style="display:none;">
+        <p>Authentication timed out. <button id="resendButton">Resend Request</button></p>
+    </div>
     <script src="/login.js"></script>
 </body>
 </html>

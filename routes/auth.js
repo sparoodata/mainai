@@ -27,6 +27,8 @@ const sendAuthMessage = async (phoneNumber) => {
         });
 
         return response.data;
+      console.log('Webhook received:', );
+
     } catch (error) {
         console.error('Error sending WhatsApp message:', error);
         throw error;
@@ -48,6 +50,7 @@ router.post('/auth', async (req, res) => {
         res.status(500).send('Failed to send authentication message');
     }
 });
+
 
 // Handle WhatsApp Response
 router.post('/auth/verify', async (req, res) => {

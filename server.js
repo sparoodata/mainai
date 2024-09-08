@@ -1,4 +1,4 @@
-require('dotenv').config(); // Load environment variables from .env file
+require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const bodyParser = require('body-parser');
@@ -12,6 +12,9 @@ app.use(express.static('public'));
 // WhatsApp API Configuration
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
 const WHATSAPP_API_KEY = process.env.WHATSAPP_API_KEY; // Store your API key in .env file
+
+// In-memory storage for session management
+const sessions = {}; // { phoneNumber: { status: 'pending', timeout: <timestamp> } }
 
 // Send WhatsApp Authentication Message
 const sendAuthMessage = async (phoneNumber) => {
@@ -50,21 +53,83 @@ app.post('/auth', async (req, res) => {
 
     try {
         await sendAuthMessage(phoneNumber);
+        sessions[phoneNumber] = {
+            status: 'pending',
+            timeout: Date.now() + 30000 // 30 seconds
+        };
         res.status(200).send('Authentication message sent');
     } catch (error) {
         res.status(500).send('Failed to send authentication message');
     }
 });
 
-// Handle WhatsApp Response (Simplified for this example)
-app.post('/auth/verify', (req, res) => {
-    const { phoneNumber, response } = req.body;
+// Handle WhatsApp Webhook
+app.post('/webhook', (req, res) => {
+    const { entry } = req.body;
 
-    if (response === 'Yes') {
-        // Authenticate user and redirect to dashboard (simplified)
-        res.redirect('/dashboard');
+    if (entry && entry.length > 0) {
+        const changes = entry[0].changes;
+        if (changes && changes.length > 0) {
+            const messages = changes[0].value.messages;
+            if (messages && messages.length > 0) {
+                const message = messages[0];
+                const phoneNumber = message.from;
+                const payload = message.button ? message.button.payload : null;
+
+                if (payload === 'Yes') {
+                    if (sessions[phoneNumber] && sessions[phoneNumber].status === 'pending') {
+                        sessions[phoneNumber].status = 'authenticated';
+                    }
+                }
+            }
+        }
+    }
+
+    res.sendStatus(200); // Respond to the webhook
+});
+
+app.post('/webhook', (req, res) => {
+    const { entry } = req.body;
+
+    if (entry && entry.length > 0) {
+        const changes = entry[0].changes;
+        if (changes && changes.length > 0) {
+            const messages = changes[0].value.messages;
+            if (messages && messages.length > 0) {
+                const message = messages[0];
+                const phoneNumber = message.from;
+                const payload = message.button ? message.button.payload : null;
+
+                if (payload === 'Yes') {
+                    if (sessions[phoneNumber] && sessions[phoneNumber].status === 'pending') {
+                        sessions[phoneNumber].status = 'authenticated';
+                    }
+                }
+            }
+        }
+    }
+
+    res.sendStatus(200); // Respond to the webhook
+});
+
+
+
+// Check authentication status
+app.post('/auth/status', (req, res) => {
+    const { phoneNumber } = req.body;
+
+    if (sessions[phoneNumber]) {
+        const session = sessions[phoneNumber];
+        if (session.status === 'authenticated') {
+            res.status(200).send('authenticated');
+        } else if (Date.now() > session.timeout) {
+            delete sessions[phoneNumber];
+            res.status(408).send('timeout');
+        } else {
+            res.status(202).send('pending');
+        }
     } else {
-        res.redirect('/');
+        res.status(404).send('not found');
     }
 });
 
