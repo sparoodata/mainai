@@ -2,25 +2,26 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
 const app = express();
-const port = process.env.PORT || 3000;
-
-const sessions = {}; // Store session data here
+const port = 3000;
 
 app.use(bodyParser.json());
-app.use(express.static('public'));
+app.use(bodyParser.urlencoded({ extended: true }));
 
-const WHATSAPP_ACCESS_TOKEN = 'EABkIvofy2pMBOwVu6VnvFPK2ZBE6E2NmCR968hHz26dM4x5kqncmDNODExDpoZCz3MfyyUV80zbghNveOMQ3kPr08UsjpTOkcJwhBrBF3wYxwO58CUgvCpKhdRtCA65OIWCc2XNlOHz5ZAyxuU9PY8oXQGdBW7znzeYchmt7Oz7hTJxF3pZC10P4xM7BRqDi1gSQvurAzUTZCKFvR98nPj0cYZCZBsZD'; // Replace with your actual token
+const sessions = {}; // To store session data
 
-app.post('/auth', async (req, res) => {
+const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
+const WHATSAPP_ACCESS_TOKEN = '<your_access_token>'; // Replace with your access token
+
+// Send WhatsApp Authentication Request
+app.post('/send-auth', async (req, res) => {
     const { phoneNumber } = req.body;
-    const sessionId = phoneNumber; // Use phone number as session ID
 
-    // Create a new session with 'pending' status
-    sessions[sessionId] = { status: 'pending' };
+    // Generate a unique session ID (could use a more robust approach)
+    const sessionId = Date.now().toString();
+    sessions[sessionId] = { phoneNumber, status: 'pending' };
 
     try {
-        // Send WhatsApp authentication request
-        await axios.post('https://graph.facebook.com/v20.0/110765315459068/messages', {
+        const response = await axios.post(WHATSAPP_API_URL, {
             messaging_product: 'whatsapp',
             to: phoneNumber,
             type: 'template',
@@ -35,15 +36,18 @@ app.post('/auth', async (req, res) => {
             }
         });
 
-        res.sendStatus(200);
+        console.log('Message sent successfully:', response.data);
+        res.json({ message: 'Authentication message sent', sessionId });
     } catch (error) {
-        console.error('Failed to send authentication message:', error.response ? error.response.data : error.message);
-        res.status(500).send('Failed to send authentication message');
+        console.error('Failed to send authentication message:', error);
+        res.status(500).json({ error: 'Failed to send authentication message' });
     }
 });
 
+// Handle Webhook Callback
 app.post('/webhook', (req, res) => {
     const { entry } = req.body;
+    console.log('Webhook Request Received:', req.body);
 
     if (entry && entry.length > 0) {
         const changes = entry[0].changes;
@@ -54,11 +58,15 @@ app.post('/webhook', (req, res) => {
                 const phoneNumber = message.from;
                 const payload = message.button ? message.button.payload : null;
 
-                if (sessions[phoneNumber]) {
-                    if (payload === 'Yes') {
-                        sessions[phoneNumber].status = 'authenticated';
-                    } else if (payload === 'No') {
-                        sessions[phoneNumber].status = 'denied';
+                // Find the session associated with the phone number
+                for (const [sessionId, session] of Object.entries(sessions)) {
+                    if (session.phoneNumber === phoneNumber) {
+                        if (payload === 'Yes') {
+                            session.status = 'authenticated';
+                        } else if (payload === 'No') {
+                            session.status = 'denied';
+                        }
+                        break;
                     }
                 }
             }
@@ -68,19 +76,24 @@ app.post('/webhook', (req, res) => {
     res.sendStatus(200); // Respond to the webhook
 });
 
-app.post('/auth/status', (req, res) => {
-    const { phoneNumber } = req.body;
+// Check Authentication Status
+app.get('/auth/status/:sessionId', (req, res) => {
+    const { sessionId } = req.params;
+    const session = sessions[sessionId];
 
-    if (sessions[phoneNumber]) {
-        const status = sessions[phoneNumber].status;
-        console.log(status);
-        res.json({ status }); // Return status as JSON
+    if (session) {
+        if (session.status === 'authenticated') {
+            res.json({ status: 'authenticated', message: 'Login successful' });
+        } else if (session.status === 'denied') {
+            res.json({ status: 'denied', message: 'Access denied' });
+        } else {
+            res.json({ status: 'pending', message: 'Waiting for authorization' });
+        }
     } else {
-        res.json({ status: 'not_found' });
-       console.log(status);
+        res.status(404).json({ status: 'not_found', message: 'Session not found' });
     }
 });
 
 app.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}`);
+    console.log(`Server is running on http://localhost:${port}`);
 });

@@ -1,21 +1,15 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login</title>
-    <link rel="stylesheet" href="/styles.css">
+    <script src="/path/to/login.js"></script> <!-- Ensure the path is correct -->
 </head>
 <body>
     <h1>Login</h1>
-    <form id="loginForm">
-        <input type="text" id="phoneNumber" placeholder="Enter phone number" required>
+    <form id="login-form">
+        <input type="text" id="phoneNumber" placeholder="Enter phone number" required />
         <button type="submit">Send Authentication Request</button>
     </form>
-    <div id="loading" style="display:none;">Loading...</div>
-    <div id="resend" style="display:none;">
-        <p>Authentication timed out. <button id="resendButton">Resend Request</button></p>
-    </div>
-    <script src="/login.js"></script>
+    <p id="status-message"></p>
 </body>
 </html>

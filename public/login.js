@@ -1,49 +1,56 @@
-document.getElementById('loginForm').addEventListener('submit', async function(event) {
-    event.preventDefault();
-    const phoneNumber = document.getElementById('phoneNumber').value;
-    const statusMessage = document.getElementById('statusMessage');
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('login-form');
+    const statusMessage = document.getElementById('status-message');
 
-    // Show loading message
-    statusMessage.textContent = 'Loading...';
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
 
-    try {
-        // Send phone number to backend for WhatsApp authentication
-        await fetch('/auth', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phoneNumber })
-        });
+        const phoneNumber = document.getElementById('phoneNumber').value;
+        statusMessage.innerHTML = 'Sending authentication request...';
 
-        // Poll for authentication status
-        let isAuthenticated = false;
-        const startTime = Date.now();
-        const timeout = 30000; // 30 seconds
-
-        while (Date.now() - startTime < timeout) {
-            const response = await fetch('/auth/status', {
+        try {
+            const response = await fetch('/send-auth', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ phoneNumber })
             });
-            const result = await response.json();
+            const data = await response.json();
 
-            if (result.status === 'authenticated') {
-                isAuthenticated = true;
-                break;
-            } else if (result.status === 'denied') {
-                break;
+            if (response.ok) {
+                statusMessage.innerHTML = 'Authentication request sent. Waiting for confirmation...';
+                const sessionId = data.sessionId;
+                await checkAuthStatus(sessionId);
+            } else {
+                statusMessage.innerHTML = 'Failed to send authentication request.';
             }
-            await new Promise(resolve => setTimeout(resolve, 2000)); // Poll every 2 seconds
+        } catch (error) {
+            statusMessage.innerHTML = 'Error: ' + error.message;
         }
+    });
 
-        // Handle authentication result
-        if (isAuthenticated) {
-            window.location.href = '/dashboard'; // Redirect to dashboard
-        } else {
-            statusMessage.textContent = 'Access denied or timeout. Please try again.';
-        }
-    } catch (error) {
-        console.error('Login failed:', error);
-        statusMessage.textContent = 'An error occurred. Please try again.';
+    async function checkAuthStatus(sessionId) {
+        const timeout = 30000; // 30 seconds
+        const startTime = Date.now();
+
+        const checkInterval = setInterval(async () => {
+            try {
+                const response = await fetch(`/auth/status/${sessionId}`);
+                const data = await response.json();
+
+                if (data.status === 'authenticated') {
+                    clearInterval(checkInterval);
+                    window.location.href = '/dashboard';
+                } else if (data.status === 'denied') {
+                    clearInterval(checkInterval);
+                    statusMessage.innerHTML = 'Access denied.';
+                } else if (Date.now() - startTime > timeout) {
+                    clearInterval(checkInterval);
+                    statusMessage.innerHTML = 'Authentication request timed out. Please try again.';
+                }
+            } catch (error) {
+                statusMessage.innerHTML = 'Error checking status: ' + error.message;
+                clearInterval(checkInterval);
+            }
+        }, 5000); // Check every 5 seconds
     }
 });
