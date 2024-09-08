@@ -1,33 +1,64 @@
 const express = require('express');
-const router = express.Router();
 const axios = require('axios');
+const router = express.Router();
 
-// Send authentication request via WhatsApp
-router.post('/login', async (req, res) => {
-    const { phoneNumber } = req.body;
-    const message = `Please authenticate by replying "YES" or "NO".`;
-    
+// WhatsApp API Configuration
+const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
+const WHATSAPP_API_KEY = process.env.WHATSAPP_API_KEY; // Store your API key in .env file
+
+// Send WhatsApp Authentication Message
+const sendAuthMessage = async (phoneNumber) => {
     try {
-        await axios.post('https://api.whatsapp.com/send', {
-            phone: phoneNumber,
-            message: message,
-            key: 'EABkIvofy2pMBO7m8SrPKiAgzXfFCHW2Mso4W4jXxc3dApHv55Vw6WNwrjT22oWFk6MdvU3GXxM1BSeunpl5MbTWkID0CMIKQgFhiRYYZC57IBMPUZBkPo2HlzuWmc0mxHezS6DZAXyfjpzsSEmSCKA65L0qRkuRJMHihPo9LCRFvsrzUBi1O3JiBVWm3sLi'
+        const response = await axios.post(WHATSAPP_API_URL, {
+            messaging_product: 'whatsapp',
+            to: phoneNumber,
+            type: 'template',
+            template: {
+                name: 'authorize',
+                language: {
+                    code: 'en',
+                },
+            },
+        }, {
+            headers: {
+                'Authorization': `Bearer ${WHATSAPP_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
         });
-        res.status(200).send('Authentication request sent.');
+
+        return response.data;
     } catch (error) {
-        res.status(500).send('Error sending authentication request.');
+        console.error('Error sending WhatsApp message:', error);
+        throw error;
+    }
+};
+
+// Handle Authentication Request
+router.post('/auth', async (req, res) => {
+    const { phoneNumber } = req.body;
+
+    if (!phoneNumber) {
+        return res.status(400).send('Phone number is required');
+    }
+
+    try {
+        await sendAuthMessage(phoneNumber);
+        res.status(200).send('Authentication message sent');
+    } catch (error) {
+        res.status(500).send('Failed to send authentication message');
     }
 });
 
-// Handle WhatsApp reply (this part needs webhook setup)
-router.post('/verify', (req, res) => {
+// Handle WhatsApp Response
+router.post('/auth/verify', async (req, res) => {
     const { phoneNumber, response } = req.body;
-    
-    if (response === 'YES') {
-        // Redirect to dashboard (implement actual redirection logic here)
+
+    if (response === 'Yes') {
+        // Authenticate user and redirect to dashboard
+        // For example, set session or token here
         res.redirect('/dashboard');
     } else {
-        res.send('Please re-enter your phone number.');
+        res.redirect('/');
     }
 });
 

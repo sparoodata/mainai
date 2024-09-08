@@ -6,6 +6,7 @@ const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
 const path = require('path'); // For serving static files
 const app = express();
+require('dotenv').config();
 
 // Middlewares
 app.use(bodyParser.json());
