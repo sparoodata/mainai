@@ -25,7 +25,6 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ phoneNumber })
             });
-          
             const result = await response.json();
 
             if (result.status === 'authenticated') {
