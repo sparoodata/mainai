@@ -1,22 +1,36 @@
+
+
+
 const express = require('express');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
-const axios = require('axios');
+const path = require('path'); // For serving static files
 const app = express();
 
+// Middlewares
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
-// Connect to MongoDB
+// MongoDB connection
 mongoose.connect('mongodb+srv://ece1saikumar:hyaDfmoR4xRStmYe@tenants.orhtp.mongodb.net/?retryWrites=true&w=majority&appName=Tenants', { useNewUrlParser: true, useUnifiedTopology: true });
 
-// Import routes
+// Routes
 const authRoutes = require('./routes/auth');
 const dashboardRoutes = require('./routes/dashboard');
 
-app.use('/auth', authRoutes);
-app.use('/dashboard', dashboardRoutes);
+// Serve static HTML files
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'views', 'login.html'));
+});
 
+app.use('/auth', authRoutes);
+
+// Catch-all route for dashboard to serve the HTML file
+app.get('/dashboard', (req, res) => {
+    res.sendFile(path.join(__dirname, 'views', 'dashboard.html'));
+});
+
+// Start server
 app.listen(process.env.PORT || 3000, () => {
     console.log('Server is running...');
 });
