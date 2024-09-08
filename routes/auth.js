@@ -56,10 +56,10 @@ router.post('/auth', async (req, res) => {
 router.post('/auth/verify', async (req, res) => {
     const { phoneNumber, response } = req.body;
 
-  console.log('Webhook received:', req.body);
+  console.log('Webhook received:', res.body);
 
 
-    if (response === 'Yes') {
+    if (res.body === 'Yes') {
         // Authenticate user and redirect to dashboard
         // For example, set session or token here
         res.redirect('/dashboard');

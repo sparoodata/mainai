@@ -1,51 +1,50 @@
-document.getElementById('loginForm').addEventListener('submit', async (event) => {
+document.getElementById('loginForm').addEventListener('submit', async function(event) {
     event.preventDefault();
-
     const phoneNumber = document.getElementById('phoneNumber').value;
+    const statusMessage = document.getElementById('statusMessage');
 
-    document.getElementById('loading').style.display = 'block';
-    document.getElementById('resend').style.display = 'none';
-    document.getElementById('accessDenied').style.display = 'none';
+    // Show loading message
+    statusMessage.textContent = 'Loading...';
 
     try {
-        // Send authentication request
-        const response = await fetch('/auth', {
+        // Send phone number to backend for WhatsApp authentication
+        await fetch('/auth', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phoneNumber })
         });
 
-        if (response.ok) {
-            // Poll for authentication status
-            const checkStatus = async () => {
-                const statusResponse = await fetch('/auth/status', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phoneNumber })
-                });
+        // Poll for authentication status
+        let isAuthenticated = false;
+        const startTime = Date.now();
+        const timeout = 30000; // 30 seconds
 
-                if (statusResponse.ok) {
-                    const status = await statusResponse.text();
-                    if (status === 'authenticated') {
-                        window.location.href = '/dashboard';
-                    } else if (status === 'denied') {
-                        document.getElementById('loading').style.display = 'none';
-                        document.getElementById('accessDenied').style.display = 'block';
-                    } else if (status === 'pending') {
-                        setTimeout(checkStatus, 5000); // Check every 5 seconds
-                    }
-                } else {
-                    console.error('Failed to check authentication status:', await statusResponse.text());
-                }
-            };
+        while (Date.now() - startTime < timeout) {
+            const response = await fetch('/auth/status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phoneNumber })
+            });
+          
+            const result = await response.json();
 
-            setTimeout(checkStatus, 5000); // Start polling after 5 seconds
+            if (result.status === 'authenticated') {
+                isAuthenticated = true;
+                break;
+            } else if (result.status === 'denied') {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Poll every 2 seconds
+        }
+
+        // Handle authentication result
+        if (isAuthenticated) {
+            window.location.href = '/dashboard'; // Redirect to dashboard
         } else {
-            console.error('Failed to send authentication message:', await response.text());
-            alert('Failed to send authentication message.');
+            statusMessage.textContent = 'Access denied or timeout. Please try again.';
         }
     } catch (error) {
-        console.error('Error:', error);
-        alert('Error sending request.');
+        console.error('Login failed:', error);
+        statusMessage.textContent = 'An error occurred. Please try again.';
     }
 });

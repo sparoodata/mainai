@@ -9,6 +9,8 @@ const sessions = {}; // Store session data here
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
+const WHATSAPP_ACCESS_TOKEN = 'EABkIvofy2pMBOwVu6VnvFPK2ZBE6E2NmCR968hHz26dM4x5kqncmDNODExDpoZCz3MfyyUV80zbghNveOMQ3kPr08UsjpTOkcJwhBrBF3wYxwO58CUgvCpKhdRtCA65OIWCc2XNlOHz5ZAyxuU9PY8oXQGdBW7znzeYchmt7Oz7hTJxF3pZC10P4xM7BRqDi1gSQvurAzUTZCKFvR98nPj0cYZCZBsZD'; // Replace with your actual token
+
 app.post('/auth', async (req, res) => {
     const { phoneNumber } = req.body;
     const sessionId = phoneNumber; // Use phone number as session ID
@@ -28,7 +30,7 @@ app.post('/auth', async (req, res) => {
             }
         }, {
             headers: {
-                'Authorization': 'Bearer <secret key>',
+                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -71,15 +73,9 @@ app.post('/auth/status', (req, res) => {
 
     if (sessions[phoneNumber]) {
         const status = sessions[phoneNumber].status;
-        if (status === 'authenticated') {
-            res.send('authenticated');
-        } else if (status === 'denied') {
-            res.send('denied');
-        } else {
-            res.send('pending');
-        }
+        res.json({ status }); // Return status as JSON
     } else {
-        res.send('not_found');
+        res.json({ status: 'not_found' });
     }
 });
 
