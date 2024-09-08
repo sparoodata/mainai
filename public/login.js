@@ -5,8 +5,10 @@ document.getElementById('loginForm').addEventListener('submit', async (event) =>
 
     document.getElementById('loading').style.display = 'block';
     document.getElementById('resend').style.display = 'none';
+    document.getElementById('accessDenied').style.display = 'none';
 
     try {
+        // Send authentication request
         const response = await fetch('/auth', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -26,18 +28,18 @@ document.getElementById('loginForm').addEventListener('submit', async (event) =>
                     const status = await statusResponse.text();
                     if (status === 'authenticated') {
                         window.location.href = '/dashboard';
+                    } else if (status === 'denied') {
+                        document.getElementById('loading').style.display = 'none';
+                        document.getElementById('accessDenied').style.display = 'block';
                     } else if (status === 'pending') {
                         setTimeout(checkStatus, 5000); // Check every 5 seconds
-                    } else if (status === 'timeout') {
-                        document.getElementById('loading').style.display = 'none';
-                        document.getElementById('resend').style.display = 'block';
                     }
                 } else {
                     console.error('Failed to check authentication status:', await statusResponse.text());
                 }
             };
 
-            checkStatus();
+            setTimeout(checkStatus, 5000); // Start polling after 5 seconds
         } else {
             console.error('Failed to send authentication message:', await response.text());
             alert('Failed to send authentication message.');
@@ -46,10 +48,4 @@ document.getElementById('loginForm').addEventListener('submit', async (event) =>
         console.error('Error:', error);
         alert('Error sending request.');
     }
-});
-
-document.getElementById('resendButton').addEventListener('click', () => {
-    document.getElementById('phoneNumber').value = '';
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('resend').style.display = 'none';
 });

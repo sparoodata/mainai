@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+    <style>
+        /* Add your styles here */
+        #loading, #accessDenied {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <form id="loginForm">
+        <label for="phoneNumber">Phone Number:</label>
+        <input type="text" id="phoneNumber" name="phoneNumber" placeholder="+91XXXXXXXXXX" required>
+        <button type="submit">Send Request</button>
+    </form>
+
+    <div id="loading">Loading...</div>
+    <div id="accessDenied">Access Denied</div>
+    <button id="resend" style="display: none;">Resend Request</button>
+
+    <script src="login.js"></script>
+</body>
+</html>
