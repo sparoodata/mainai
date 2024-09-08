@@ -27,7 +27,7 @@ const sendAuthMessage = async (phoneNumber) => {
         });
 
         return response.data;
-      console.log('Webhook received:', );
+      console.log('Webhook received:', response.data);
 
     } catch (error) {
         console.error('Error sending WhatsApp message:', error);
@@ -55,6 +55,9 @@ router.post('/auth', async (req, res) => {
 // Handle WhatsApp Response
 router.post('/auth/verify', async (req, res) => {
     const { phoneNumber, response } = req.body;
+
+  console.log('Webhook received:', req.body);
+
 
     if (response === 'Yes') {
         // Authenticate user and redirect to dashboard

@@ -99,7 +99,7 @@ app.post('/webhook', (req, res) => {
                 const message = messages[0];
                 const phoneNumber = message.from;
                 const payload = message.button ? message.button.payload : null;
-
+                console.log(payload);
                 if (payload === 'Yes') {
                     if (sessions[phoneNumber] && sessions[phoneNumber].status === 'pending') {
                         sessions[phoneNumber].status = 'authenticated';
@@ -117,6 +117,8 @@ app.post('/webhook', (req, res) => {
 // Check authentication status
 app.post('/auth/status', (req, res) => {
     const { phoneNumber } = req.body;
+
+  console.log('Webhook received:', req.body);
 
     if (sessions[phoneNumber]) {
         const session = sessions[phoneNumber];
