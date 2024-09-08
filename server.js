@@ -73,9 +73,11 @@ app.post('/auth/status', (req, res) => {
 
     if (sessions[phoneNumber]) {
         const status = sessions[phoneNumber].status;
+        console.log(status);
         res.json({ status }); // Return status as JSON
     } else {
         res.json({ status: 'not_found' });
+       console.log(status);
     }
 });
 
