@@ -10,8 +10,8 @@ app.use(bodyParser.urlencoded({ extended: true }));
 const sessions = {}; // To store session data
 
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
-const WHATSAPP_ACCESS_TOKEN = '<your_access_token>'; // Replace with your access token
 
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 // Send WhatsApp Authentication Request
 app.post('/send-auth', async (req, res) => {
     const { phoneNumber } = req.body;
