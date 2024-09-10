@@ -67,7 +67,7 @@
 
     <script>
 document.getElementById('authForm').addEventListener('submit', async function(event) {
-    event.preventDefault();
+    event.preventDefault();  // This should prevent the form from reloading the page
     const phoneNumber = document.getElementById('phoneNumber').value;
     const countryCode = document.getElementById('countryCode').value;
     const submitBtn = document.getElementById('submitBtn');
@@ -126,6 +126,7 @@ document.getElementById('authForm').addEventListener('submit', async function(ev
         submitBtn.disabled = false;
     }
 });
+
 
   </script>
 </body>
