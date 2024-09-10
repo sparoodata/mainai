@@ -29,6 +29,25 @@ app.use(session({
 }));
 
 
+app.post('/login', (req, res) => {
+  const { phoneNumber, authToken } = req.body;
+
+  // Logic to authenticate the user
+  if (authTokenIsValid) {
+    req.session.phoneNumber = phoneNumber;
+    req.session.status = 'authenticated';
+    
+    req.session.save(err => {
+      if (err) {
+        console.error("Error saving session:", err);
+        return res.status(500).send("Error saving session");
+      }
+      return res.redirect('/dashboard');
+    });
+  } else {
+    res.status(401).send("Invalid credentials");
+  }
+});
 
 const sessions = {}; // Store session data
 
@@ -167,6 +186,7 @@ app.get('/auth/status/:sessionId', (req, res) => {
     if (session) {
         console.log('Checking session:', session);
         if (session.status === 'authenticated') {
+          
             res.json({ status: 'authenticated', message: 'Login successful' });
         } else if (session.status === 'denied') {
             res.json({ status: 'denied', message: 'Access denied' });
@@ -185,15 +205,13 @@ app.get('/', (req, res) => {
 
 // Secure Dashboard Route
 app.get('/dashboard', (req, res) => {
-    console.log("Session data:", req.session);  // Add this line to inspect the session
-    
-    if (req.session.authenticatedSessionId && sessions[req.session.authenticatedSessionId]?.status === 'authenticated') {
-        const phoneNumber = req.session.phoneNumber;
-        res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number: ${phoneNumber}</p>`);
-    } else {
-        res.redirect('/');  // Redirect to login page if not authenticated
-    }
+  if (req.session.status === 'authenticated') {
+    res.send('Welcome to your dashboard');
+  } else {
+    res.redirect('/login');
+  }
 });
+
 
 
 // Access Denied route
