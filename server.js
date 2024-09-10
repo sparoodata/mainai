@@ -128,11 +128,11 @@ app.post('/webhook', (req, res) => {
                     if (sessions[sessionId]) {
                         if (action === 'yes') {
                           
-                           session.status = 'authenticated';
-    req.session.authenticatedSessionId = sessionId; // Store session ID
-    req.session.phoneNumber = session.phoneNumber;  // Store the phone number
                           
-                               console.log('User authenticated successfully:', session.phoneNumber);
+                            sessions[sessionId].status = 'authenticated';
+                            req.session.authenticatedSessionId = sessionId;  // Save authenticated session ID
+                            req.session.phoneNumber = phoneNumber;  // Save phone number in session
+                            console.log('User authenticated successfully:', phoneNumber);
                           
                         } else if (action === 'no') {
                             sessions[sessionId].status = 'denied';
