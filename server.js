@@ -10,8 +10,9 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // Session configuration
+
 app.use(session({
-    secret: 'your-secret-key', // Use a secure random string
+    secret: 'my_session_secret', // Use a secure random string
     resave: false,
     saveUninitialized: true,
     cookie: { secure: false } // Set secure: true if using HTTPS
@@ -97,6 +98,18 @@ app.post('/webhook', (req, res) => {
                         if (payload === 'Yes') {
                             sessions[sessionId] = { ...session, status: 'authenticated' }; // Correctly reassign the session
                             console.log('Session authenticated:', sessions[sessionId]);
+                        const session = require('express-session');
+
+// Use session middleware
+app.use(session({
+    secret: 'my_session_secret',
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: false } // Set to true if using HTTPS
+}));
+                          
+                          req.session.phoneNumber = phoneNumber;
+                          req.session.status = 'authenticated';
                         } else if (payload === 'No') {
                             sessions[sessionId] = { ...session, status: 'denied' }; // Correctly reassign the session
                             console.log('Session denied:', sessions[sessionId]);
