@@ -70,7 +70,7 @@
         <select id="countryCode" name="countryCode" required>
             <option value="1">USA (+1)</option>
             <option value="44">UK (+44)</option>
-            <option value="91">India (+91)</option>
+            <option value="91" selected>India (+91)</option> <!-- India selected by default -->
             <option value="49">Germany (+49)</option>
             <option value="61">Australia (+61)</option>
         </select>
@@ -91,6 +91,8 @@
             const fullPhoneNumber = countryCode + phoneNumber;
 
             document.getElementById('statusMessage').innerText = 'Sending WhatsApp message...';
+            document.getElementById('countryCode').disabled = true; // Disable the dropdown
+            document.getElementById('phoneNumber').disabled = true;
 
             try {
                 const response = await fetch('/send-auth', {
@@ -103,14 +105,18 @@
 
                 const data = await response.json();
                 if (data.sessionId) {
-                    document.getElementById('statusMessage').innerText = 'Waiting for WhatsApp response...';
+                    document.getElementById('statusMessage').innerText = 'Waiting for response...';
                     pollAuthStatus(data.sessionId);
                 } else {
                     document.getElementById('statusMessage').innerText = 'Failed to send WhatsApp message.';
+                    document.getElementById('countryCode').disabled = false; // Re-enable if failed
+                    document.getElementById('phoneNumber').disabled = false;
                 }
             } catch (error) {
                 console.error('Error:', error);
                 document.getElementById('statusMessage').innerText = 'An error occurred.';
+                document.getElementById('countryCode').disabled = false;
+                document.getElementById('phoneNumber').disabled = false;
             }
         });
 
@@ -122,10 +128,13 @@
 
                     if (data.status === 'authenticated') {
                         clearInterval(intervalId);
+                        document.getElementById('phoneNumber').value = ''; // Clear phone number field
                         window.location.href = '/dashboard';  // Redirect to dashboard
                     } else if (data.status === 'denied') {
                         clearInterval(intervalId);
                         document.getElementById('statusMessage').innerText = 'Access denied.';
+                        document.getElementById('countryCode').disabled = false; // Re-enable if denied
+                        document.getElementById('phoneNumber').disabled = false;
                     }
                 } catch (error) {
                     console.error('Error checking auth status:', error);
