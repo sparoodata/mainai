@@ -104,7 +104,7 @@ app.post('/webhook', (req, res) => {
 app.get('/auth/status/:sessionId', (req, res) => {
     const { sessionId } = req.params;
     const session = sessions[sessionId];
-
+    console.log()
     if (session) {
         if (session.status === 'authenticated') {
             req.session.authenticated = true; // Set session variable for authentication
