@@ -2,7 +2,6 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
 const axios = require('axios');
-const session = require('express-session');
 const app = express();
 const port = 3000;
 
@@ -12,12 +11,13 @@ require('dotenv').config();
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Session configuration
+const session = require('express-session');
+
 app.use(session({
-    secret: 'your-secret-key', // Use a secure random string
+    secret: 'your_secret_key',  // Replace with your own secret
     resave: false,
     saveUninitialized: true,
-    cookie: { secure: false } // Set secure: true if using HTTPS
+    cookie: { secure: false }  // Set secure: true if using HTTPS
 }));
 
 const sessions = {}; // Store session data
@@ -172,8 +172,8 @@ app.get('/', (req, res) => {
 
 // Secure Dashboard Route
 app.get('/dashboard', (req, res) => {
-     console.log(req.session.authenticatedSessionId);
-   
+    console.log(req.session.authenticatedSessionId);  // Check if session is available
+
     if (req.session.authenticatedSessionId && sessions[req.session.authenticatedSessionId].status === 'authenticated') {
         const phoneNumber = req.session.phoneNumber;
         res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number: ${phoneNumber}</p>`);
