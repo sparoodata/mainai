@@ -13,9 +13,26 @@ const sessions = {}; // To store session data
 // WhatsApp API credentials
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN; // Replace with your access token
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN; // Replace with your verify token
 
 // Serve static files from the public directory
 app.use(express.static('public'));
+
+// Webhook Verification
+app.get('/webhook', (req, res) => {
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
+
+    if (mode && token === VERIFY_TOKEN) {
+        // Respond with the challenge token from the request to verify the webhook
+        console.log('Webhook verified successfully!');
+        res.status(200).send(challenge);
+    } else {
+        // Respond with '403 Forbidden' if verification fails
+        res.sendStatus(403);
+    }
+});
 
 // Send WhatsApp Authentication Request
 app.post('/send-auth', async (req, res) => {
@@ -62,6 +79,8 @@ app.post('/webhook', (req, res) => {
                 const message = messages[0];
                 const phoneNumber = message.from;
                 const payload = message.button ? message.button.payload : null;
+                
+                console.log(payload);
 
                 // Find the session associated with the phone number
                 for (const [sessionId, session] of Object.entries(sessions)) {
