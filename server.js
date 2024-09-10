@@ -32,16 +32,32 @@ app.use(session({
         collectionName: 'sessions'
     }),
     cookie: {
-        secure: true, // Set to true if using HTTPS
+        secure: false, // Set to true if using HTTPS
         maxAge: 1000 * 60 * 60 * 24, // 1 day
     }
 }));
+
 
 app.use((req, res, next) => {
     console.log('Session ID:', req.sessionID);
     console.log('Session Data:', req.session);
     next();
 });
+
+app.use(session({
+    secret: 'your-secret-key',
+    resave: false,
+    saveUninitialized: false,
+    store: MongoStore.create({
+        mongoUrl: MONGO_URI,
+        collectionName: 'sessions'
+    }),
+    cookie: {
+        secure: false, // Set to true if using HTTPS
+        maxAge: 1000 * 60 * 60 * 24, // 1 day
+    }
+}));
+
 
 
 
@@ -208,9 +224,10 @@ app.get('/', (req, res) => {
 // Secure Dashboard Route
 // Secure Dashboard Route
 app.get('/dashboard', (req, res) => {
-    const sessionId = req.session.authenticatedSessionId;
-    console.log('Session ID:', sessionId);
+    console.log('Session ID:', req.sessionID);
     console.log('Session Data:', req.session);
+
+    const sessionId = req.session.authenticatedSessionId;
 
     if (sessionId && sessions[sessionId] && sessions[sessionId].status === 'authenticated') {
         const phoneNumber = req.session.phoneNumber;
@@ -222,6 +239,7 @@ app.get('/dashboard', (req, res) => {
 });
 
 
+
 app.get('/test-session', (req, res) => {
     req.session.test = 'This is a test';
     req.session.save(err => {
@@ -231,6 +249,16 @@ app.get('/test-session', (req, res) => {
         res.send('Test session set!');
     });
 });
+
+app.get('/set-session', (req, res) => {
+    req.session.test = 'Test value';
+    res.send('Session value set!');
+});
+
+app.get('/get-session', (req, res) => {
+    res.send(`Session value: ${req.session.test || 'No session value found'}`);
+});
+
 
 app.get('/read-session', (req, res) => {
     res.send(`Test session value: ${req.session.test || 'No test session found'}`);
