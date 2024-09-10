@@ -17,6 +17,7 @@ app.use(session({
     cookie: { secure: false } // Set secure: true if using HTTPS
 }));
 
+
 const sessions = {}; // Store session data
 
 // WhatsApp API credentials
@@ -92,16 +93,13 @@ app.post('/webhook', (req, res) => {
 
                 // Find the session associated with the phone number
                 for (const [sessionId, session] of Object.entries(sessions)) {
-                    // Compare without '+'
                     if (session.phoneNumber.replace(/^\+/, '') === phoneNumber) {
                         if (payload === 'Yes') {
-                            // Set authenticated status and store the phone number in the session without '+'
-                            session.status = 'authenticated';
-                            req.session.authenticatedSessionId = sessionId;
-                            req.session.phoneNumber = phoneNumber; // Store phone number without '+'
-                            console.log('User authenticated successfully:', phoneNumber);
+                            sessions[sessionId] = { ...session, status: 'authenticated' }; // Correctly reassign the session
+                            console.log('Session authenticated:', sessions[sessionId]);
                         } else if (payload === 'No') {
-                            session.status = 'denied';
+                            sessions[sessionId] = { ...session, status: 'denied' }; // Correctly reassign the session
+                            console.log('Session denied:', sessions[sessionId]);
                         }
                         break;
                     }
@@ -118,8 +116,9 @@ app.post('/webhook', (req, res) => {
 app.get('/auth/status/:sessionId', (req, res) => {
     const { sessionId } = req.params;
     const session = sessions[sessionId];
-    console.log(session.status);
+
     if (session) {
+        console.log('Checking session:', session); // Debugging
         if (session.status === 'authenticated') {
             res.json({ status: 'authenticated', message: 'Login successful' });
         } else if (session.status === 'denied') {
@@ -131,6 +130,7 @@ app.get('/auth/status/:sessionId', (req, res) => {
         res.status(404).json({ status: 'not_found', message: 'Session not found' });
     }
 });
+
 
 // Serve the HTML file
 app.get('/', (req, res) => {
