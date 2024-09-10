@@ -17,7 +17,10 @@
     "mongoose": "^6.13.1",
     "body-parser": "^1.20.2",
     "axios": "^1.7.7",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "express-session": "^1.18.0",
+    "crypt": "^0.0.2",
+    "crypto-js": "^4.2.0"
   },
   "engines": {
     "node": "14.x"
