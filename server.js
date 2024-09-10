@@ -9,20 +9,20 @@ const port = 3000;
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Configure session middleware
+// Session configuration
 app.use(session({
-    secret: 'your-secret-key', // Replace with a secure random string
+    secret: 'your-secret-key', // Use a secure random string
     resave: false,
     saveUninitialized: true,
-    cookie: { secure: false } // Set `secure: true` if using HTTPS
+    cookie: { secure: false } // Set secure: true if using HTTPS
 }));
 
-const sessions = {}; // To store session data
+const sessions = {}; // Store session data
 
 // WhatsApp API credentials
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
-const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN; // Replace with your access token
-const VERIFY_TOKEN = process.env.VERIFY_TOKEN; // Replace with your verify token
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN; // Your WhatsApp access token
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN; // Your webhook verify token
 
 // Serve static files from the public directory
 app.use(express.static('public'));
@@ -34,11 +34,9 @@ app.get('/webhook', (req, res) => {
     const challenge = req.query['hub.challenge'];
 
     if (mode && token === VERIFY_TOKEN) {
-        // Respond with the challenge token from the request to verify the webhook
         console.log('Webhook verified successfully!');
         res.status(200).send(challenge);
     } else {
-        // Respond with '403 Forbidden' if verification fails
         res.sendStatus(403);
     }
 });
@@ -47,8 +45,8 @@ app.get('/webhook', (req, res) => {
 app.post('/send-auth', async (req, res) => {
     const { phoneNumber, countryCode } = req.body;
 
-    // Remove the '+' prefix from phoneNumber
-    const formattedPhoneNumber = phoneNumber.replace(/^\+/, '');
+    // Concatenate the country code and phone number
+    const formattedPhoneNumber = `${countryCode}${phoneNumber.replace(/^\+/, '')}`;
 
     // Generate a unique session ID
     const sessionId = Date.now().toString();
@@ -81,7 +79,6 @@ app.post('/send-auth', async (req, res) => {
 // Handle Webhook Callback
 app.post('/webhook', (req, res) => {
     const { entry } = req.body;
-    console.log('Webhook Request Received:', req.body);
 
     if (entry && entry.length > 0) {
         const changes = entry[0].changes;
@@ -92,15 +89,19 @@ app.post('/webhook', (req, res) => {
                 const phoneNumber = message.from.replace(/^\+/, ''); // Remove the '+' prefix
                 const payload = message.button ? message.button.payload : null;
 
-                console.log('Received Payload:', payload);
-
                 // Find the session associated with the phone number
                 for (const [sessionId, session] of Object.entries(sessions)) {
+                  console.log(session.phoneNumber);
+                  console.log(phoneNumber);
                     if (session.phoneNumber === phoneNumber) {
+                        console.log(payload);
                         if (payload === 'Yes') {
+                        
+                            // Set authenticated status and store the phone number in the session
                             session.status = 'authenticated';
-                            // Store sessionId in session cookie for tracking
                             req.session.authenticatedSessionId = sessionId;
+                            req.session.phoneNumber = phoneNumber; // Store phone number securely in the session
+                            console.log('User authenticated successfully:', phoneNumber);
                         } else if (payload === 'No') {
                             session.status = 'denied';
                         }
@@ -118,7 +119,7 @@ app.post('/webhook', (req, res) => {
 app.get('/auth/status/:sessionId', (req, res) => {
     const { sessionId } = req.params;
     const session = sessions[sessionId];
-
+    console.log(session.status);
     if (session) {
         if (session.status === 'authenticated') {
             res.json({ status: 'authenticated', message: 'Login successful' });
@@ -137,17 +138,15 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));  // Serve index.html from the public directory
 });
 
-// Dashboard route (to be shown after successful authentication)
+// Secure Dashboard Route
 app.get('/dashboard', (req, res) => {
-    if (req.session.authenticatedSessionId) {
-        const session = sessions[req.session.authenticatedSessionId];
-        if (session && session.status === 'authenticated') {
-            res.send('<h1>Welcome to your Dashboard!</h1><p>You have successfully logged in via WhatsApp authentication.</p>');
-        } else {
-            res.redirect('/');
-        }
+    // Check if the user is authenticated
+    if (req.session.authenticatedSessionId && sessions[req.session.authenticatedSessionId].status === 'authenticated') {
+        // Pass the phone number to the dashboard
+        const phoneNumber = req.session.phoneNumber;
+        res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number: ${phoneNumber}</p>`);
     } else {
-        res.redirect('/');
+        res.redirect('/'); // Redirect to login page if not authenticated
     }
 });
 
