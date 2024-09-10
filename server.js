@@ -1,5 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const path = require('path');
 const axios = require('axios');
 const app = express();
 const port = 3000;
@@ -9,9 +10,13 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 const sessions = {}; // To store session data
 
+// WhatsApp API credentials
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN; // Replace with your access token
 
-const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+// Serve static files from the public directory
+app.use(express.static('public'));
+
 // Send WhatsApp Authentication Request
 app.post('/send-auth', async (req, res) => {
     const { phoneNumber } = req.body;
@@ -92,6 +97,21 @@ app.get('/auth/status/:sessionId', (req, res) => {
     } else {
         res.status(404).json({ status: 'not_found', message: 'Session not found' });
     }
+});
+
+// Serve the HTML file
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));  // Serve index.html from the public directory
+});
+
+// Dashboard route (to be shown after successful authentication)
+app.get('/dashboard', (req, res) => {
+    res.send('<h1>Welcome to your Dashboard!</h1><p>You have successfully logged in via WhatsApp authentication.</p>');
+});
+
+// Access Denied route
+app.get('/access-denied', (req, res) => {
+    res.send('<h1>Access Denied</h1><p>You have been denied access.</p>');
 });
 
 app.listen(port, () => {
