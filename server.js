@@ -12,14 +12,20 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 const session = require('express-session');
-const MongoStore = require('connect-mongo')(session);
+const MongoStore = require('connect-mongo');
+require('dotenv').config(); // If you're using dotenv to load environment variables
+
+// Use MONGO_URI from environment variables
+const mongoUri = process.env.MONGO_URI;
 
 app.use(session({
-    secret: 'your-secret-key',
-    resave: false,
-    saveUninitialized: true,
-    store: new MongoStore({ url: process.env.MONGO_URI }),  // Add your MongoDB connection URI
-    cookie: { secure: false }  // Set 'true' if using HTTPS
+  secret: 'your-secret-key',  // Replace with your session secret
+  resave: false,
+  saveUninitialized: true,
+  store: new MongoStore({
+    mongoUrl: mongoUri,
+    // Additional options can be added here if necessary
+  })
 }));
 
 
