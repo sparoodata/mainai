@@ -6,25 +6,26 @@ const session = require('express-session');
 const app = express();
 const port = 3000;
 
+// Load environment variables
+require('dotenv').config();
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // Session configuration
-
 app.use(session({
-    secret: 'my_session_secret', // Use a secure random string
+    secret: 'your-secret-key', // Use a secure random string
     resave: false,
     saveUninitialized: true,
     cookie: { secure: false } // Set secure: true if using HTTPS
 }));
 
-
 const sessions = {}; // Store session data
 
 // WhatsApp API credentials
-const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
-const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN; // Your WhatsApp access token
-const VERIFY_TOKEN = process.env.VERIFY_TOKEN; // Your webhook verify token
+const WHATSAPP_API_URL = 'https://graph.facebook.com/v17.0/110765315459068/messages';
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 
 // Serve static files from the public directory
 app.use(express.static('public'));
@@ -58,10 +59,30 @@ app.post('/send-auth', async (req, res) => {
         const response = await axios.post(WHATSAPP_API_URL, {
             messaging_product: 'whatsapp',
             to: formattedPhoneNumber,
-            type: 'template',
-            template: {
-                name: 'authorize',
-                language: { code: 'en' }
+            type: 'interactive',
+            interactive: {
+                type: 'button',
+                body: {
+                    text: 'Do you authorize this login?'
+                },
+                action: {
+                    buttons: [
+                        {
+                            type: 'reply',
+                            reply: {
+                                id: `yes_${sessionId}`,
+                                title: 'Yes'
+                            }
+                        },
+                        {
+                            type: 'reply',
+                            reply: {
+                                id: `no_${sessionId}`,
+                                title: 'No'
+                            }
+                        }
+                    ]
+                }
             }
         }, {
             headers: {
@@ -73,12 +94,11 @@ app.post('/send-auth', async (req, res) => {
         console.log('Message sent successfully:', response.data);
         res.json({ message: 'Authentication message sent', sessionId });
     } catch (error) {
-        console.error('Failed to send authentication message:', error);
+        console.error('Failed to send authentication message:', error.response ? error.response.data : error);
         res.status(500).json({ error: 'Failed to send authentication message' });
     }
 });
 
-// Handle Webhook Callback
 // Handle Webhook Callback
 app.post('/webhook', (req, res) => {
     const { entry } = req.body;
@@ -86,35 +106,37 @@ app.post('/webhook', (req, res) => {
     if (entry && entry.length > 0) {
         const changes = entry[0].changes;
         if (changes && changes.length > 0) {
-            const messages = changes[0].value.messages;
+            const value = changes[0].value;
+            const messages = value.messages;
+
             if (messages && messages.length > 0) {
                 const message = messages[0];
                 const phoneNumber = message.from.replace(/^\+/, ''); // Remove the '+' prefix
-                const payload = message.button ? message.button.payload : null;
 
-                // Find the session associated with the phone number
-                for (const [sessionId, session] of Object.entries(sessions)) {
-                    if (session.phoneNumber.replace(/^\+/, '') === phoneNumber) {
-                        if (payload === 'Yes') {
-                            sessions[sessionId] = { ...session, status: 'authenticated' }; // Correctly reassign the session
-                            console.log('Session authenticated:', sessions[sessionId]);
-                        const session = require('express-session');
+                let payload;
+                if (message.button && message.button.payload) {
+                    payload = message.button.payload; // For older API versions
+                } else if (message.interactive && message.interactive.button_reply && message.interactive.button_reply.id) {
+                    payload = message.interactive.button_reply.id; // For newer API versions
+                }
 
-// Use session middleware
-app.use(session({
-    secret: 'my_session_secret',
-    resave: false,
-    saveUninitialized: true,
-    cookie: { secure: false } // Set to true if using HTTPS
-}));
-                          
-                          req.session.phoneNumber = phoneNumber;
-                          req.session.status = 'authenticated';
-                        } else if (payload === 'No') {
-                            sessions[sessionId] = { ...session, status: 'denied' }; // Correctly reassign the session
-                            console.log('Session denied:', sessions[sessionId]);
+                console.log('Received Payload:', payload);
+
+                if (payload) {
+                    // Extract action and sessionId from payload
+                    const [action, sessionId] = payload.split('_');
+
+                    if (sessions[sessionId]) {
+                        if (action === 'yes') {
+                            sessions[sessionId].status = 'authenticated';
+                            req.session.authenticatedSessionId = sessionId;
+                            req.session.phoneNumber = phoneNumber;
+                            console.log('User authenticated successfully:', phoneNumber);
+                        } else if (action === 'no') {
+                            sessions[sessionId].status = 'denied';
                         }
-                        break;
+                    } else {
+                        console.log('Session not found for sessionId:', sessionId);
                     }
                 }
             }
@@ -124,14 +146,13 @@ app.use(session({
     res.sendStatus(200); // Respond to the webhook
 });
 
-
 // Check Authentication Status
 app.get('/auth/status/:sessionId', (req, res) => {
     const { sessionId } = req.params;
     const session = sessions[sessionId];
 
     if (session) {
-        console.log('Checking session:', session); // Debugging
+        console.log('Checking session:', session);
         if (session.status === 'authenticated') {
             res.json({ status: 'authenticated', message: 'Login successful' });
         } else if (session.status === 'denied') {
@@ -143,7 +164,6 @@ app.get('/auth/status/:sessionId', (req, res) => {
         res.status(404).json({ status: 'not_found', message: 'Session not found' });
     }
 });
-
 
 // Serve the HTML file
 app.get('/', (req, res) => {

@@ -87,8 +87,9 @@
 
         const result = await response.json();
         if (result.sessionId) {
+            const sessionId = result.sessionId;
             const checkStatus = async () => {
-                const statusResponse = await fetch(`/auth/status/${result.sessionId}`);
+                const statusResponse = await fetch(`/auth/status/${sessionId}`);
                 const statusResult = await statusResponse.json();
                 if (statusResult.status === 'authenticated') {
                     window.location.href = '/dashboard'; // Redirect to dashboard after authentication
@@ -109,21 +110,6 @@
         submitBtn.disabled = false;
     }
 });
-
-      function checkStatus(sessionId) {
-    fetch(`/auth/status/${sessionId}`)
-        .then(response => response.json())
-        .then(data => {
-            console.log(data);
-            if (data.status === 'authenticated') {
-                window.location.href = '/dashboard';
-            } else if (data.status === 'denied') {
-                window.location.href = '/access-denied';
-            } else {
-                setTimeout(() => checkStatus(sessionId), 2000); // Check every 2 seconds
-            }
-        });
-}
 
     </script>
 </body>
