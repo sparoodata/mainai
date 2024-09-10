@@ -2,6 +2,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
 const axios = require('axios');
+const session = require('express-session');
 const app = express();
 const port = 3000;
 
@@ -11,43 +12,13 @@ require('dotenv').config();
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const session = require('express-session');
-const MongoStore = require('connect-mongo');
-require('dotenv').config(); // If you're using dotenv to load environment variables
-
-// Use MONGO_URI from environment variables
-const mongoUri = process.env.MONGO_URI;
-
+// Session configuration
 app.use(session({
-  secret: 'your-secret-key',  // Replace with your session secret
-  resave: false,
-  saveUninitialized: false,   // Set to false to avoid storing uninitialized sessions
-  store: new MongoStore({
-    mongoUrl: mongoUri,
-    ttl: 14 * 24 * 60 * 60 // Session expiration in seconds (14 days)
-  })
+    secret: 'your-secret-key', // Use a secure random string
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: false } // Set secure: true if using HTTPS
 }));
-
-
-app.post('/login', (req, res) => {
-  const { phoneNumber, authToken } = req.body;
-
-  // Logic to authenticate the user
-  if (authTokenIsValid) {
-    req.session.phoneNumber = phoneNumber;
-    req.session.status = 'authenticated';
-    
-    req.session.save(err => {
-      if (err) {
-        console.error("Error saving session:", err);
-        return res.status(500).send("Error saving session");
-      }
-      return res.redirect('/dashboard');
-    });
-  } else {
-    res.status(401).send("Invalid credentials");
-  }
-});
 
 const sessions = {}; // Store session data
 
@@ -157,13 +128,10 @@ app.post('/webhook', (req, res) => {
 
                     if (sessions[sessionId]) {
                         if (action === 'yes') {
-                          
-                          
                             sessions[sessionId].status = 'authenticated';
                             req.session.authenticatedSessionId = sessionId;  // Save authenticated session ID
                             req.session.phoneNumber = phoneNumber;  // Save phone number in session
                             console.log('User authenticated successfully:', phoneNumber);
-                          
                         } else if (action === 'no') {
                             sessions[sessionId].status = 'denied';
                         }
@@ -186,7 +154,6 @@ app.get('/auth/status/:sessionId', (req, res) => {
     if (session) {
         console.log('Checking session:', session);
         if (session.status === 'authenticated') {
-          
             res.json({ status: 'authenticated', message: 'Login successful' });
         } else if (session.status === 'denied') {
             res.json({ status: 'denied', message: 'Access denied' });
@@ -205,14 +172,15 @@ app.get('/', (req, res) => {
 
 // Secure Dashboard Route
 app.get('/dashboard', (req, res) => {
-  if (req.session.status === 'authenticated') {
-    res.send('Welcome to your dashboard');
-  } else {
-    res.redirect('/login');
-  }
+     console.log(req.session.authenticatedSessionId);
+   
+    if (req.session.authenticatedSessionId && sessions[req.session.authenticatedSessionId].status === 'authenticated') {
+        const phoneNumber = req.session.phoneNumber;
+        res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number: ${phoneNumber}</p>`);
+    } else {
+        res.redirect('/');  // Redirect to login page if not authenticated
+    }
 });
-
-
 
 // Access Denied route
 app.get('/access-denied', (req, res) => {
