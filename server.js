@@ -3,24 +3,35 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const axios = require('axios');
 const session = require('express-session');
+const MongoStore = require('connect-mongo'); // To store sessions in MongoDB
+const mongoose = require('mongoose');
 const app = express();
 const port = 3000;
 
 // Load environment variables
 require('dotenv').config();
 
+// MongoDB connection
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/yourdatabase';
+
+mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => console.log('Connected to MongoDB'))
+    .catch(err => console.error('MongoDB connection error:', err));
+
+// Body parser middleware
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Session configuration
+// Session configuration with MongoDB session store
 app.use(session({
     secret: 'your-secret-key', // Use a secure random string
     resave: false,
     saveUninitialized: true,
+    store: MongoStore.create({ mongoUrl: MONGO_URI }), // Store session in MongoDB
     cookie: { secure: false } // Set secure: true if using HTTPS
 }));
 
-const sessions = {}; // Store session data
+const sessions = {}; // Store session data in-memory (for temporary use)
 
 // WhatsApp API credentials
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v17.0/110765315459068/messages';
@@ -49,7 +60,7 @@ app.post('/send-auth', async (req, res) => {
     const { phoneNumber, countryCode } = req.body;
 
     // Concatenate the country code and phone number
-    const formattedPhoneNumber = `${countryCode}${phoneNumber.replace(/^\+/, '')}`;
+    const formattedPhoneNumber = `${countryCode}${phoneNumber.replace(/^\+/, '')}`; // Strip '+' from phone number if included
 
     // Generate a unique session ID
     const sessionId = Date.now().toString();
@@ -131,7 +142,14 @@ app.post('/webhook', (req, res) => {
                             sessions[sessionId].status = 'authenticated';
                             req.session.authenticatedSessionId = sessionId;  // Save authenticated session ID
                             req.session.phoneNumber = phoneNumber;  // Save phone number in session
-                            console.log('User authenticated successfully:', phoneNumber);
+
+                            // Explicitly save the session to ensure it's written before redirecting
+                            req.session.save(err => {
+                                if (err) {
+                                    console.error('Error saving session:', err);
+                                }
+                                console.log('User authenticated successfully:', phoneNumber);
+                            });
                         } else if (action === 'no') {
                             sessions[sessionId].status = 'denied';
                         }
@@ -145,6 +163,7 @@ app.post('/webhook', (req, res) => {
 
     res.sendStatus(200); // Respond to the webhook
 });
+
 
 // Check Authentication Status
 app.get('/auth/status/:sessionId', (req, res) => {
@@ -171,16 +190,19 @@ app.get('/', (req, res) => {
 });
 
 // Secure Dashboard Route
+// Secure Dashboard Route
 app.get('/dashboard', (req, res) => {
-     console.log(req.session.authenticatedSessionId);
-   
-    if (req.session.authenticatedSessionId && sessions[req.session.authenticatedSessionId].status === 'authenticated') {
+    const sessionId = req.session.authenticatedSessionId;
+
+    if (sessionId && sessions[sessionId] && sessions[sessionId].status === 'authenticated') {
         const phoneNumber = req.session.phoneNumber;
         res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number: ${phoneNumber}</p>`);
     } else {
+        console.log('Access denied, session is undefined or not authenticated');
         res.redirect('/');  // Redirect to login page if not authenticated
     }
 });
+
 
 // Access Denied route
 app.get('/access-denied', (req, res) => {

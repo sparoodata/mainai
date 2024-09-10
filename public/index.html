@@ -128,11 +128,10 @@ document.getElementById('authForm').addEventListener('submit', async function(ev
 
                     console.log(`Checking session status: ${statusResult.status}`);
 
-                if (statusResult.status === 'authenticated') {
-    console.log('User authenticated, redirecting to dashboard...');
-        window.location.href = '/dashboard';  // Redirect to dashboard after a delay
-}    
-                 else if (statusResult.status === 'denied') {
+                    if (statusResult.status === 'authenticated') {
+                        console.log('User authenticated, redirecting to dashboard...');
+                        window.location.href = '/dashboard';  // Redirect to dashboard after a delay
+                    } else if (statusResult.status === 'denied') {
                         console.log('Access denied, redirecting to access-denied page...');
                         window.location.href = '/access-denied';
                     } else {
@@ -156,7 +155,8 @@ document.getElementById('authForm').addEventListener('submit', async function(ev
         submitBtn.disabled = false;
     }
 });
+</script>
 
-    </script>
+
 </body>
 </html>
