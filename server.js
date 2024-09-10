@@ -21,12 +21,13 @@ const mongoUri = process.env.MONGO_URI;
 app.use(session({
   secret: 'your-secret-key',  // Replace with your session secret
   resave: false,
-  saveUninitialized: true,
+  saveUninitialized: false,   // Set to false to avoid storing uninitialized sessions
   store: new MongoStore({
     mongoUrl: mongoUri,
-    // Additional options can be added here if necessary
+    ttl: 14 * 24 * 60 * 60 // Session expiration in seconds (14 days)
   })
 }));
+
 
 
 const sessions = {}; // Store session data

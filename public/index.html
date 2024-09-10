@@ -101,9 +101,8 @@ document.getElementById('authForm').addEventListener('submit', async function(ev
 
                 if (statusResult.status === 'authenticated') {
     console.log('User authenticated, redirecting to dashboard...');
-    setTimeout(() => {
-        window.location.href = '/dashboard';  // Redirect to dashboard after a delay
-    }, 500);  // Delay for 0.5 seconds
+    console.log("Session before redirect:", req.session);
+      res.redirect('/dashboard');
 }    
                  else if (statusResult.status === 'denied') {
                         console.log('Access denied, redirecting to access-denied page...');
