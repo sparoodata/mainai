@@ -24,12 +24,26 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 // Session configuration with MongoDB session store
 app.use(session({
-    secret: 'your-secret-key', // Use a secure random string
+    secret: 'your-secret-key',
     resave: false,
-    saveUninitialized: true,
-    store: MongoStore.create({ mongoUrl: MONGO_URI }), // Store session in MongoDB
-    cookie: { secure: false } // Set secure: true if using HTTPS
+    saveUninitialized: false,
+    store: MongoStore.create({
+        mongoUrl: MONGO_URI,
+        collectionName: 'sessions'
+    }),
+    cookie: {
+        secure: true, // Set to true if using HTTPS
+        maxAge: 1000 * 60 * 60 * 24, // 1 day
+    }
 }));
+
+app.use((req, res, next) => {
+    console.log('Session ID:', req.sessionID);
+    console.log('Session Data:', req.session);
+    next();
+});
+
+
 
 const sessions = {}; // Store session data in-memory (for temporary use)
 
@@ -111,6 +125,7 @@ app.post('/send-auth', async (req, res) => {
 });
 
 // Handle Webhook Callback
+// Handle Webhook Callback
 app.post('/webhook', (req, res) => {
     const { entry } = req.body;
 
@@ -144,7 +159,7 @@ app.post('/webhook', (req, res) => {
                             req.session.phoneNumber = phoneNumber;  // Save phone number in session
 
                             // Explicitly save the session to ensure it's written before redirecting
-                            req.session.save(err => {
+                            req.session.save((err) => {
                                 if (err) {
                                     console.error('Error saving session:', err);
                                 }
@@ -191,8 +206,11 @@ app.get('/', (req, res) => {
 
 // Secure Dashboard Route
 // Secure Dashboard Route
+// Secure Dashboard Route
 app.get('/dashboard', (req, res) => {
     const sessionId = req.session.authenticatedSessionId;
+    console.log('Session ID:', sessionId);
+    console.log('Session Data:', req.session);
 
     if (sessionId && sessions[sessionId] && sessions[sessionId].status === 'authenticated') {
         const phoneNumber = req.session.phoneNumber;
@@ -201,6 +219,21 @@ app.get('/dashboard', (req, res) => {
         console.log('Access denied, session is undefined or not authenticated');
         res.redirect('/');  // Redirect to login page if not authenticated
     }
+});
+
+
+app.get('/test-session', (req, res) => {
+    req.session.test = 'This is a test';
+    req.session.save(err => {
+        if (err) {
+            console.error('Error saving test session:', err);
+        }
+        res.send('Test session set!');
+    });
+});
+
+app.get('/read-session', (req, res) => {
+    res.send(`Test session value: ${req.session.test || 'No test session found'}`);
 });
 
 
