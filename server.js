@@ -12,12 +12,11 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 const session = require('express-session');
-
 app.use(session({
-    secret: 'your_secret_key',  // Replace with your own secret
-    resave: false,
-    saveUninitialized: true,
-    cookie: { secure: false }  // Set secure: true if using HTTPS
+  secret: 'your-secret-key',
+  resave: false,
+  saveUninitialized: true,
+  cookie: { secure: false }  // Set 'true' if using HTTPS
 }));
 
 const sessions = {}; // Store session data
@@ -128,10 +127,13 @@ app.post('/webhook', (req, res) => {
 
                     if (sessions[sessionId]) {
                         if (action === 'yes') {
-                            sessions[sessionId].status = 'authenticated';
-                            req.session.authenticatedSessionId = sessionId;  // Save authenticated session ID
-                            req.session.phoneNumber = phoneNumber;  // Save phone number in session
-                            console.log('User authenticated successfully:', phoneNumber);
+                          
+                           session.status = 'authenticated';
+    req.session.authenticatedSessionId = sessionId; // Store session ID
+    req.session.phoneNumber = session.phoneNumber;  // Store the phone number
+                          
+                               console.log('User authenticated successfully:', session.phoneNumber);
+                          
                         } else if (action === 'no') {
                             sessions[sessionId].status = 'denied';
                         }
@@ -172,8 +174,7 @@ app.get('/', (req, res) => {
 
 // Secure Dashboard Route
 app.get('/dashboard', (req, res) => {
-    console.log(req.session.authenticatedSessionId);  // Check if session is available
-
+    console.log(req.session); // Debugging: Check if session has the ID
     if (req.session.authenticatedSessionId && sessions[req.session.authenticatedSessionId].status === 'authenticated') {
         const phoneNumber = req.session.phoneNumber;
         res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number: ${phoneNumber}</p>`);
@@ -181,6 +182,7 @@ app.get('/dashboard', (req, res) => {
         res.redirect('/');  // Redirect to login page if not authenticated
     }
 });
+
 
 // Access Denied route
 app.get('/access-denied', (req, res) => {
