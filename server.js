@@ -9,12 +9,15 @@ const port = 3000;
 // Load environment variables from .env file
 require('dotenv').config();
 
+// Serve static files from the 'public' directory
+app.use(express.static('public'));
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // Set up sessions
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'your_secret_key', // Use environment variable for session secret
+    secret: process.env.SESSION_SECRET || 'your_secret_key',
     resave: false,
     saveUninitialized: true,
     cookie: { secure: false } // Set secure to true if using HTTPS
@@ -104,6 +107,7 @@ app.get('/auth/status/:sessionId', (req, res) => {
 
     if (session) {
         if (session.status === 'authenticated') {
+            req.session.authenticated = true; // Set session variable for authentication
             res.json({ status: 'authenticated', message: 'Login successful' });
         } else if (session.status === 'denied') {
             res.json({ status: 'denied', message: 'Access denied' });
@@ -118,14 +122,10 @@ app.get('/auth/status/:sessionId', (req, res) => {
 // Protect Dashboard Route
 app.get('/dashboard', (req, res) => {
     if (req.session.authenticated) {
-        res.sendFile(__dirname + '/dashboard.html'); // Serve the dashboard page
+        res.sendFile(__dirname + '/public/dashboard.html'); // Serve the dashboard page
     } else {
         res.redirect('/login'); // Redirect to login page if not authenticated
     }
-});
-
-app.get('/login', (req, res) => {
-    res.sendFile(__dirname + '/index.html'); // Serve the login page
 });
 
 app.listen(port, () => {
