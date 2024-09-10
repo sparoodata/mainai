@@ -66,7 +66,7 @@ app.post('/send-auth', async (req, res) => {
     }
 });
 
-// Handle Webhook Callback
+/// Handle Webhook Callback
 app.post('/webhook', (req, res) => {
     const { entry } = req.body;
     console.log('Webhook Request Received:', req.body);
@@ -77,14 +77,12 @@ app.post('/webhook', (req, res) => {
             const messages = changes[0].value.messages;
             if (messages && messages.length > 0) {
                 const message = messages[0];
-                const phoneNumber = message.from;
+                const phoneNumber = message.from.replace(/^\+/, ''); // Remove the '+' prefix
                 const payload = message.button ? message.button.payload : null;
-                
-                console.log(payload);
 
                 // Find the session associated with the phone number
                 for (const [sessionId, session] of Object.entries(sessions)) {
-                    if (session.phoneNumber === phoneNumber) {
+                    if (session.phoneNumber === phoneNumber) { // Compare without '+'
                         if (payload === 'Yes') {
                             session.status = 'authenticated';
                         } else if (payload === 'No') {
@@ -99,6 +97,7 @@ app.post('/webhook', (req, res) => {
 
     res.sendStatus(200); // Respond to the webhook
 });
+
 
 // Check Authentication Status
 app.get('/auth/status/:sessionId', (req, res) => {

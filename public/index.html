@@ -7,111 +7,130 @@
     <style>
         body {
             font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
-            background-color: #f4f4f4;
+            margin: 0;
         }
-        .container {
-            text-align: center;
+        form {
+            background-color: #fff;
             padding: 20px;
-            background-color: white;
             border-radius: 8px;
-            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            width: 100%;
         }
-        input {
-            padding: 10px;
-            width: 80%;
+        h1 {
+            font-size: 24px;
             margin-bottom: 20px;
+            color: #333;
+            text-align: center;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: bold;
+        }
+        select, input {
+            width: calc(100% - 20px);
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
         }
         button {
-            padding: 10px 20px;
-            background-color: #007bff;
+            width: 100%;
+            padding: 12px;
+            background-color: #28a745;
             color: white;
             border: none;
             border-radius: 4px;
+            font-size: 16px;
             cursor: pointer;
         }
-        button:disabled {
-            background-color: grey;
-            cursor: not-allowed;
+        button:hover {
+            background-color: #218838;
         }
-        #status-message {
+        #statusMessage {
+            text-align: center;
+            color: #666;
             margin-top: 20px;
-            font-weight: bold;
+            font-size: 16px;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>WhatsApp Authentication</h2>
-        <input type="text" id="phoneNumber" placeholder="Enter your phone number" />
-        <button onclick="sendAuthRequest()">Send Authentication Request</button>
-        <div id="status-message"></div>
-    </div>
+    <form id="authForm">
+        <h1>WhatsApp Authentication</h1>
+        <label for="countryCode">Select your country code:</label>
+        <select id="countryCode" name="countryCode" required>
+            <option value="1">USA (+1)</option>
+            <option value="44">UK (+44)</option>
+            <option value="91">India (+91)</option>
+            <option value="49">Germany (+49)</option>
+            <option value="61">Australia (+61)</option>
+        </select>
+
+        <label for="phoneNumber">Enter your phone number:</label>
+        <input type="text" id="phoneNumber" name="phoneNumber" required>
+
+        <button type="submit">Authenticate via WhatsApp</button>
+
+        <p id="statusMessage"></p>
+    </form>
 
     <script>
-        function sendAuthRequest() {
+        document.getElementById('authForm').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const countryCode = document.getElementById('countryCode').value;
             const phoneNumber = document.getElementById('phoneNumber').value;
-            const statusMessage = document.getElementById('status-message');
+            const fullPhoneNumber = countryCode + phoneNumber;
 
-            if (!phoneNumber) {
-                statusMessage.textContent = "Please enter a valid phone number.";
-                return;
-            }
+            document.getElementById('statusMessage').innerText = 'Sending WhatsApp message...';
 
-            // Disable button while waiting
-            const button = document.querySelector('button');
-            button.disabled = true;
-            statusMessage.textContent = "Sending authentication request...";
+            try {
+                const response = await fetch('/send-auth', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ phoneNumber: fullPhoneNumber }),
+                });
 
-            fetch('/send-auth', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phoneNumber })
-            })
-            .then(response => response.json())
-            .then(data => {
+                const data = await response.json();
                 if (data.sessionId) {
-                    checkAuthStatus(data.sessionId);
+                    document.getElementById('statusMessage').innerText = 'Waiting for WhatsApp response...';
+                    pollAuthStatus(data.sessionId);
                 } else {
-                    statusMessage.textContent = "Failed to send authentication request.";
-                    button.disabled = false;
+                    document.getElementById('statusMessage').innerText = 'Failed to send WhatsApp message.';
                 }
-            })
-            .catch(error => {
+            } catch (error) {
                 console.error('Error:', error);
-                statusMessage.textContent = "An error occurred.";
-                button.disabled = false;
-            });
-        }
+                document.getElementById('statusMessage').innerText = 'An error occurred.';
+            }
+        });
 
-        function checkAuthStatus(sessionId) {
-            const statusMessage = document.getElementById('status-message');
-            statusMessage.textContent = "Waiting for WhatsApp response...";
+        async function pollAuthStatus(sessionId) {
+            const intervalId = setInterval(async () => {
+                try {
+                    const response = await fetch(`/auth/status/${sessionId}`);
+                    const data = await response.json();
 
-            const interval = setInterval(() => {
-                fetch(`/auth/status/${sessionId}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.status === 'authenticated') {
-                            clearInterval(interval);
-                            window.location.href = '/dashboard';  // Redirect to Dashboard
-                        } else if (data.status === 'denied') {
-                            clearInterval(interval);
-                            window.location.href = '/access-denied';  // Redirect to Access Denied
-                        } else if (data.status === 'not_found') {
-                            clearInterval(interval);
-                            statusMessage.textContent = "Session not found. Please try again.";
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        statusMessage.textContent = "An error occurred while checking authentication status.";
-                        clearInterval(interval);
-                    });
-            }, 3000);  // Poll every 3 seconds
+                    if (data.status === 'authenticated') {
+                        clearInterval(intervalId);
+                        window.location.href = '/dashboard';  // Redirect to dashboard
+                    } else if (data.status === 'denied') {
+                        clearInterval(intervalId);
+                        document.getElementById('statusMessage').innerText = 'Access denied.';
+                    }
+                } catch (error) {
+                    console.error('Error checking auth status:', error);
+                }
+            }, 3000); // Poll every 3 seconds
         }
     </script>
 </body>
