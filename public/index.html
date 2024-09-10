@@ -121,7 +121,17 @@
         });
 
         async function pollAuthStatus(sessionId) {
+            const maxAttempts = 10; // Limit the polling attempts to prevent infinite loop
+            let attempts = 0;
             const intervalId = setInterval(async () => {
+                if (attempts >= maxAttempts) {
+                    clearInterval(intervalId);
+                    document.getElementById('statusMessage').innerText = 'Authentication timed out.';
+                    document.getElementById('countryCode').disabled = false;
+                    document.getElementById('phoneNumber').disabled = false;
+                    return;
+                }
+
                 try {
                     const response = await fetch(`/auth/status/${sessionId}`);
                     const data = await response.json();
@@ -135,9 +145,12 @@
                         document.getElementById('statusMessage').innerText = 'Access denied.';
                         document.getElementById('countryCode').disabled = false; // Re-enable if denied
                         document.getElementById('phoneNumber').disabled = false;
+                    } else {
+                        attempts++;
                     }
                 } catch (error) {
                     console.error('Error checking auth status:', error);
+                    attempts++;
                 }
             }, 3000); // Poll every 3 seconds
         }

@@ -79,14 +79,21 @@ app.post('/webhook', (req, res) => {
                 const message = messages[0];
                 const phoneNumber = message.from.replace(/^\+/, ''); // Remove the '+' prefix
                 const payload = message.button ? message.button.payload : null;
-
+                 console.log(payload);
                 // Find the session associated with the phone number
+              
                 for (const [sessionId, session] of Object.entries(sessions)) {
+                       console.log(session.phoneNumber );
+                          console.log(phoneNumber );
                     if (session.phoneNumber === phoneNumber) { // Compare without '+'
-                        if (payload === 'Yes') {
+             
+                      
+                      if (payload === 'Yes') {
                             session.status = 'authenticated';
+                           console.log(session.status);
                         } else if (payload === 'No') {
                             session.status = 'denied';
+                             console.log(session.status);
                         }
                         break;
                     }
