@@ -2,11 +2,20 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
 const axios = require('axios');
+const session = require('express-session');
 const app = express();
 const port = 3000;
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+
+// Configure session middleware
+app.use(session({
+    secret: 'your-secret-key', // Replace with a secure random string
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: false } // Set `secure: true` if using HTTPS
+}));
 
 const sessions = {}; // To store session data
 
@@ -36,16 +45,19 @@ app.get('/webhook', (req, res) => {
 
 // Send WhatsApp Authentication Request
 app.post('/send-auth', async (req, res) => {
-    const { phoneNumber } = req.body;
+    const { phoneNumber, countryCode } = req.body;
 
-    // Generate a unique session ID (could use a more robust approach)
+    // Remove the '+' prefix from phoneNumber
+    const formattedPhoneNumber = phoneNumber.replace(/^\+/, '');
+
+    // Generate a unique session ID
     const sessionId = Date.now().toString();
-    sessions[sessionId] = { phoneNumber, status: 'pending' };
+    sessions[sessionId] = { phoneNumber: formattedPhoneNumber, status: 'pending' };
 
     try {
         const response = await axios.post(WHATSAPP_API_URL, {
             messaging_product: 'whatsapp',
-            to: phoneNumber,
+            to: formattedPhoneNumber,
             type: 'template',
             template: {
                 name: 'authorize',
@@ -66,7 +78,7 @@ app.post('/send-auth', async (req, res) => {
     }
 });
 
-/// Handle Webhook Callback
+// Handle Webhook Callback
 app.post('/webhook', (req, res) => {
     const { entry } = req.body;
     console.log('Webhook Request Received:', req.body);
@@ -79,21 +91,18 @@ app.post('/webhook', (req, res) => {
                 const message = messages[0];
                 const phoneNumber = message.from.replace(/^\+/, ''); // Remove the '+' prefix
                 const payload = message.button ? message.button.payload : null;
-                 console.log(payload);
+
+                console.log('Received Payload:', payload);
+
                 // Find the session associated with the phone number
-              
                 for (const [sessionId, session] of Object.entries(sessions)) {
-                       console.log(session.phoneNumber );
-                          console.log(phoneNumber );
-                    if (session.phoneNumber === phoneNumber) { // Compare without '+'
-             
-                      
-                      if (payload === 'Yes') {
+                    if (session.phoneNumber === phoneNumber) {
+                        if (payload === 'Yes') {
                             session.status = 'authenticated';
-                           console.log(session.status);
+                            // Store sessionId in session cookie for tracking
+                            req.session.authenticatedSessionId = sessionId;
                         } else if (payload === 'No') {
                             session.status = 'denied';
-                             console.log(session.status);
                         }
                         break;
                     }
@@ -104,7 +113,6 @@ app.post('/webhook', (req, res) => {
 
     res.sendStatus(200); // Respond to the webhook
 });
-
 
 // Check Authentication Status
 app.get('/auth/status/:sessionId', (req, res) => {
@@ -131,7 +139,16 @@ app.get('/', (req, res) => {
 
 // Dashboard route (to be shown after successful authentication)
 app.get('/dashboard', (req, res) => {
-    res.send('<h1>Welcome to your Dashboard!</h1><p>You have successfully logged in via WhatsApp authentication.</p>');
+    if (req.session.authenticatedSessionId) {
+        const session = sessions[req.session.authenticatedSessionId];
+        if (session && session.status === 'authenticated') {
+            res.send('<h1>Welcome to your Dashboard!</h1><p>You have successfully logged in via WhatsApp authentication.</p>');
+        } else {
+            res.redirect('/');
+        }
+    } else {
+        res.redirect('/');
+    }
 });
 
 // Access Denied route
@@ -139,6 +156,7 @@ app.get('/access-denied', (req, res) => {
     res.send('<h1>Access Denied</h1><p>You have been denied access.</p>');
 });
 
+// Start the server
 app.listen(port, () => {
     console.log(`Server is running on http://localhost:${port}`);
 });
