@@ -22,7 +22,7 @@
     "crypt": "^0.0.2",
     "crypto-js": "^4.2.0",
     "connect-mongo": "^5.1.0",
-    "mongodb": "^6.8.1"
+    "mongodb": "^3.6.0"
   },
   "engines": {
     "node": "14.x"
