@@ -12,12 +12,16 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 const session = require('express-session');
+const MongoStore = require('connect-mongo')(session);
+
 app.use(session({
-  secret: 'your-secret-key',
-  resave: false,
-  saveUninitialized: true,
-  cookie: { secure: false }  // Set 'true' if using HTTPS
+    secret: 'your-secret-key',
+    resave: false,
+    saveUninitialized: true,
+    store: new MongoStore({ url: process.env.MONGO_URI }),  // Add your MongoDB connection URI
+    cookie: { secure: false }  // Set 'true' if using HTTPS
 }));
+
 
 const sessions = {}; // Store session data
 
@@ -174,8 +178,9 @@ app.get('/', (req, res) => {
 
 // Secure Dashboard Route
 app.get('/dashboard', (req, res) => {
-    console.log(req.session); // Debugging: Check if session has the ID
-    if (req.session.authenticatedSessionId && sessions[req.session.authenticatedSessionId].status === 'authenticated') {
+    console.log("Session data:", req.session);  // Add this line to inspect the session
+    
+    if (req.session.authenticatedSessionId && sessions[req.session.authenticatedSessionId]?.status === 'authenticated') {
         const phoneNumber = req.session.phoneNumber;
         res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number: ${phoneNumber}</p>`);
     } else {
