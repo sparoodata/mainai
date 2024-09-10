@@ -66,10 +66,10 @@
     </div>
 
     <script>
-  document.getElementById('authForm').addEventListener('submit', async function(event) {
+document.getElementById('authForm').addEventListener('submit', async function(event) {
     event.preventDefault();
     const phoneNumber = document.getElementById('phoneNumber').value;
-    const countryCode = document.getElementById('countryCode').value;  // Get the selected country code
+    const countryCode = document.getElementById('countryCode').value;
     const submitBtn = document.getElementById('submitBtn');
     const messageDiv = document.getElementById('message');
 
@@ -77,28 +77,44 @@
     messageDiv.textContent = 'Waiting for response...';
 
     try {
+        // Send authentication request to the server
         const response = await fetch('/send-auth', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ phoneNumber, countryCode })  // Send phone number and country code
+            body: JSON.stringify({ phoneNumber, countryCode })
         });
 
         const result = await response.json();
+
         if (result.sessionId) {
             const sessionId = result.sessionId;
+            
+            // Polling function to check authentication status
             const checkStatus = async () => {
-                const statusResponse = await fetch(`/auth/status/${sessionId}`);
-                const statusResult = await statusResponse.json();
-                if (statusResult.status === 'authenticated') {
-                    window.location.href = '/dashboard'; // Redirect to dashboard after authentication
-                } else if (statusResult.status === 'denied') {
-                    window.location.href = '/access-denied';
-                } else {
-                    setTimeout(checkStatus, 2000); // Check every 2 seconds
+                try {
+                    const statusResponse = await fetch(`/auth/status/${sessionId}`);
+                    const statusResult = await statusResponse.json();
+
+                    console.log(`Checking session status: ${statusResult.status}`);
+
+                    if (statusResult.status === 'authenticated') {
+                        console.log('User authenticated, redirecting to dashboard...');
+                        window.location.href = '/dashboard';  // Redirect to dashboard
+                    } else if (statusResult.status === 'denied') {
+                        console.log('Access denied, redirecting to access-denied page...');
+                        window.location.href = '/access-denied';
+                    } else {
+                        // Continue polling if status is still pending
+                        setTimeout(checkStatus, 2000); // Retry after 2 seconds
+                    }
+                } catch (error) {
+                    console.error('Error while checking authentication status:', error);
                 }
             };
+
+            // Start polling for authentication status
             checkStatus();
         } else {
             messageDiv.textContent = 'Failed to send authentication message.';
@@ -111,6 +127,6 @@
     }
 });
 
-    </script>
+  </script>
 </body>
 </html>

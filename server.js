@@ -129,8 +129,8 @@ app.post('/webhook', (req, res) => {
                     if (sessions[sessionId]) {
                         if (action === 'yes') {
                             sessions[sessionId].status = 'authenticated';
-                            req.session.authenticatedSessionId = sessionId;
-                            req.session.phoneNumber = phoneNumber;
+                            req.session.authenticatedSessionId = sessionId;  // Save authenticated session ID
+                            req.session.phoneNumber = phoneNumber;  // Save phone number in session
                             console.log('User authenticated successfully:', phoneNumber);
                         } else if (action === 'no') {
                             sessions[sessionId].status = 'denied';
@@ -172,13 +172,11 @@ app.get('/', (req, res) => {
 
 // Secure Dashboard Route
 app.get('/dashboard', (req, res) => {
-    // Check if the user is authenticated
     if (req.session.authenticatedSessionId && sessions[req.session.authenticatedSessionId].status === 'authenticated') {
-        // Pass the phone number to the dashboard
         const phoneNumber = req.session.phoneNumber;
         res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number: ${phoneNumber}</p>`);
     } else {
-        res.redirect('/'); // Redirect to login page if not authenticated
+        res.redirect('/');  // Redirect to login page if not authenticated
     }
 });
 
