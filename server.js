@@ -172,6 +172,8 @@ app.get('/', (req, res) => {
 
 // Secure Dashboard Route
 app.get('/dashboard', (req, res) => {
+     console.log(req.session.authenticatedSessionId);
+   
     if (req.session.authenticatedSessionId && sessions[req.session.authenticatedSessionId].status === 'authenticated') {
         const phoneNumber = req.session.phoneNumber;
         res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number: ${phoneNumber}</p>`);
