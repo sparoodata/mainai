@@ -1,8 +1,8 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
-const session = require('express-session');
 const crypto = require('crypto');
+const session = require('express-session');
 const app = express();
 const port = 3000;
 
@@ -63,23 +63,29 @@ app.post('/send-auth', async (req, res) => {
 
 // Handle Webhook Callback
 app.post('/webhook', (req, res) => {
-    console.log('in webhook');
     const { entry } = req.body;
-    const webhookToken = req.headers['x-hub-signature'] || ''; // Webhook signature header
- 
-    // console.log('Webhook Request Received:', req.body);
-
+    const signature = req.headers['x-hub-signature'] || ''; // Webhook signature header
+    console.log('in webhook')
     // Verify webhook token
+    const [algo, hash] = signature.split('=');
+    if (algo !== 'sha1') {
+        return res.status(400).send('Invalid signature algorithm');
+    }
+
+    // Compute the HMAC hash
+    const hmac = crypto.createHmac('sha1', WEBHOOK_VERIFY_TOKEN);
   
-  console.log(webhookToken);
-   console.log(WEBHOOK_VERIFY_TOKEN);
-  
-    if (webhookToken !== WEBHOOK_VERIFY_TOKEN) {
+    hmac.update(JSON.stringify(req.body), 'utf-8');
+    const computedHash = hmac.digest('hex');
+    console.log(computedHash);
+    console.log()
+    if (computedHash !== hash) {
         return res.status(403).send('Forbidden');
     }
 
+   // console.log('Webhook Request Received:', req.body);
+
     if (entry && entry.length > 0) {
-         console.log('in condition webhook')
         const changes = entry[0].changes;
         if (changes && changes.length > 0) {
             const messages = changes[0].value.messages;
@@ -87,7 +93,6 @@ app.post('/webhook', (req, res) => {
                 const message = messages[0];
                 const phoneNumber = message.from;
                 const payload = message.button ? message.button.payload : null;
-                console.log(payload);
 
                 // Find the session associated with the phone number
                 for (const [sessionId, session] of Object.entries(sessions)) {
@@ -111,8 +116,8 @@ app.post('/webhook', (req, res) => {
 app.get('/auth/status/:sessionId', (req, res) => {
     const { sessionId } = req.params;
     const session = sessions[sessionId];
+
     if (session) {
-      console.log(session.status);
         if (session.status === 'authenticated') {
             req.session.authenticated = true; // Set session variable for authentication
             res.json({ status: 'authenticated', message: 'Login successful' });
