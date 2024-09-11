@@ -196,25 +196,6 @@ app.post('/webhook', (req, res) => {
     res.sendStatus(200); // Respond to the webhook
 });
 
-app.use((req, res, next) => {
-    console.log('Session ID:', req.sessionID);
-    console.log('Session Data:', req.session);
-    next();
-});
-
-app.get('/test-session', (req, res) => {
-    req.session.test = 'Test data';
-    req.session.save(err => {
-        if (err) {
-            console.error('Error saving session:', err);
-        }
-        res.send('Test session set!');
-    });
-});
-
-app.get('/view-session', (req, res) => {
-    res.send(`Session Test Data: ${req.session.test}`);
-});
 
 // Check Authentication Status
 app.get('/auth/status/:sessionId', (req, res) => {
