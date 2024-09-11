@@ -172,6 +172,7 @@ app.post('/webhook', (req, res) => {
                         if (action === 'yes') {
                             sessions[sessionId].status = 'authenticated';
                             req.session.authenticatedSessionId = sessionId;  // Save authenticated session ID
+                            console.log(req.session.authenticatedSessionId);
                             req.session.phoneNumber = phoneNumber;  // Save phone number in session
 
                             // Explicitly save the session to ensure it's written before redirecting
@@ -223,22 +224,12 @@ app.get('/', (req, res) => {
 // Secure Dashboard Route
 // Secure Dashboard Route
 // Secure Dashboard Route
+
+
 app.get('/dashboard', (req, res) => {
-    console.log('Session ID:', req.sessionID);
-    console.log('Session Data:', req.session);
-
-    const sessionId = req.session.authenticatedSessionId;
-
-    if (sessionId && sessions[sessionId] && sessions[sessionId].status === 'authenticated') {
-        const phoneNumber = req.session.phoneNumber;
+  const phoneNumber = req.session.phoneNumber;
         res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number: ${phoneNumber}</p>`);
-    } else {
-        console.log('Access denied, session is undefined or not authenticated');
-        res.redirect('/');  // Redirect to login page if not authenticated
-    }
 });
-
-
 
 app.get('/test-session', (req, res) => {
     req.session.test = 'This is a test';
