@@ -151,7 +151,6 @@ app.post('/webhook', async (req, res) => {
                 }
 
                 if (payload) {
-                    // Extract action and sessionId from payload
                     const [action, sessionId] = payload.split('_');
 
                     try {
@@ -166,14 +165,15 @@ app.post('/webhook', async (req, res) => {
                                 // Save session info in Express session
                                 req.session.authenticatedSessionId = sessionId;
                                 req.session.phoneNumber = phoneNumber;
+                              console.log(req.session.authenticatedSessionId );
 
+                                // Save session and handle response
                                 req.session.save((err) => {
                                     if (err) {
                                         console.error('Error saving session:', err);
                                         return res.status(500).send('Internal Server Error');
                                     } else {
                                         console.log('User authenticated successfully:', phoneNumber);
-                                        // Ensure the response is sent only once
                                         return res.redirect('/dashboard');
                                     }
                                 });
@@ -193,9 +193,10 @@ app.post('/webhook', async (req, res) => {
         }
     }
 
-    // Ensure the response is sent only once
+    // Ensure response is sent only once
     res.sendStatus(200);
 });
+
 
 
 // Check Authentication Status
