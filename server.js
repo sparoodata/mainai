@@ -37,41 +37,24 @@ app.use(session({
     }
 }));
 
-
+// Log session data for debugging
 app.use((req, res, next) => {
     console.log('Session ID:', req.sessionID);
     console.log('Session Data:', req.session);
     next();
 });
 
-app.use(session({
-    secret: 'your-secret-key',
-    resave: false,
-    saveUninitialized: false,
-    store: MongoStore.create({
-        mongoUrl: MONGO_URI,
-        collectionName: 'sessions'
-    }),
-    cookie: {
-        secure: false, // Set to true if using HTTPS
-        maxAge: 1000 * 60 * 60 * 24, // 1 day
-    }
-}));
-
-
-
-
-const sessions = {}; // Store session data in-memory (for temporary use)
-
 // WhatsApp API credentials
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v17.0/110765315459068/messages';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 
+const sessions = {}; // Store session data temporarily in-memory
+
 // Serve static files from the public directory
 app.use(express.static('public'));
 
-// Webhook Verification
+// Webhook Verification for WhatsApp
 app.get('/webhook', (req, res) => {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
@@ -141,7 +124,6 @@ app.post('/send-auth', async (req, res) => {
 });
 
 // Handle Webhook Callback
-// Handle Webhook Callback
 app.post('/webhook', (req, res) => {
     const { entry } = req.body;
 
@@ -196,7 +178,6 @@ app.post('/webhook', (req, res) => {
     res.sendStatus(200); // Respond to the webhook
 });
 
-
 // Check Authentication Status
 app.get('/auth/status/:sessionId', (req, res) => {
     const { sessionId } = req.params;
@@ -221,8 +202,7 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));  // Serve index.html from the public directory
 });
 
-
-
+// Dashboard route (protected)
 app.get('/dashboard', (req, res) => {
     console.log('Session Data at /dashboard:', req.session);  // Debug the session data
     const phoneNumber = req.session.phoneNumber;
@@ -232,10 +212,6 @@ app.get('/dashboard', (req, res) => {
         res.send(`<h1>Session Data Missing!</h1><p>Phone number is undefined</p>`);
     }
 });
-
-
-
-
 
 // Access Denied route
 app.get('/access-denied', (req, res) => {
