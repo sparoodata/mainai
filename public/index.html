@@ -5,94 +5,121 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f4f4f4;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-        }
-        .container {
-            max-width: 400px;
-            padding: 20px;
-            background: #fff;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-        h1 {
-            font-size: 24px;
-            margin-bottom: 20px;
-        }
-        .phone-group {
-            display: flex;
-            align-items: center;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            overflow: hidden;
-            font-size: 18px;
-        }
-        .phone-group select {
-            border: none;
-            background-color: transparent;
-            padding: 10px;
-            font-size: 18px;
-            outline: none;
-            appearance: none;
-        }
-        .phone-group input {
-            border: none;
-            padding: 10px;
-            width: 100%;
-            font-size: 18px;
-            outline: none;
-        }
-        .divider {
-            width: 1px;
-            background-color: #ccc;
-            height: 70%;
-        }
-        button {
-            padding: 12px;
-            width: 100%;
-            font-size: 18px;
-            background-color: #28a745;
-            color: #fff;
-            border: none;
-            cursor: pointer;
-            margin-top: 10px;
-        }
-        button:disabled {
-            background-color: #ccc;
-        }
-        .message {
-            margin-top: 20px;
-            font-size: 18px;
-        }
+       body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background: linear-gradient(135deg, #4e54c8, #8f94fb); /* Gradient background */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+.container {
+    max-width: 400px;
+    padding: 20px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.container h1 {
+    font-size: 28px;
+    margin-bottom: 30px;
+    color: #333;
+}
+
+.phone-group {
+    display: flex;
+    align-items: center;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.phone-group select {
+    border: none;
+    background-color: transparent;
+    padding: 10px;
+    font-size: 18px;
+    outline: none;
+    appearance: none;
+    width: 30%; /* Adjust the width to accommodate flags */
+}
+
+.phone-group input {
+    border: none;
+    padding: 10px;
+    width: 70%;
+    font-size: 18px;
+    outline: none;
+}
+
+button {
+    padding: 15px;
+    width: 100%;
+    font-size: 18px;
+    background-color: #4e54c8;
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    border-radius: 5px;
+    margin-top: 20px;
+    transition: background-color 0.3s ease;
+}
+
+button:hover {
+    background-color: #8f94fb;
+}
+
+button:disabled {
+    background-color: #ccc;
+}
+
+.message {
+    margin-top: 20px;
+    font-size: 18px;
+    color: red;
+}
+
+select.flag-select option {
+    background-image: url('flags-sprite.png'); /* Add a sprite or individual flags */
+    background-repeat: no-repeat;
+    padding-left: 30px;
+    line-height: 30px;
+}
+option[data-flag="india"] {
+    background-position: 0px -32px;
+}
+option[data-flag="usa"] {
+    background-position: 0px 0px;
+}
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Login</h1>
-        <form id="authForm">
-            <div class="phone-group">
-                <select id="countryCode" name="countryCode">
-                    <option value="+91" selected>+91</option>
-                    <option value="+1">+1</option>
-                    <option value="+44">+44</option>
-                    <option value="+49">+49</option>
-                    <option value="+61">+61</option>
-                </select>
-                <div class="divider"></div>
-                <input type="text" id="phoneNumber" name="phoneNumber" placeholder="Enter your number" required>
-            </div>
-            <button type="submit" id="submitBtn">Send Authentication</button>
-        </form>
-        <div id="message" class="message"></div>
-    </div>
+<div class="container">
+    <h1>Login</h1>
+    <form id="authForm">
+        <div class="phone-group">
+            <select id="countryCode" name="countryCode" class="flag-select">
+                <option value="+91" data-flag="🇮🇳">🇮🇳 +91</option>
+                <option value="+1" data-flag="usa">🇺🇸 +1</option>
+                <option value="+44" data-flag="uk">🇬🇧 +44</option>
+                <option value="+49" data-flag="germany">🇩🇪 +49</option>
+                <option value="+61" data-flag="australia">🇦🇺 +61</option>
+            </select>
+            <div class="divider"></div>
+            <input type="text" id="phoneNumber" name="phoneNumber" placeholder="Enter your number" required>
+        </div>
+        <button type="submit" id="submitBtn">Send Authentication</button>
+    </form>
+    <div id="message" class="message"></div>
+</div>
+
 
     <script>
 document.getElementById('authForm').addEventListener('submit', async function(event) {
