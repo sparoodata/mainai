@@ -41,6 +41,10 @@
             padding: 20px;
             text-align: center;
             box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
         }
 
         .sign-in-container {
@@ -69,6 +73,10 @@
 
         .overlay-content {
             position: absolute;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
         }
 
         .overlay-content h2 {
@@ -99,6 +107,7 @@
 
         .form-group {
             margin-bottom: 15px;
+            width: 100%;
         }
 
         input, select {
@@ -107,6 +116,7 @@
             font-size: 16px;
             border: 1px solid #ddd;
             border-radius: 5px;
+            box-sizing: border-box;
         }
 
         button {
@@ -135,14 +145,14 @@
 
         @media (max-width: 768px) {
             .container {
-                height: auto;
+                height: 100%;
                 flex-direction: column;
             }
 
             .form-container {
                 width: 100%;
-                height: auto;
-                transform: translateX(0);
+                height: 200%;
+                transform: translateY(0);
             }
 
             .sign-in-container, .sign-up-container {
@@ -152,12 +162,43 @@
 
             .overlay-container {
                 width: 100%;
+                height: 50%;
+                position: absolute;
+                top: 0;
                 right: 0;
-                transform: translateX(-100%);
+                transform: translateY(-100%);
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
             }
 
             .container.slide-active .overlay-container {
-                transform: translateX(0);
+                transform: translateY(0);
+            }
+
+            .container.slide-active .form-container {
+                transform: translateY(-50%);
+            }
+        }
+
+        @media (max-width: 480px) {
+            .overlay-content h2 {
+                font-size: 20px;
+            }
+
+            .overlay-content button {
+                font-size: 14px;
+                padding: 8px 16px;
+            }
+
+            input, select {
+                font-size: 14px;
+                padding: 8px;
+            }
+
+            button {
+                font-size: 14px;
+                padding: 8px 16px;
             }
         }
     </style>
