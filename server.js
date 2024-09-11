@@ -170,9 +170,11 @@ app.post('/webhook', async (req, res) => {
                                 req.session.save((err) => {
                                     if (err) {
                                         console.error('Error saving session:', err);
+                                        return res.status(500).send('Internal Server Error');
                                     } else {
                                         console.log('User authenticated successfully:', phoneNumber);
-                                        res.redirect('/dashboard');
+                                        // Ensure the response is sent only once
+                                        return res.redirect('/dashboard');
                                     }
                                 });
                             } else if (action === 'no') {
@@ -184,14 +186,17 @@ app.post('/webhook', async (req, res) => {
                         }
                     } catch (error) {
                         console.error('Error handling session:', error);
+                        return res.status(500).send('Internal Server Error');
                     }
                 }
             }
         }
     }
 
-    res.sendStatus(200); // Respond to the webhook
+    // Ensure the response is sent only once
+    res.sendStatus(200);
 });
+
 
 // Check Authentication Status
 app.get('/auth/status/:sessionId', async (req, res) => {
@@ -225,11 +230,11 @@ app.get('/', (req, res) => {
 // Dashboard route (protected)
 app.get('/dashboard', async (req, res) => {
     const sessionId = req.session.authenticatedSessionId;
-    console.log('saisession',sessionId);
+
     if (sessionId) {
         try {
             const session = await Session.findOne({ sessionId });
-          console.log(session);
+          console.log('inside ifffffffffffff');
 
             if (session && session.status === 'authenticated') {
                 res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number: ${session.phoneNumber}</p>`);
@@ -244,6 +249,7 @@ app.get('/dashboard', async (req, res) => {
         res.redirect('/access-denied');
     }
 });
+
 
 // Access Denied route
 app.get('/access-denied', (req, res) => {
