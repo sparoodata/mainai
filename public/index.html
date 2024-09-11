@@ -3,187 +3,152 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login</title>
+    <title>Login & Sign Up</title>
     <style>
-       body {
-    font-family: Arial, sans-serif;
-    margin: 0;
-    padding: 0;
-    background: linear-gradient(135deg, #4e54c8, #8f94fb); /* Gradient background */
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-}
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-.container {
-    max-width: 400px;
-    padding: 20px;
-    background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-    text-align: center;
-    transition: all 0.3s ease;
-}
+        body, html {
+            height: 100%;
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #e0f7e0; /* Light green background */
+        }
 
-.container h1 {
-    font-size: 28px;
-    margin-bottom: 30px;
-    color: #333;
-}
+        .container {
+            position: relative;
+            width: 700px;
+            height: 400px;
+            background-color: white;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            display: flex;
+        }
 
-.phone-group {
-    display: flex;
-    align-items: center;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-    overflow: hidden;
-    margin-bottom: 20px;
-}
+        .form-container {
+            width: 50%;
+            padding: 50px;
+            transition: transform 0.6s ease;
+        }
 
-.phone-group select {
-    border: none;
-    background-color: transparent;
-    padding: 10px;
-    font-size: 18px;
-    outline: none;
-    appearance: none;
-    width: 30%; /* Adjust the width to accommodate flags */
-}
+        .form-container h2 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #2f5c2f; /* Matching color for text */
+        }
 
-.phone-group input {
-    border: none;
-    padding: 10px;
-    width: 70%;
-    font-size: 18px;
-    outline: none;
-}
+        .form-container form {
+            display: flex;
+            flex-direction: column;
+        }
 
-button {
-    padding: 15px;
-    width: 100%;
-    font-size: 18px;
-    background-color: #4e54c8;
-    color: #fff;
-    border: none;
-    cursor: pointer;
-    border-radius: 5px;
-    margin-top: 20px;
-    transition: background-color 0.3s ease;
-}
+        .form-container input {
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
 
-button:hover {
-    background-color: #8f94fb;
-}
+        .form-container button {
+            padding: 12px;
+            font-size: 16px;
+            background-color: #4caf50; /* Matching button color */
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-top: 10px;
+            transition: background-color 0.3s ease;
+        }
 
-button:disabled {
-    background-color: #ccc;
-}
+        .form-container button:hover {
+            background-color: #81c784; /* Hover effect for button */
+        }
 
-.message {
-    margin-top: 20px;
-    font-size: 18px;
-    color: red;
-}
+        .overlay-container {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            width: 50%;
+            height: 100%;
+            background-color: #81c784;
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.6s ease;
+        }
 
-select.flag-select option {
-    background-image: url('flags-sprite.png'); /* Add a sprite or individual flags */
-    background-repeat: no-repeat;
-    padding-left: 30px;
-    line-height: 30px;
-}
-option[data-flag="india"] {
-    background-position: 0px -32px;
-}
-option[data-flag="usa"] {
-    background-position: 0px 0px;
-}
+        .overlay-container button {
+            background-color: white;
+            color: #4caf50;
+            border: 2px solid white;
+            padding: 12px 25px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+
+        .overlay-container button:hover {
+            background-color: #4caf50;
+            color: white;
+        }
+
+        /* Slide effect styles */
+        .container.right-panel-active .sign-in-container {
+            transform: translateX(100%);
+        }
+
+        .container.right-panel-active .overlay-container {
+            transform: translateX(-100%);
+        }
     </style>
 </head>
 <body>
-<div class="container">
-    <h1>Login</h1>
-    <form id="authForm">
-        <div class="phone-group">
-            <select id="countryCode" name="countryCode" class="flag-select">
-                <option value="+91" data-flag="🇮🇳">🇮🇳 +91</option>
-                <option value="+1" data-flag="usa">🇺🇸 +1</option>
-                <option value="+44" data-flag="uk">🇬🇧 +44</option>
-                <option value="+49" data-flag="germany">🇩🇪 +49</option>
-                <option value="+61" data-flag="australia">🇦🇺 +61</option>
-            </select>
-            <div class="divider"></div>
-            <input type="text" id="phoneNumber" name="phoneNumber" placeholder="Enter your number" required>
+
+<div class="container" id="container">
+    <!-- Sign In Form -->
+    <div class="form-container sign-in-container">
+        <h2>Sign In</h2>
+        <form id="signInForm">
+            <input type="text" placeholder="WhatsApp Number" required>
+            <button type="submit">Sign In</button>
+        </form>
+    </div>
+
+    <!-- Sign Up Form -->
+    <div class="form-container sign-up-container">
+        <h2>Sign Up</h2>
+        <form id="signUpForm">
+            <input type="text" placeholder="WhatsApp Number" required>
+            <button type="submit">Sign Up</button>
+        </form>
+    </div>
+
+    <!-- Overlay for toggling -->
+    <div class="overlay-container">
+        <div>
+            <h2>Create An Account?</h2>
+            <button id="signUpBtn">Register</button>
         </div>
-        <button type="submit" id="submitBtn">Send Authentication</button>
-    </form>
-    <div id="message" class="message"></div>
+    </div>
 </div>
 
+<script>
+    const container = document.getElementById('container');
+    const signUpBtn = document.getElementById('signUpBtn');
 
-    <script>
-document.getElementById('authForm').addEventListener('submit', async function(event) {
-    event.preventDefault();  // This should prevent the form from reloading the page
-    const phoneNumber = document.getElementById('phoneNumber').value;
-    const countryCode = document.getElementById('countryCode').value;
-    const submitBtn = document.getElementById('submitBtn');
-    const messageDiv = document.getElementById('message');
-
-    submitBtn.disabled = true;
-    messageDiv.textContent = 'Waiting for response...';
-
-    try {
-        // Send authentication request to the server
-        const response = await fetch('/send-auth', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ phoneNumber, countryCode })
-        });
-
-        const result = await response.json();
-
-        if (result.sessionId) {
-            const sessionId = result.sessionId;
-            
-            // Polling function to check authentication status
-            const checkStatus = async () => {
-                try {
-                    const statusResponse = await fetch(`/auth/status/${sessionId}`);
-                    const statusResult = await statusResponse.json();
-
-                    console.log(`Checking session status: ${statusResult.status}`);
-
-                    if (statusResult.status === 'authenticated') {
-                        console.log('User authenticated, redirecting to dashboard...');
-                        window.location.href = '/dashboard';  // Redirect to dashboard after a delay
-                    } else if (statusResult.status === 'denied') {
-                        console.log('Access denied, redirecting to access-denied page...');
-                        window.location.href = '/access-denied';
-                    } else {
-                        // Continue polling if status is still pending
-                        setTimeout(checkStatus, 2000); // Retry after 2 seconds
-                    }
-                } catch (error) {
-                    console.error('Error while checking authentication status:', error);
-                }
-            };
-
-            // Start polling for authentication status
-            checkStatus();
-        } else {
-            messageDiv.textContent = 'Failed to send authentication message.';
-        }
-    } catch (error) {
-        console.error('Error:', error);
-        messageDiv.textContent = 'An error occurred. Please try again.';
-    } finally {
-        submitBtn.disabled = false;
-    }
-});
+    signUpBtn.addEventListener('click', () => {
+        container.classList.toggle('right-panel-active');
+    });
 </script>
-
 
 </body>
 </html>
