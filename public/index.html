@@ -3,72 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login & Sign Up</title>
+    <title>Sign In / Sign Up Slider</title>
     <style>
-        * {
+        body {
+            font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
-        }
-
-        body, html {
-            height: 100%;
-            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #4e54c8, #8f94fb);
             display: flex;
             justify-content: center;
             align-items: center;
-            background-color: #e0f7e0; /* Light green background */
+            height: 100vh;
         }
 
         .container {
-            position: relative;
-            width: 700px;
-            height: 400px;
-            background-color: white;
+            width: 800px;
+            height: 500px;
+            background-color: #fff;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             border-radius: 12px;
-            display: flex;
+            position: relative;
+            overflow: hidden;
         }
 
         .form-container {
-            width: 50%;
-            padding: 50px;
-            transition: transform 0.6s ease;
-        }
-
-        .form-container h2 {
-            font-size: 24px;
-            margin-bottom: 20px;
-            color: #2f5c2f; /* Matching color for text */
-        }
-
-        .form-container form {
+            position: absolute;
+            top: 0;
+            width: 100%;
+            height: 100%;
             display: flex;
-            flex-direction: column;
+            transition: transform 0.6s ease-in-out;
         }
 
-        .form-container input {
-            padding: 12px;
-            margin: 10px 0;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 16px;
+        .sign-in-container, .sign-up-container {
+            width: 50%;
+            height: 100%;
+            padding: 50px;
+            text-align: center;
         }
 
-        .form-container button {
-            padding: 12px;
-            font-size: 16px;
-            background-color: #4caf50; /* Matching button color */
-            color: white;
-            border: none;
-            cursor: pointer;
-            border-radius: 5px;
-            margin-top: 10px;
-            transition: background-color 0.3s ease;
+        .sign-in-container {
+            background-color: #fff;
         }
 
-        .form-container button:hover {
-            background-color: #81c784; /* Hover effect for button */
+        .sign-up-container {
+            background-color: #f0f8e0; /* Light green */
         }
 
         .overlay-container {
@@ -77,36 +56,61 @@
             left: 50%;
             width: 50%;
             height: 100%;
-            background-color: #81c784;
-            border-radius: 12px;
+            background-color: #8f94fb;
+            color: white;
             display: flex;
             justify-content: center;
             align-items: center;
-            transition: transform 0.6s ease;
+            transition: transform 0.6s ease-in-out;
         }
 
-        .overlay-container button {
-            background-color: white;
-            color: #4caf50;
-            border: 2px solid white;
-            padding: 12px 25px;
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        input {
+            width: 80%;
+            padding: 10px;
             font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4e54c8;
+            color: white;
+            border: none;
             cursor: pointer;
             border-radius: 5px;
+            margin-top: 20px;
             transition: background-color 0.3s ease;
         }
 
-        .overlay-container button:hover {
-            background-color: #4caf50;
-            color: white;
+        button:hover {
+            background-color: #8f94fb;
         }
 
-        /* Slide effect styles */
-        .container.right-panel-active .sign-in-container {
-            transform: translateX(100%);
+        .overlay-content {
+            text-align: center;
         }
 
-        .container.right-panel-active .overlay-container {
+        .overlay-content button {
+            background-color: white;
+            color: #4e54c8;
+        }
+
+        .container.slide-active .form-container {
+            transform: translateX(-100%);
+        }
+
+        .container.slide-active .overlay-container {
             transform: translateX(-100%);
         }
     </style>
@@ -114,39 +118,90 @@
 <body>
 
 <div class="container" id="container">
-    <!-- Sign In Form -->
-    <div class="form-container sign-in-container">
-        <h2>Sign In</h2>
-        <form id="signInForm">
-            <input type="text" placeholder="WhatsApp Number" required>
-            <button type="submit">Sign In</button>
-        </form>
+    <div class="form-container">
+        <!-- Sign In Form -->
+        <div class="sign-in-container">
+            <h1>Sign In</h1>
+            <form id="signInForm">
+                <div class="form-group">
+                    <select id="signInCountryCode" name="countryCode">
+                        <option value="+91">🇮🇳 +91</option>
+                        <option value="+1">🇺🇸 +1</option>
+                        <option value="+44">🇬🇧 +44</option>
+                        <option value="+49">🇩🇪 +49</option>
+                        <option value="+61">🇦🇺 +61</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <input type="text" id="signInPhoneNumber" name="phoneNumber" placeholder="Enter your number" required>
+                </div>
+                <button type="submit">Sign In</button>
+            </form>
+        </div>
+
+        <!-- Sign Up Form -->
+        <div class="sign-up-container">
+            <h1>Sign Up</h1>
+            <form id="signUpForm">
+                <div class="form-group">
+                    <select id="signUpCountryCode" name="countryCode">
+                        <option value="+91">🇮🇳 +91</option>
+                        <option value="+1">🇺🇸 +1</option>
+                        <option value="+44">🇬🇧 +44</option>
+                        <option value="+49">🇩🇪 +49</option>
+                        <option value="+61">🇦🇺 +61</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <input type="text" id="signUpPhoneNumber" name="phoneNumber" placeholder="Enter your number" required>
+                </div>
+                <button type="submit">Sign Up</button>
+            </form>
+        </div>
     </div>
 
-    <!-- Sign Up Form -->
-    <div class="form-container sign-up-container">
-        <h2>Sign Up</h2>
-        <form id="signUpForm">
-            <input type="text" placeholder="WhatsApp Number" required>
-            <button type="submit">Sign Up</button>
-        </form>
-    </div>
-
-    <!-- Overlay for toggling -->
+    <!-- Overlay Content -->
     <div class="overlay-container">
-        <div>
-            <h2>Create An Account?</h2>
-            <button id="signUpBtn">Register</button>
+        <div class="overlay-content">
+            <h2 id="overlayText">New here? Create an account!</h2>
+            <button id="slideButton">Register</button>
         </div>
     </div>
 </div>
 
 <script>
     const container = document.getElementById('container');
-    const signUpBtn = document.getElementById('signUpBtn');
+    const slideButton = document.getElementById('slideButton');
+    const overlayText = document.getElementById('overlayText');
 
-    signUpBtn.addEventListener('click', () => {
-        container.classList.toggle('right-panel-active');
+    slideButton.addEventListener('click', function () {
+        container.classList.toggle('slide-active');
+        
+        // Change overlay text and button
+        if (container.classList.contains('slide-active')) {
+            overlayText.textContent = 'Already have an account? Sign in!';
+            slideButton.textContent = 'Sign In';
+        } else {
+            overlayText.textContent = 'New here? Create an account!';
+            slideButton.textContent = 'Register';
+        }
+    });
+
+    // Example: Attach the sign-in and sign-up logic (like your authentication code)
+    document.getElementById('signInForm').addEventListener('submit', function (event) {
+        event.preventDefault();
+        const phoneNumber = document.getElementById('signInPhoneNumber').value;
+        const countryCode = document.getElementById('signInCountryCode').value;
+        console.log('Signing In:', countryCode, phoneNumber);
+        // Add your authentication logic here
+    });
+
+    document.getElementById('signUpForm').addEventListener('submit', function (event) {
+        event.preventDefault();
+        const phoneNumber = document.getElementById('signUpPhoneNumber').value;
+        const countryCode = document.getElementById('signUpCountryCode').value;
+        console.log('Signing Up:', countryCode, phoneNumber);
+        // Add your sign-up logic here
     });
 </script>
 
