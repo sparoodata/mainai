@@ -17,43 +17,38 @@
         }
 
         .container {
-            width: 800px;
+            width: 900px;
             height: 500px;
             background-color: #fff;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             border-radius: 12px;
             position: relative;
             overflow: hidden;
+            display: flex;
         }
 
         .form-container {
-            position: absolute;
-            top: 0;
-            width: 100%;
+            width: 50%;
             height: 100%;
             display: flex;
             transition: transform 0.6s ease-in-out;
         }
 
         .sign-in-container, .sign-up-container {
-            width: 50%;
-            height: 100%;
+            width: 100%;
             padding: 50px;
             text-align: center;
         }
 
         .sign-in-container {
-            background-color: #fff;
+            background-color: #d4edda; /* Light green */
         }
 
         .sign-up-container {
-            background-color: #f0f8e0; /* Light green */
+            background-color: #c3e6cb; /* Slightly darker green */
         }
 
         .overlay-container {
-            position: absolute;
-            top: 0;
-            left: 50%;
             width: 50%;
             height: 100%;
             background-color: #8f94fb;
@@ -62,6 +57,28 @@
             justify-content: center;
             align-items: center;
             transition: transform 0.6s ease-in-out;
+            position: absolute;
+            top: 0;
+            right: 0;
+        }
+
+        .overlay-content {
+            text-align: center;
+        }
+
+        .overlay-content button {
+            background-color: white;
+            color: #4e54c8;
+            border: none;
+            cursor: pointer;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+
+        .overlay-content button:hover {
+            background-color: #f8f9fa;
         }
 
         h1 {
@@ -77,6 +94,15 @@
             width: 80%;
             padding: 10px;
             font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        select {
+            width: 85%;
+            padding: 10px;
+            font-size: 16px;
+            margin-bottom: 20px;
             border: 1px solid #ddd;
             border-radius: 5px;
         }
@@ -97,21 +123,12 @@
             background-color: #8f94fb;
         }
 
-        .overlay-content {
-            text-align: center;
-        }
-
-        .overlay-content button {
-            background-color: white;
-            color: #4e54c8;
-        }
-
         .container.slide-active .form-container {
-            transform: translateX(-100%);
+            transform: translateX(-50%);
         }
 
         .container.slide-active .overlay-container {
-            transform: translateX(-100%);
+            transform: translateX(0);
         }
     </style>
 </head>
