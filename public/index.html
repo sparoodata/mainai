@@ -1,3 +1,6 @@
+
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,7 +9,7 @@
     <title>Sign In / Sign Up Slider</title>
     <link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
     <style>
-        body {
+   body {
             font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
@@ -231,65 +234,6 @@
                 padding: 8px 16px;
             }
         }
-      .form-group select, .form-group input {
-    font-size: 16px;
-    padding: 10px;
-    border: 1px solid #ccc; /* Light border for cleaner look */
-    border-radius: 8px; /* Rounded corners */
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Subtle shadow */
-    width: 100%;
-    max-width: 300px;
-    outline: none; /* Removes default blue outline */
-    transition: all 0.3s ease; /* Smooth transition for hover/focus */
-    background-color: #f9f9f9; /* Light background for a soft look */
-    color: #333; /* Darker text color for readability */
-    box-sizing: border-box;
-}
-
-.form-group select {
-    appearance: none; /* Hides default dropdown arrow */
-    background: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNC4wMDEgMjQuMDAxIj48cGF0aCBkPSJNMTIgMTZsLTguNjMtOC42MyAxLjQyLTEuNDJMMTIgMTMuMTcgMTkuMjEgNi4zNkwyMC42MyA3Ljc5TDEyIDE2eiIvPjwvc3ZnPg==') no-repeat right 10px center;
-    background-size: 12px; /* Custom dropdown arrow size */
-    background-color: #f9f9f9; /* Same background as input */
-}
-
-.form-group input::placeholder {
-    color: #888; /* Placeholder text color */
-}
-
-.form-group select:hover, .form-group input:hover {
-    border-color: #8f94fb; /* Blue border on hover */
-    background-color: #f0f0ff; /* Slightly brighter background */
-}
-
-.form-group select:focus, .form-group input:focus {
-    border-color: #4e54c8; /* Highlight border on focus */
-    box-shadow: 0 0 8px rgba(78, 84, 200, 0.3); /* Glowing effect */
-    background-color: #fff; /* Brighter background on focus */
-}
-
-button {
-    background-color: #4e54c8;
-    color: white;
-    border: none;
-    cursor: pointer;
-    padding: 10px 20px;
-    font-size: 16px;
-    border-radius: 5px;
-    margin-top: 20px;
-    transition: background-color 0.3s ease, transform 0.3s ease;
-}
-
-button:hover {
-    background-color: #8f94fb;
-    transform: scale(1.05); /* Slightly grow on hover */
-}
-
-button:focus {
-    outline: none;
-    box-shadow: 0 0 8px rgba(78, 84, 200, 0.3); /* Similar glowing effect on focus */
-}
-
     </style>
 </head>
 <body>
@@ -312,7 +256,8 @@ button:focus {
                         </select>
                         <input type="text" id="signInPhoneNumber" name="phoneNumber" placeholder="Enter your number" required>
                     </div>
-                    <button type="submit">Sign In</button>
+                    <button type="submit" id="submitBtnSignIn">Sign In</button>
+                    <div id="messageSignIn"></div>
                 </form>
             </div>
 
@@ -330,7 +275,8 @@ button:focus {
                         </select>
                         <input type="text" id="signUpPhoneNumber" name="phoneNumber" placeholder="Enter your number" required>
                     </div>
-                    <button type="submit">Sign Up</button>
+                    <button type="submit" id="submitBtnSignUp">Sign Up</button>
+                    <div id="messageSignUp"></div>
                 </form>
             </div>
         </div>
@@ -362,21 +308,66 @@ button:focus {
             }
         });
 
-        // Example: Attach the sign-in and sign-up logic (like your authentication code)
+        // Authentication logic for both Sign In and Sign Up
+        const authenticateUser = async (phoneNumber, countryCode, messageDiv, submitBtn) => {
+            submitBtn.disabled = true;
+            messageDiv.textContent = 'Waiting for response...';
+
+            try {
+                const response = await fetch('/send-auth', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ phoneNumber, countryCode })
+                });
+
+                const result = await response.json();
+                if (result.sessionId) {
+                    const sessionId = result.sessionId;
+                    const checkStatus = async () => {
+                        const statusResponse = await fetch(`/auth/status/${sessionId}`);
+                        const statusResult = await statusResponse.json();
+                        if (statusResult.status === 'authenticated') {
+                            window.location.href = '/dashboard';
+                        } else if (statusResult.status === 'denied') {
+                            window.location.href = '/access-denied';
+                        } else {
+                            setTimeout(checkStatus, 2000);
+                        }
+                    };
+                    checkStatus();
+                } else {
+                    messageDiv.textContent = 'Failed to send authentication message.';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                messageDiv.textContent = 'An error occurred. Please try again.';
+            } finally {
+                submitBtn.disabled = false;
+            }
+        };
+
+        // Sign In form submission
         document.getElementById('signInForm').addEventListener('submit', function (event) {
             event.preventDefault();
             const phoneNumber = document.getElementById('signInPhoneNumber').value;
             const countryCode = document.getElementById('signInCountryCode').value;
-            console.log('Signing In:', countryCode, phoneNumber);
-            // Add your authentication logic here
+            const messageDiv = document.getElementById('messageSignIn');
+            const submitBtn = document.getElementById('submitBtnSignIn');
+
+            authenticateUser(phoneNumber, countryCode, messageDiv, submitBtn);
         });
 
+        // Sign Up form submission
         document.getElementById('signUpForm').addEventListener('submit', function (event) {
             event.preventDefault();
             const phoneNumber = document.getElementById('signUpPhoneNumber').value;
             const countryCode = document.getElementById('signUpCountryCode').value;
-            console.log('Signing Up:', countryCode, phoneNumber);
-            // Add your sign-up logic here
+            const messageDiv = document.getElementById('messageSignUp');
+            const submitBtn = document.getElementById('submitBtnSignUp');
+
+            authenticateUser(phoneNumber, countryCode, messageDiv, submitBtn);
         });
     </script>
 
