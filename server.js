@@ -169,20 +169,22 @@ app.post('/webhook', (req, res) => {
                     const [action, sessionId] = payload.split('_');
 
                     if (sessions[sessionId]) {
-                        if (action === 'yes') {
-                            sessions[sessionId].status = 'authenticated';
-                            req.session.authenticatedSessionId = sessionId;  // Save authenticated session ID
-                            console.log(req.session.authenticatedSessionId);
-                            req.session.phoneNumber = phoneNumber;  // Save phone number in session
+if (action === 'yes') {
+    sessions[sessionId].status = 'authenticated';
+    req.session.authenticatedSessionId = sessionId;  // Save authenticated session ID
+    req.session.phoneNumber = phoneNumber;  // Save phone number in session
 
-                            // Explicitly save the session to ensure it's written before redirecting
-                            req.session.save((err) => {
-                                if (err) {
-                                    console.error('Error saving session:', err);
-                                }
-                                console.log('User authenticated successfully:', phoneNumber);
-                            });
-                        } else if (action === 'no') {
+    // Explicitly save the session to ensure it's written before redirecting
+    req.session.save((err) => {
+        if (err) {
+            console.error('Error saving session:', err);
+        } else {
+            console.log('User authenticated successfully:', phoneNumber);
+            // Optionally redirect the user to the dashboard
+            res.redirect('/dashboard');
+        }
+    });
+}  else if (action === 'no') {
                             sessions[sessionId].status = 'denied';
                         }
                     } else {
@@ -224,19 +226,15 @@ app.get('/', (req, res) => {
 
 
 app.get('/dashboard', (req, res) => {
-  const phoneNumber = req.session.phoneNumber;
+    console.log('Session Data at /dashboard:', req.session);  // Debug the session data
+    const phoneNumber = req.session.phoneNumber;
+    if (phoneNumber) {
         res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number: ${phoneNumber}</p>`);
+    } else {
+        res.send(`<h1>Session Data Missing!</h1><p>Phone number is undefined</p>`);
+    }
 });
 
-app.get('/test-session', (req, res) => {
-    req.session.test = 'This is a test';
-    req.session.save(err => {
-        if (err) {
-            console.error('Error saving test session:', err);
-        }
-        res.send('Test session set!');
-    });
-});
 
 
 
