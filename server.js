@@ -221,9 +221,6 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));  // Serve index.html from the public directory
 });
 
-// Secure Dashboard Route
-// Secure Dashboard Route
-// Secure Dashboard Route
 
 
 app.get('/dashboard', (req, res) => {
@@ -241,19 +238,7 @@ app.get('/test-session', (req, res) => {
     });
 });
 
-app.get('/set-session', (req, res) => {
-    req.session.test = 'Test value';
-    res.send('Session value set!');
-});
 
-app.get('/get-session', (req, res) => {
-    res.send(`Session value: ${req.session.test || 'No session value found'}`);
-});
-
-
-app.get('/read-session', (req, res) => {
-    res.send(`Test session value: ${req.session.test || 'No test session found'}`);
-});
 
 
 // Access Denied route
