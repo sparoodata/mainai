@@ -22,23 +22,24 @@ mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
     .catch(err => console.error('MongoDB connection error:', err));
 
 // Body parser middleware
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
 
-// Session configuration with MongoDB session store
-app.use(session({
-    secret: 'your-secret-key',
+// Use session middleware
+app.use(
+  session({
+    secret: 'yourSecret', // Make sure this is a secure secret
     resave: false,
     saveUninitialized: false,
     store: MongoStore.create({
-        mongoUrl: MONGO_URI,
-        collectionName: 'sessions'
+      mongoUrl: 'mongodb://localhost:27017/yourDBName', // Replace with your MongoDB connection string
+      collectionName: 'sessions', // Make sure it's the same collection where sessions are stored
     }),
     cookie: {
-        secure: false, // Set to true if using HTTPS
-        maxAge: 1000 * 60 * 60 * 24, // 1 day
-    }
-}));
+      maxAge: 1000 * 60 * 60 * 24, // 24 hours
+      httpOnly: true, // For security reasons
+    },
+  })
+);
+
 
 // WhatsApp API credentials
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v17.0/110765315459068/messages';
@@ -203,42 +204,36 @@ app.get('/', (req, res) => {
 app.use(cookieParser());
 // Dashboard route (protected)
 app.get('/dashboard', async (req, res) => {
-    // If req.session is undefined, fetch session directly from MongoDB using the session ID from the cookie
-   console.log(req.cookies);
-  const sessionIdFromCookie = req.cookies['connect.sid']; // Get session ID from cookie (default name for session ID)
-    
-    if (sessionIdFromCookie) {
-        try {
-            // Fetch the session from MongoDB using the session ID (remember to replace quotes around ObjectId)
-            console.log(sessionIdFromCookie);
-            const session = await mongoose.connection.db.collection('sessions').findOne({ _id: sessionIdFromCookie });
+  try {
+    const sessionIdFromCookie = req.cookies['connect.sid']; // Get session ID from the cookie
 
-            if (session) {
-                const sessionData = JSON.parse(session.session); // Parse the session string from MongoDB
-                
-                if (sessionData.authenticatedSessionId) {
-                    // Find session details in your Session model based on session ID
-                    const sessionInDb = await Session.findOne({ sessionId: sessionData.authenticatedSessionId });
+    console.log('Session ID from cookie:', sessionIdFromCookie); // Log for debugging
 
-                    if (sessionInDb && sessionInDb.status === 'authenticated') {
-                        res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number: ${sessionInDb.phoneNumber}</p>`);
-                    } else {
-                        res.redirect('/access-denied');
-                    }
-                } else {
-                    res.redirect('/access-denied');
-                }
-            } else {
-                console.log('Session not found in MongoDB');
-                res.redirect('/access-denied');
-            }
-        } catch (error) {
-            console.error('Error retrieving session from MongoDB:', error);
-            res.status(500).send('Internal Server Error');
-        }
-    } else {
-        res.redirect('/access-denied');
+    if (!sessionIdFromCookie) {
+      return res.redirect('/access-denied'); // If no session ID found in the cookie
     }
+
+    // Find the session in MongoDB
+    const session = await mongoose.connection.db.collection('sessions').findOne({ _id: sessionIdFromCookie });
+
+    if (!session) {
+      console.log('Session not found in MongoDB');
+      return res.redirect('/access-denied');
+    }
+
+    console.log('Session found in MongoDB:', session);
+
+    const sessionData = JSON.parse(session.session);
+
+    if (sessionData.authenticatedSessionId) {
+      return res.send(`<h1>Welcome to your Dashboard!</h1><p>Your session ID: ${sessionData.authenticatedSessionId}</p>`);
+    } else {
+      return res.redirect('/access-denied');
+    }
+  } catch (error) {
+    console.error('Error retrieving session:', error);
+    res.status(500).send('Internal Server Error');
+  }
 });
 
 
