@@ -6,6 +6,8 @@ const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const mongoose = require('mongoose');
 const Session = require('./models/Session');
+const cookieParser = require('cookie-parser');
+
 const app = express();
 const port = 3000;
 
@@ -197,22 +199,38 @@ app.get('/', (req, res) => {
 
 // Dashboard route (protected)
 // Dashboard route (protected)
+app.use(cookieParser());
+// Dashboard route (protected)
 app.get('/dashboard', async (req, res) => {
-    console.log('req.session:', res.session); // Log the session
-
-    const sessionId = req.session.authenticatedSessionId;
-
-    if (sessionId) {
+    // If req.session is undefined, fetch session directly from MongoDB using the session ID from the cookie
+    const sessionIdFromCookie = req.cookies['connect.sid']; // Get session ID from cookie (default name for session ID)
+    
+    if (sessionIdFromCookie) {
         try {
-            const session = await Session.findOne({ sessionId });
+            // Fetch the session from MongoDB using the session ID (remember to replace quotes around ObjectId)
+            const session = await mongoose.connection.db.collection('sessions').findOne({ _id: sessionIdFromCookie });
 
-            if (session && session.status === 'authenticated') {
-                res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number: ${session.phoneNumber}</p>`);
+            if (session) {
+                const sessionData = JSON.parse(session.session); // Parse the session string from MongoDB
+                
+                if (sessionData.authenticatedSessionId) {
+                    // Find session details in your Session model based on session ID
+                    const sessionInDb = await Session.findOne({ sessionId: sessionData.authenticatedSessionId });
+
+                    if (sessionInDb && sessionInDb.status === 'authenticated') {
+                        res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number: ${sessionInDb.phoneNumber}</p>`);
+                    } else {
+                        res.redirect('/access-denied');
+                    }
+                } else {
+                    res.redirect('/access-denied');
+                }
             } else {
+                console.log('Session not found in MongoDB');
                 res.redirect('/access-denied');
             }
         } catch (error) {
-            console.error('Error retrieving session:', error);
+            console.error('Error retrieving session from MongoDB:', error);
             res.status(500).send('Internal Server Error');
         }
     } else {
