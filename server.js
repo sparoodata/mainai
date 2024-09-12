@@ -197,44 +197,71 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+
+
+
+const createSession = async (req, res, next) => {
+    // Ensure sessionId is not null
+    const sessionId = req.session ? req.session.sessionId : null;
+
+    if (!sessionId) {
+        // Generate a new sessionId if it doesn't exist
+        const newSessionId = Date.now().toString(); // Example, you can replace this with your logic
+        req.session.sessionId = newSessionId;
+    }
+
+    try {
+        // Now save session to MongoDB using the sessionId
+        const newSession = new Session({
+            sessionId: req.session.sessionId,
+            phoneNumber: req.body.phoneNumber, // Ensure this is populated correctly
+            status: 'authenticated',
+        });
+
+        await newSession.save();
+        res.redirect('/dashboard');
+    } catch (error) {
+        console.error('Error saving session:', error);
+        res.status(500).send('Internal Server Error');
+    }
+};
+
+app.post('/login', createSession);
+
 // Dashboard route (protected)
 // Dashboard route (protected)
 app.use(cookieParser());
 // Dashboard route (protected)
 app.get('/dashboard', async (req, res) => {
-    // If req.session is undefined, fetch session directly from MongoDB using the session ID from the cookie
-    const sessionIdFromCookie = req.cookies['connect.sid']; // Get session ID from cookie (default name for session ID)
-    
-    if (sessionIdFromCookie) {
-        try {
-            // Fetch the session from MongoDB using the session ID (remember to replace quotes around ObjectId)
-            const session = await mongoose.connection.db.collection('sessions').findOne({ _id: sessionIdFromCookie });
+    try {
+        const sessionIdFromCookie = req.cookies && req.cookies['connect.sid'];
 
-            if (session) {
-                const sessionData = JSON.parse(session.session); // Parse the session string from MongoDB
-                
-                if (sessionData.authenticatedSessionId) {
-                    // Find session details in your Session model based on session ID
-                    const sessionInDb = await Session.findOne({ sessionId: sessionData.authenticatedSessionId });
-
-                    if (sessionInDb && sessionInDb.status === 'authenticated') {
-                        res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number: ${sessionInDb.phoneNumber}</p>`);
-                    } else {
-                        res.redirect('/access-denied');
-                    }
-                } else {
-                    res.redirect('/access-denied');
-                }
-            } else {
-                console.log('Session not found in MongoDB');
-                res.redirect('/access-denied');
-            }
-        } catch (error) {
-            console.error('Error retrieving session from MongoDB:', error);
-            res.status(500).send('Internal Server Error');
+        if (!sessionIdFromCookie) {
+            return res.redirect('/access-denied'); // Early return to avoid multiple sends
         }
-    } else {
-        res.redirect('/access-denied');
+
+        const session = await mongoose.connection.db.collection('sessions').findOne({ _id: sessionIdFromCookie });
+
+        if (!session) {
+            return res.redirect('/access-denied'); // Early return
+        }
+
+        const sessionData = JSON.parse(session.session);
+
+        if (!sessionData.authenticatedSessionId) {
+            return res.redirect('/access-denied'); // Early return
+        }
+
+        const sessionInDb = await Session.findOne({ sessionId: sessionData.authenticatedSessionId });
+
+        if (sessionInDb && sessionInDb.status === 'authenticated') {
+            return res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number: ${sessionInDb.phoneNumber}</p>`);
+        } else {
+            return res.redirect('/access-denied'); // Early return
+        }
+    } catch (error) {
+        console.error('Error retrieving session from MongoDB:', error);
+        res.status(500).send('Internal Server Error');
     }
 });
 
