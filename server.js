@@ -135,6 +135,7 @@ app.post('/webhook', async (req, res) => {
                                 await session.save();
 
                                 // Set session data
+                             
                                 req.session.authenticatedSessionId = sessionId;
                                 console.log('authentic_id',req.session.authenticatedSessionId);
                                 req.session.phoneNumber = phoneNumber;
@@ -203,11 +204,13 @@ app.use(cookieParser());
 // Dashboard route (protected)
 app.get('/dashboard', async (req, res) => {
     // If req.session is undefined, fetch session directly from MongoDB using the session ID from the cookie
-    const sessionIdFromCookie = req.cookies['connect.sid']; // Get session ID from cookie (default name for session ID)
+   console.log(req.cookies);
+  const sessionIdFromCookie = req.cookies['connect.sid']; // Get session ID from cookie (default name for session ID)
     
     if (sessionIdFromCookie) {
         try {
             // Fetch the session from MongoDB using the session ID (remember to replace quotes around ObjectId)
+            console.log(sessionIdFromCookie);
             const session = await mongoose.connection.db.collection('sessions').findOne({ _id: sessionIdFromCookie });
 
             if (session) {
