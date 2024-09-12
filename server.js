@@ -3,9 +3,9 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const axios = require('axios');
 const session = require('express-session');
-const MongoStore = require('connect-mongo'); // To store sessions in MongoDB
+const MongoStore = require('connect-mongo');
 const mongoose = require('mongoose');
-const Session = require('./models/Session'); // Import the Session model
+const Session = require('./models/Session');
 const app = express();
 const port = 3000;
 
@@ -38,13 +38,6 @@ app.use(session({
     }
 }));
 
-// Log session data for debugging
-app.use((req, res, next) => {
-    console.log('Session ID:', req.sessionID);
-    console.log('Session Data:', req.session);
-    next();
-});
-
 // WhatsApp API credentials
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v17.0/110765315459068/messages';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
@@ -70,11 +63,7 @@ app.get('/webhook', (req, res) => {
 // Send WhatsApp Authentication Request
 app.post('/send-auth', async (req, res) => {
     const { phoneNumber, countryCode } = req.body;
-
-    // Concatenate the country code and phone number
-    const formattedPhoneNumber = `${countryCode}${phoneNumber.replace(/^\+/, '')}`; // Strip '+' from phone number if included
-
-    // Generate a unique session ID
+    const formattedPhoneNumber = `${countryCode}${phoneNumber.replace(/^\+/, '')}`;
     const sessionId = Date.now().toString();
 
     try {
@@ -89,20 +78,8 @@ app.post('/send-auth', async (req, res) => {
                 },
                 action: {
                     buttons: [
-                        {
-                            type: 'reply',
-                            reply: {
-                                id: `yes_${sessionId}`,
-                                title: 'Yes'
-                            }
-                        },
-                        {
-                            type: 'reply',
-                            reply: {
-                                id: `no_${sessionId}`,
-                                title: 'No'
-                            }
-                        }
+                        { type: 'reply', reply: { id: `yes_${sessionId}`, title: 'Yes' } },
+                        { type: 'reply', reply: { id: `no_${sessionId}`, title: 'No' } }
                     ]
                 }
             }
@@ -113,12 +90,7 @@ app.post('/send-auth', async (req, res) => {
             }
         });
 
-        // Save session to MongoDB
-        const newSession = new Session({
-            sessionId,
-            phoneNumber: formattedPhoneNumber,
-            status: 'pending'
-        });
+        const newSession = new Session({ sessionId, phoneNumber: formattedPhoneNumber, status: 'pending' });
         await newSession.save();
 
         console.log('Message sent successfully:', response.data);
@@ -141,45 +113,38 @@ app.post('/webhook', async (req, res) => {
 
             if (messages && messages.length > 0) {
                 const message = messages[0];
-                const phoneNumber = message.from.replace(/^\+/, ''); // Remove the '+' prefix
-
+                const phoneNumber = message.from.replace(/^\+/, '');
                 let payload;
-                if (message.button && message.button.payload) {
-                    payload = message.button.payload; // For older API versions
-                } else if (message.interactive && message.interactive.button_reply && message.interactive.button_reply.id) {
-                    payload = message.interactive.button_reply.id; // For newer API versions
+
+                if (message.interactive && message.interactive.button_reply && message.interactive.button_reply.id) {
+                    payload = message.interactive.button_reply.id;
                 }
 
                 if (payload) {
                     const [action, sessionId] = payload.split('_');
 
                     try {
-                        // Find session by sessionId in MongoDB
                         const session = await Session.findOne({ sessionId });
 
                         if (session) {
                             if (action === 'yes') {
                                 session.status = 'authenticated';
-                                await session.save(); // Update session status in MongoDB
+                                await session.save();
 
-                                // Save session info in Express session
                                 req.session.authenticatedSessionId = sessionId;
                                 req.session.phoneNumber = phoneNumber;
-                              console.log(req.session.authenticatedSessionId );
 
-                                // Save session and handle response
                                 req.session.save((err) => {
                                     if (err) {
                                         console.error('Error saving session:', err);
                                         return res.status(500).send('Internal Server Error');
-                                    } else {
-                                        console.log('User authenticated successfully:', phoneNumber);
-                                        return res.redirect('/dashboard');
                                     }
+                                    console.log('User authenticated successfully:', phoneNumber);
+                                    res.status(200).send(); // Send a response once, no redirect here
                                 });
                             } else if (action === 'no') {
                                 session.status = 'denied';
-                                await session.save(); // Update session status in MongoDB
+                                await session.save();
                             }
                         } else {
                             console.log('Session not found for sessionId:', sessionId);
@@ -193,11 +158,8 @@ app.post('/webhook', async (req, res) => {
         }
     }
 
-    // Ensure response is sent only once
-    res.sendStatus(200);
+    res.sendStatus(200); // Ensure response is only sent once
 });
-
-
 
 // Check Authentication Status
 app.get('/auth/status/:sessionId', async (req, res) => {
@@ -225,17 +187,17 @@ app.get('/auth/status/:sessionId', async (req, res) => {
 
 // Serve the HTML file
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));  // Serve index.html from the public directory
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Dashboard route (protected)
 app.get('/dashboard', async (req, res) => {
+    console.log(req.session);
     const sessionId = req.session.authenticatedSessionId;
 
     if (sessionId) {
         try {
             const session = await Session.findOne({ sessionId });
-          console.log('inside ifffffffffffff');
 
             if (session && session.status === 'authenticated') {
                 res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number: ${session.phoneNumber}</p>`);
@@ -250,7 +212,6 @@ app.get('/dashboard', async (req, res) => {
         res.redirect('/access-denied');
     }
 });
-
 
 // Access Denied route
 app.get('/access-denied', (req, res) => {
