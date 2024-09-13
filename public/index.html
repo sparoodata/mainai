@@ -6,103 +6,90 @@
     <title>Login and Signup Form</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
-        body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            font-family: 'Roboto', sans-serif;
-            background: linear-gradient(135deg, #1E5799 0%,#2989D8 50%,#207CCA 100%);
-        }
+      body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    font-family: 'Roboto', sans-serif;
+    background: linear-gradient(135deg, #1E5799 0%, #2989D8 50%, #207CCA 100%);
+}
 
-        .container {
-            width: 400px;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
-            padding: 30px 25px;
-            box-sizing: border-box;
-        }
+.container {
+    width: 400px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    padding: 30px 25px;
+    box-sizing: border-box;
+}
 
-        .toggle-buttons {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 20px;
-        }
+.toggle-buttons {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
 
-        .toggle-buttons button {
-            background: none;
-            border: none;
-            font-size: 1.1rem;
-            font-weight: 500;
-            cursor: pointer;
-            padding-bottom: 5px;
-            border-bottom: 2px solid transparent;
-            transition: color 0.3s ease, border-bottom 0.3s ease;
-        }
+.toggle-buttons button {
+    background: none;
+    border: none;
+    font-size: 1.1rem;
+    font-weight: 500;
+    cursor: pointer;
+    padding-bottom: 5px;
+    border-bottom: 2px solid transparent;
+    transition: color 0.3s ease, border-bottom 0.3s ease;
+}
 
-        .toggle-buttons button.active {
-            color: #1E5799;
-            border-color: #1E5799;
-        }
+.toggle-buttons button.active {
+    color: #1E5799;
+    border-color: #1E5799;
+}
 
-        .form-container {
-            display: flex;
-            width: 200%;
-            transition: transform 0.4s ease-in-out;
-        }
-
-        form {
-            width: 50%;
-            padding: 10px;
-            box-sizing: border-box;
-        }
-
-        input {
-            width: 100%;
-            padding: 12px;
-            margin: 10px 0;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: 1rem;
-            outline: none;
-            box-sizing: border-box;
-        }
-
-        .btn {
-            width: 100%;
-            padding: 12px;
-            margin-top: 15px;
-            background: #1E5799;
-            border: none;
-            color: white;
-            font-size: 1.1rem;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: background 0.3s ease;
-        }
-
-        .btn:hover {
-            background: #1b4a8b;
-        }
-
-        .toggle-buttons button:hover {
-            color: #1b4a8b;
-        }
-      .form-container {
+.form-container {
     display: flex;
     width: 200%;
-    transform: translateX(0);
     transition: transform 0.4s ease-in-out;
-    overflow: hidden; /* Ensure anything outside the container is hidden */
 }
 
 form {
-    width: 50%; /* Each form takes exactly half of the container width */
+    width: 50%;
     padding: 10px;
     box-sizing: border-box;
+}
+
+input {
+    width: 100%;
+    padding: 12px;
+    margin: 10px 0;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 1rem;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.btn {
+    width: 100%;
+    padding: 12px;
+    margin-top: 15px;
+    background: #1E5799;
+    border: none;
+    color: white;
+    font-size: 1.1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+}
+
+.btn:hover {
+    background: #1b4a8b;
+}
+
+.toggle-buttons button:hover {
+    color: #1b4a8b;
 }
 
     </style>
