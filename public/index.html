@@ -11,78 +11,36 @@
             justify-content: center;
             align-items: center;
             height: 100vh;
+            margin: 0;
             font-family: 'Roboto', sans-serif;
             background: linear-gradient(135deg, #1E5799 0%,#2989D8 50%,#207CCA 100%);
         }
 
         .container {
-            position: relative;
             width: 400px;
-            height: 450px;
             background: white;
-            border-radius: 10px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border-radius: 12px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
             overflow: hidden;
-        }
-
-        .header {
-            text-align: center;
-            padding: 20px;
-            font-size: 1.8rem;
-            font-weight: 700;
-            color: #333;
-        }
-
-        .form-container {
-            display: flex;
-            width: 200%;
-            transition: transform 0.5s ease-in-out;
-        }
-
-        form {
-            width: 50%;
-            padding: 20px;
+            padding: 30px 25px;
             box-sizing: border-box;
-        }
-
-        input {
-            width: 100%;
-            padding: 10px;
-            margin: 10px 0;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 1rem;
-        }
-
-        .btn {
-            width: 100%;
-            padding: 10px;
-            background: #1E5799;
-            border: none;
-            color: white;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 1.1rem;
-        }
-
-        .btn:hover {
-            background: #1b4a8b;
         }
 
         .toggle-buttons {
             display: flex;
             justify-content: space-between;
-            margin: 10px 20px;
+            margin-bottom: 20px;
         }
 
         .toggle-buttons button {
             background: none;
             border: none;
+            font-size: 1.1rem;
+            font-weight: 500;
             cursor: pointer;
-            font-size: 1rem;
-            color: #555;
             padding-bottom: 5px;
             border-bottom: 2px solid transparent;
+            transition: color 0.3s ease, border-bottom 0.3s ease;
         }
 
         .toggle-buttons button.active {
@@ -90,15 +48,54 @@
             border-color: #1E5799;
         }
 
-        .spacing {
-            margin-top: 30px;
+        .form-container {
+            display: flex;
+            width: 200%;
+            transition: transform 0.4s ease-in-out;
+        }
+
+        form {
+            width: 50%;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+            outline: none;
+            box-sizing: border-box;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            margin-top: 15px;
+            background: #1E5799;
+            border: none;
+            color: white;
+            font-size: 1.1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .btn:hover {
+            background: #1b4a8b;
+        }
+
+        .toggle-buttons button:hover {
+            color: #1b4a8b;
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div class="header">Login Form</div>
     <div class="toggle-buttons">
         <button class="active" id="loginBtn">Login</button>
         <button id="signupBtn">Signup</button>
@@ -108,13 +105,11 @@
         <form id="signInForm">
             <input type="text" id="signInPhoneNumber" placeholder="Phone Number">
             <button class="btn" type="submit">Send Authorization</button>
-            <p id="messageSignIn"></p>
         </form>
         <!-- Signup Form -->
         <form id="signUpForm">
             <input type="text" id="signUpPhoneNumber" placeholder="Phone Number">
             <button class="btn" type="submit">Register</button>
-            <p id="messageSignUp"></p>
         </form>
     </div>
 </div>
@@ -134,42 +129,6 @@
         formContainer.style.transform = 'translateX(-50%)';
         signupBtn.classList.add('active');
         loginBtn.classList.remove('active');
-    });
-
-    // Handle SignIn form submission
-    document.getElementById('signInForm').addEventListener('submit', function (event) {
-        event.preventDefault();
-        const phoneNumber = document.getElementById('signInPhoneNumber').value;
-        fetch('/api/send-whatsapp-auth', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phoneNumber })
-        })
-        .then(response => response.json())
-        .then(data => {
-            document.getElementById('messageSignIn').textContent = data.message;
-        })
-        .catch(error => {
-            document.getElementById('messageSignIn').textContent = 'Failed to send authorization.';
-        });
-    });
-
-    // Handle SignUp form submission
-    document.getElementById('signUpForm').addEventListener('submit', function (event) {
-        event.preventDefault();
-        const phoneNumber = document.getElementById('signUpPhoneNumber').value;
-        fetch('/api/send-whatsapp-otp', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phoneNumber })
-        })
-        .then(response => response.json())
-        .then(data => {
-            document.getElementById('messageSignUp').textContent = data.message;
-        })
-        .catch(error => {
-            document.getElementById('messageSignUp').textContent = 'Failed to send OTP.';
-        });
     });
 </script>
 
