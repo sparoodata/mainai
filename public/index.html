@@ -91,6 +91,20 @@
         .toggle-buttons button:hover {
             color: #1b4a8b;
         }
+      .form-container {
+    display: flex;
+    width: 200%;
+    transform: translateX(0);
+    transition: transform 0.4s ease-in-out;
+    overflow: hidden; /* Ensure anything outside the container is hidden */
+}
+
+form {
+    width: 50%; /* Each form takes exactly half of the container width */
+    padding: 10px;
+    box-sizing: border-box;
+}
+
     </style>
 </head>
 <body>
