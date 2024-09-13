@@ -21,15 +21,16 @@
             background: white;
             border-radius: 12px;
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
-            padding: 30px 25px;
+            overflow: hidden; /* Prevent overflow */
+            padding: 0;
             box-sizing: border-box;
         }
 
         .toggle-buttons {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 20px;
+            padding: 30px 25px;
+            box-sizing: border-box;
         }
 
         .toggle-buttons button {
@@ -50,14 +51,14 @@
 
         .form-container {
             display: flex;
-            width: 200%;
-            transform: translateX(0);
+            width: 200%; /* Double the width for sliding */
+            transform: translateX(0); /* Show login form by default */
             transition: transform 0.4s ease-in-out;
         }
 
         form {
-            width: 50%;
-            padding: 10px;
+            width: 50%; /* Each form occupies 50% of the container */
+            padding: 30px 25px;
             box-sizing: border-box;
         }
 
@@ -121,13 +122,13 @@
     const formContainer = document.getElementById('formContainer');
 
     loginBtn.addEventListener('click', () => {
-        formContainer.style.transform = 'translateX(0)';
+        formContainer.style.transform = 'translateX(0)'; /* Login form in view */
         loginBtn.classList.add('active');
         signupBtn.classList.remove('active');
     });
 
     signupBtn.addEventListener('click', () => {
-        formContainer.style.transform = 'translateX(-50%)';
+        formContainer.style.transform = 'translateX(-50%)'; /* Move to show signup form */
         signupBtn.classList.add('active');
         loginBtn.classList.remove('active');
     });
