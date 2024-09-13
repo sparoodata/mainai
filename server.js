@@ -16,22 +16,26 @@ require('dotenv').config();
 
 // MongoDB connection
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/yourdatabase';
-
 mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => console.log('Connected to MongoDB'))
     .catch(err => console.error('MongoDB connection error:', err));
 
-// Body parser middleware
+// Use body parser middleware
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// Use cookieParser middleware
+app.use(cookieParser());
 
 // Use session middleware
 app.use(
   session({
-    secret: 'yourSecret', // Make sure this is a secure secret
+    secret: 'yourSecret', // Ensure this is a secure secret in production
     resave: false,
     saveUninitialized: false,
     store: MongoStore.create({
-      mongoUrl: 'mongodb://localhost:27017/yourDBName', // Replace with your MongoDB connection string
-      collectionName: 'sessions', // Make sure it's the same collection where sessions are stored
+      mongoUrl: MONGO_URI, // Use the same MongoDB connection string
+      collectionName: 'sessions',
     }),
     cookie: {
       maxAge: 1000 * 60 * 60 * 24, // 24 hours
@@ -39,7 +43,6 @@ app.use(
     },
   })
 );
-
 
 // WhatsApp API credentials
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v17.0/110765315459068/messages';
@@ -76,9 +79,7 @@ app.post('/send-auth', async (req, res) => {
             type: 'interactive',
             interactive: {
                 type: 'button',
-                body: {
-                    text: 'Do you authorize this login?'
-                },
+                body: { text: 'Do you authorize this login?' },
                 action: {
                     buttons: [
                         { type: 'reply', reply: { id: `yes_${sessionId}`, title: 'Yes' } },
@@ -104,7 +105,6 @@ app.post('/send-auth', async (req, res) => {
     }
 });
 
-// Handle Webhook Callback
 // Handle Webhook Callback
 app.post('/webhook', async (req, res) => {
     const { entry } = req.body;
@@ -135,20 +135,16 @@ app.post('/webhook', async (req, res) => {
                                 session.status = 'authenticated';
                                 await session.save();
 
-                                // Set session data
-                             
                                 req.session.authenticatedSessionId = sessionId;
-                                console.log('authentic_id',req.session.authenticatedSessionId);
                                 req.session.phoneNumber = phoneNumber;
 
-                                // Save session
                                 req.session.save((err) => {
                                     if (err) {
                                         console.error('Error saving session:', err);
                                         return res.status(500).send('Internal Server Error');
                                     } else {
                                         console.log('Session saved successfully:', req.session);
-                                        res.status(200).send(); // Send a response once
+                                        res.status(200).send();
                                     }
                                 });
                             } else if (action === 'no') {
@@ -167,7 +163,7 @@ app.post('/webhook', async (req, res) => {
         }
     }
 
-    res.sendStatus(200); // Ensure response is only sent once
+    res.sendStatus(200);
 });
 
 // Check Authentication Status
@@ -177,7 +173,6 @@ app.get('/auth/status/:sessionId', async (req, res) => {
     try {
         const session = await Session.findOne({ sessionId });
         if (session) {
-            console.log('Checking session:', session);
             if (session.status === 'authenticated') {
                 res.json({ status: 'authenticated', message: 'Login successful' });
             } else if (session.status === 'denied') {
@@ -200,42 +195,18 @@ app.get('/', (req, res) => {
 });
 
 // Dashboard route (protected)
-// Dashboard route (protected)
-app.use(cookieParser());
-// Dashboard route (protected)
 app.get('/dashboard', async (req, res) => {
-  try {
-    const sessionIdFromCookie = req.cookies['connect.sid']; // Get session ID from the cookie
+    try {
+        if (!req.session.authenticatedSessionId) {
+            return res.redirect('/access-denied');
+        }
 
-    console.log('Session ID from cookie:', sessionIdFromCookie); // Log for debugging
-
-    if (!sessionIdFromCookie) {
-      return res.redirect('/access-denied'); // If no session ID found in the cookie
+        return res.send(`<h1>Welcome to your Dashboard!</h1><p>Your session ID: ${req.session.authenticatedSessionId}</p>`);
+    } catch (error) {
+        console.error('Error retrieving session:', error);
+        res.status(500).send('Internal Server Error');
     }
-
-    // Find the session in MongoDB
-    const session = await mongoose.connection.db.collection('sessions').findOne({ _id: sessionIdFromCookie });
-
-    if (!session) {
-      console.log('Session not found in MongoDB');
-      return res.redirect('/access-denied');
-    }
-
-    console.log('Session found in MongoDB:', session);
-
-    const sessionData = JSON.parse(session.session);
-
-    if (sessionData.authenticatedSessionId) {
-      return res.send(`<h1>Welcome to your Dashboard!</h1><p>Your session ID: ${sessionData.authenticatedSessionId}</p>`);
-    } else {
-      return res.redirect('/access-denied');
-    }
-  } catch (error) {
-    console.error('Error retrieving session:', error);
-    res.status(500).send('Internal Server Error');
-  }
 });
-
 
 // Access Denied route
 app.get('/access-denied', (req, res) => {
