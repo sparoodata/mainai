@@ -1,6 +1,3 @@
-
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,7 +6,7 @@
     <title>Sign In / Sign Up Slider</title>
     <link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
     <style>
-   body {
+        body {
             font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
@@ -35,204 +32,102 @@
 
         .container {
             width: 100%;
-            max-width: 900px;
-            height: 500px;
+            max-width: 400px;
             background-color: #fff;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             border-radius: 12px;
-            position: relative;
-            display: flex;
             overflow: hidden;
-            margin-top: 20px; /* Space between header and container */
-        }
-
-        .form-container {
-            width: 200%;
-            height: 100%;
-            display: flex;
-            transition: transform 0.6s ease-in-out;
-        }
-
-        .sign-in-container, .sign-up-container {
-            width: 50%;
             padding: 20px;
-            box-sizing: border-box;
+        }
+
+        .tab-buttons {
             display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
+            justify-content: space-around;
+            margin-bottom: 20px;
         }
 
-        .sign-in-container {
-            background-color: #d0e0f0; /* Light blue */
-        }
-
-        .sign-up-container {
-            background-color: #b0c4de; /* Slightly darker blue */
-        }
-
-        .overlay-container {
-            width: 50%;
-            height: 100%;
-            background-color: #8f94fb;
-            color: white;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            position: absolute;
-            top: 0;
-            right: 0;
-            transition: transform 0.6s ease-in-out;
-            z-index: 10;
-            text-align: center;
-        }
-
-        .overlay-content {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .overlay-content h2 {
-            margin: 0;
-            font-size: 24px;
-        }
-
-        .overlay-content button {
-            background-color: white;
-            color: #4e54c8;
+        .tab-buttons button {
+            background: #f0f0f0;
             border: none;
+            outline: none;
+            padding: 10px 30px;
+            border-radius: 30px;
             cursor: pointer;
-            padding: 10px 20px;
             font-size: 16px;
-            border-radius: 5px;
-            margin-top: 20px;
-            transition: background-color 0.3s ease;
+            transition: background-color 0.3s;
         }
 
-        .overlay-content button:hover {
-            background-color: #f8f9fa;
+        .tab-buttons button.active {
+            background: linear-gradient(135deg, #4e54c8, #8f94fb);
+            color: white;
+        }
+
+        .tab-buttons button:hover {
+            background: #e0e0e0;
         }
 
         .form-group {
             margin-bottom: 15px;
-            width: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .form-group select, .form-group input {
-            font-size: 16px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            box-sizing: border-box;
-        }
-
-        .form-group select {
-            width: 40%;
-            margin-right: 10px;
-            padding: 10px;
         }
 
         .form-group input {
-            width: 60%;
-            padding: 10px;
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            outline: none;
+            transition: border 0.3s;
         }
 
-        button {
-            padding: 10px 20px;
+        .form-group input:focus {
+            border-color: #4e54c8;
+        }
+
+        .form-group label {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .form-group a {
+            font-size: 12px;
+            color: #4e54c8;
+            text-decoration: none;
+        }
+
+        .form-group a:hover {
+            text-decoration: underline;
+        }
+
+        .form-group button {
+            width: 100%;
+            padding: 12px;
             font-size: 16px;
-            background-color: #4e54c8;
+            background: linear-gradient(135deg, #4e54c8, #8f94fb);
             color: white;
             border: none;
+            border-radius: 8px;
             cursor: pointer;
-            border-radius: 5px;
-            margin-top: 20px;
-            transition: background-color 0.3s ease;
+            transition: background 0.3s;
         }
 
-        button:hover {
-            background-color: #8f94fb;
+        .form-group button:hover {
+            background: linear-gradient(135deg, #8f94fb, #4e54c8);
         }
 
-        .container.slide-active .form-container {
-            transform: translateX(-50%);
+        .footer-text {
+            text-align: center;
+            font-size: 14px;
+            color: #666;
         }
 
-        .container.slide-active .overlay-container {
-            transform: translateX(0);
+        .footer-text a {
+            color: #4e54c8;
+            text-decoration: none;
         }
 
-        @media (max-width: 768px) {
-            .container {
-                height: 100%;
-                flex-direction: column;
-                max-width: 100%;
-            }
-
-            .form-container {
-                width: 100%;
-                height: 200%;
-                transform: translateY(0);
-            }
-
-            .sign-in-container, .sign-up-container {
-                width: 100%;
-                padding: 20px;
-            }
-
-            .form-group {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .form-group select, .form-group input {
-                width: 100%;
-                margin: 0;
-            }
-
-            .overlay-container {
-                width: 100%;
-                height: 50%;
-                position: absolute;
-                top: 0;
-                right: 0;
-                transform: translateY(-100%);
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-            }
-
-            .container.slide-active .overlay-container {
-                transform: translateY(0);
-            }
-
-            .container.slide-active .form-container {
-                transform: translateY(-50%);
-            }
-        }
-
-        @media (max-width: 480px) {
-            .overlay-content h2 {
-                font-size: 20px;
-            }
-
-            .overlay-content button {
-                font-size: 14px;
-                padding: 8px 16px;
-            }
-
-            .form-group select, .form-group input {
-                font-size: 14px;
-                padding: 8px;
-            }
-
-            button {
-                font-size: 14px;
-                padding: 8px 16px;
-            }
+        .footer-text a:hover {
+            text-decoration: underline;
         }
     </style>
 </head>
@@ -240,134 +135,69 @@
 
     <h1 class="header">MyTenantsOnline</h1>
 
-    <div class="container" id="container">
-        <div class="form-container">
-            <!-- Sign In Form -->
-            <div class="sign-in-container">
-                <h1>Sign In</h1>
-                <form id="signInForm">
-                    <div class="form-group">
-                        <select id="signInCountryCode" name="countryCode">
-                            <option value="+91">🇮🇳 India (+91)</option>
-                            <option value="+1">🇺🇸 USA (+1)</option>
-                            <option value="+44">🇬🇧 UK (+44)</option>
-                            <option value="+49">🇩🇪 Germany (+49)</option>
-                            <option value="+61">🇦🇺 Australia (+61)</option>
-                        </select>
-                        <input type="text" id="signInPhoneNumber" name="phoneNumber" placeholder="Enter your number" required>
-                    </div>
-                    <button type="submit" id="submitBtnSignIn">Sign In</button>
-                    <div id="messageSignIn"></div>
-                </form>
-            </div>
+    <div class="container">
+        <div class="tab-buttons">
+            <button id="loginTab" class="active">Login</button>
+            <button id="signupTab">Signup</button>
+        </div>
 
-            <!-- Sign Up Form -->
-            <div class="sign-up-container">
-                <h1>Sign Up</h1>
-                <form id="signUpForm">
-                    <div class="form-group">
-                        <select id="signUpCountryCode" name="countryCode">
-                            <option value="+91">🇮🇳 India (+91)</option>
-                            <option value="+1">🇺🇸 USA (+1)</option>
-                            <option value="+44">🇬🇧 UK (+44)</option>
-                            <option value="+49">🇩🇪 Germany (+49)</option>
-                            <option value="+61">🇦🇺 Australia (+61)</option>
-                        </select>
-                        <input type="text" id="signUpPhoneNumber" name="phoneNumber" placeholder="Enter your number" required>
-                    </div>
-                    <button type="submit" id="submitBtnSignUp">Sign Up</button>
-                    <div id="messageSignUp"></div>
-                </form>
+        <div id="loginForm" class="form-content">
+            <div class="form-group">
+                <label>Phone Number</label>
+                <input type="text" placeholder="Enter Phone Number" required>
+            </div>
+            <div class="form-group">
+                <button type="submit">Login</button>
             </div>
         </div>
 
-        <!-- Overlay Content -->
-        <div class="overlay-container">
-            <div class="overlay-content">
-                <h2 id="overlayText">New here? Create an account!</h2>
-                <button id="slideButton">Register</button>
+        <div id="signupForm" class="form-content" style="display: none;">
+            <div class="form-group">
+                <label>Phone Number</label>
+                <input type="text" placeholder="Phone Number" required>
             </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" placeholder="Password" required>
+            </div>
+            <div class="form-group">
+                <label>Confirm Password</label>
+                <input type="password" placeholder="Confirm Password" required>
+            </div>
+            <div class="form-group">
+                <button type="submit">Signup</button>
+            </div>
+        </div>
+
+        <div class="footer-text">
+            Not a member? <a href="#" id="signupLink">Signup now</a>
         </div>
     </div>
 
     <script>
-        const container = document.getElementById('container');
-        const slideButton = document.getElementById('slideButton');
-        const overlayText = document.getElementById('overlayText');
+        const loginTab = document.getElementById('loginTab');
+        const signupTab = document.getElementById('signupTab');
+        const loginForm = document.getElementById('loginForm');
+        const signupForm = document.getElementById('signupForm');
+        const signupLink = document.getElementById('signupLink');
 
-        slideButton.addEventListener('click', function () {
-            container.classList.toggle('slide-active');
-            
-            // Change overlay text and button
-            if (container.classList.contains('slide-active')) {
-                overlayText.textContent = 'Already have an account? Sign in!';
-                slideButton.textContent = 'Sign In';
-            } else {
-                overlayText.textContent = 'New here? Create an account!';
-                slideButton.textContent = 'Register';
-            }
+        loginTab.addEventListener('click', () => {
+            loginTab.classList.add('active');
+            signupTab.classList.remove('active');
+            loginForm.style.display = 'block';
+            signupForm.style.display = 'none';
         });
 
-        // Authentication logic for both Sign In and Sign Up
-        const authenticateUser = async (phoneNumber, countryCode, messageDiv, submitBtn) => {
-            submitBtn.disabled = true;
-            messageDiv.textContent = 'Waiting for response...';
-
-            try {
-                const response = await fetch('/send-auth', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ phoneNumber, countryCode })
-                });
-
-                const result = await response.json();
-                if (result.sessionId) {
-                    const sessionId = result.sessionId;
-                    const checkStatus = async () => {
-                        const statusResponse = await fetch(`/auth/status/${sessionId}`);
-                        const statusResult = await statusResponse.json();
-                        if (statusResult.status === 'authenticated') {
-                            window.location.href = '/dashboard';
-                        } else if (statusResult.status === 'denied') {
-                            window.location.href = '/access-denied';
-                        } else {
-                            setTimeout(checkStatus, 2000);
-                        }
-                    };
-                    checkStatus();
-                } else {
-                    messageDiv.textContent = 'Failed to send authentication message.';
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                messageDiv.textContent = 'An error occurred. Please try again.';
-            } finally {
-                submitBtn.disabled = false;
-            }
-        };
-
-        // Sign In form submission
-        document.getElementById('signInForm').addEventListener('submit', function (event) {
-            event.preventDefault();
-            const phoneNumber = document.getElementById('signInPhoneNumber').value;
-            const countryCode = document.getElementById('signInCountryCode').value;
-            const messageDiv = document.getElementById('messageSignIn');
-            const submitBtn = document.getElementById('submitBtnSignIn');
-
-            authenticateUser(phoneNumber, countryCode, messageDiv, submitBtn);
+        signupTab.addEventListener('click', () => {
+            signupTab.classList.add('active');
+            loginTab.classList.remove('active');
+            loginForm.style.display = 'none';
+            signupForm.style.display = 'block';
         });
 
-        // Sign Up form submission
-        document.getElementById('signUpForm').addEventListener('submit', function (event) {
+        signupLink.addEventListener('click', (event) => {
             event.preventDefault();
-            const phoneNumber = document.getElementById('signUpPhoneNumber').value;
-            const countryCode = document.getElementById('signUpCountryCode').value;
-            const messageDiv = document.getElementById('messageSignUp');
-            const submitBtn = document.getElementById('submitBtnSignUp');
-
-            authenticateUser(phoneNumber, countryCode, messageDiv, submitBtn);
+            signupTab.click();
         });
     </script>
 
