@@ -53,6 +53,7 @@
             border-radius: 25px;
             transition: color 0.3s ease;
             position: relative;
+          
         }
 
         .toggle-button.active {
@@ -64,6 +65,7 @@
         .form-container {
             display: flex;
             width: 200%; /* Double the width for sliding */
+            overflow: hidden;
             transform: translateX(0); /* Show login form by default */
             transition: transform 0.4s ease-in-out;
         }
@@ -72,6 +74,7 @@
             width: 50%; /* Each form occupies 50% of the container */
             padding: 30px 25px;
             box-sizing: border-box;
+            overflow: visible; /* Ensure no overflow except for the dropdown */
         }
 
         input {
@@ -96,6 +99,7 @@
             border-radius: 8px;
             cursor: pointer;
             transition: background 0.3s ease;
+           overflow: hidden; 
         }
 
         .btn:hover {
@@ -108,6 +112,7 @@
             margin: 10px 0;
             box-sizing: border-box;
             position: relative; /* Ensure proper positioning */
+            z-index: 1; /* Allow the dropdown to overflow properly */
         }
 
         .intl-tel-input input {
@@ -124,13 +129,19 @@
         .intl-tel-input .country-list {
             z-index: 1000; /* Bring it to the front */
             position: absolute; /* Required for it to overflow properly */
+            overflow: hidden; /* Allow dropdown visibility */
+        }
+
+        /* Fix overflow issue */
+        .container {
+            position: relative;
+            overflow: visible; /* Ensure overflow is visible for the dropdown */
         }
 
         /* General fix for overflow */
         .container form {
             overflow: hidden; /* No overflow visible for the form elements */
         }
-
     </style>
 </head>
 <body>
