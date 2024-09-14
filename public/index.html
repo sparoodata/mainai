@@ -12,122 +12,110 @@
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 
     <style>
-       /* General styles */
-/* General styles */
-body {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    margin: 0;
-    font-family: 'Roboto', sans-serif;
-    background: linear-gradient(135deg, #1E5799 0%, #2989D8 50%, #207CCA 100%);
-    overflow: hidden;
-}
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #1E5799 0%, #2989D8 50%, #207CCA 100%);
+            overflow: hidden;
+        }
 
 .container {
     width: 400px;
+    height: 800px; /* Double the original height */
     background: white;
     border-radius: 12px;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
     padding: 0;
     box-sizing: border-box;
-    overflow: hidden;
     position: relative;
+    overflow: hidden; /* Keep forms inside the container */
 }
 
-.toggle-container {
-    display: flex;
-    justify-content: space-between;
-    background-color: #f0f0f0;
-    border-radius: 25px;
-    padding: 5px;
-    margin: 25px;
-}
 
-.toggle-button {
-    width: 50%;
-    text-align: center;
-    padding: 10px;
-    font-size: 1.1rem;
-    font-weight: 500;
-    cursor: pointer;
-    border-radius: 25px;
-    transition: color 0.3s ease;
-}
+        .toggle-container {
+            display: flex;
+            justify-content: space-between;
+            background-color: #f0f0f0;
+            border-radius: 25px;
+            padding: 5px;
+            margin: 25px;
+        }
 
-.toggle-button.active {
-    background-color: #1E5799;
-    color: white;
-    border-radius: 25px;
-}
+        .toggle-button {
+            width: 50%;
+            text-align: center;
+            padding: 10px;
+            font-size: 1.1rem;
+            font-weight: 500;
+            cursor: pointer;
+            border-radius: 25px;
+            transition: color 0.3s ease;
+        }
 
-.form-container {
-    display: flex;
-    width: 200%;
-    transform: translateX(0);
-    transition: transform 0.4s ease-in-out;
-}
+        .toggle-button.active {
+            background-color: #1E5799;
+            color: white;
+            border-radius: 25px;
+        }
 
-form {
-    width: 50%;
-    padding: 30px 25px;
-    box-sizing: border-box;
-}
+        .form-container {
+            display: flex;
+            width: 200%;
+            transform: translateX(0);
+            transition: transform 0.4s ease-in-out;
+        }
 
-input {
-    width: calc(100% - 16px); /* Adjust width to account for padding */
-    padding: 12px;
-    margin: 10px 0;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    font-size: 1rem;
-    outline: none;
-    box-sizing: border-box;
-}
+        form {
+            width: 50%;
+            padding: 30px 25px;
+            box-sizing: border-box;
+        }
 
-.btn {
-    width: 100%;
-    padding: 12px;
-    margin-top: 15px;
-    background: #1E5799;
-    border: none;
-    color: white;
-    font-size: 1.1rem;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background 0.3s ease;
-}
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+            outline: none;
+            box-sizing: border-box;
+        }
 
-.btn:hover {
-    background: #1b4a8b;
-}
+        .btn {
+            width: 100%;
+            padding: 12px;
+            margin-top: 15px;
+            background: #1E5799;
+            border: none;
+            color: white;
+            font-size: 1.1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
 
-/* Fix intl-tel-input to show the dropdown on top */
-.intl-tel-input {
-    width: 100%;
-    margin: 10px 0;
-    position: relative;
-    z-index: 1;
-}
+        .btn:hover {
+            background: #1b4a8b;
+        }
 
-.intl-tel-input input {
-    width: 100%; /* Full width for the input */
-    padding: 12px;
-    border-radius: 8px;
-    border: 1px solid #ddd;
-    outline: none;
-    font-size: 1rem;
-    box-sizing: border-box;
-}
+        /* Adjust intl-tel-input */
+        .intl-tel-input {
+            width: 100%;
+            margin: 10px 0;
+            position: relative; /* Keep input inside form */
+        }
 
-.intl-tel-input .country-list {
-    position: absolute;
-    top: 50px; /* Adjust based on the height of your input */
-    left: 0;
-    z-index: 9999;
-    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
-}
+        .intl-tel-input .country-list {
+            z-index: 9999; /* Make dropdown appear above everything */
+            position: absolute;
+            top: 50px; /* Adjust dropdown's position so it appears below the input */
+            left: 0;
+        }
 
     </style>
 </head>
