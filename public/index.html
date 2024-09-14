@@ -20,16 +20,16 @@
             margin: 0;
             font-family: 'Roboto', sans-serif;
             background: linear-gradient(135deg, #1E5799 0%, #2989D8 50%, #207CCA 100%);
-            overflow: hidden; /* Prevents scrollbars on the overall body */
+            overflow: hidden;
         }
 
         .container {
             width: 400px;
-            height: 80vh; /* Adjust height to 80% of viewport height */
+            height: 80vh;
             background: transparent;
             border-radius: 12px;
             padding: 0;
-            overflow: hidden; /* Ensures the container respects its bounds */
+            overflow: hidden;
             display: flex;
             flex-direction: column;
         }
@@ -40,7 +40,7 @@
             position: relative;
             background-color: #f0f0f0;
             border-radius: 25px;
-            margin: 90px; /* Adjusted margin for less space */
+            margin: 90px;
         }
 
         .toggle-button {
@@ -63,20 +63,19 @@
 
         .form-container {
             display: flex;
-            width: 200%; /* Double the width for sliding */
-            height: calc(100% - 50px); /* Fill remaining height of the container with adjusted space */
-            transform: translateX(0); /* Show login form by default */
+            width: 200%;
+            height: calc(100% - 50px);
+            transform: translateX(0);
             transition: transform 0.6s ease-in-out;
         }
 
         form {
-            width: 50%; /* Each form occupies 50% of the container */
+            width: 50%;
             padding: 30px 25px;
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
-            justify-content: top; /* Center form elements vertically */
-            overflow: hidden; /* Ensure no overflow except for the dropdown */
+            justify-content: center;
         }
 
         input {
@@ -89,7 +88,6 @@
             outline: none;
             box-sizing: border-box;
             font-weight: 600;
-
         }
 
         .btn {
@@ -109,13 +107,12 @@
             background: #1b4a8b;
         }
 
-        /* Adjust intl-tel-input */
         .intl-tel-input {
             width: 100%;
             margin: 10px 0;
             box-sizing: border-box;
-            position: relative; /* Ensure proper positioning */
-            z-index: 1; /* Allow the dropdown to overflow properly */
+            position: relative;
+            z-index: 1;
         }
 
         .intl-tel-input input {
@@ -128,11 +125,10 @@
             box-sizing: border-box;
         }
 
-        /* Ensure only dropdown overflow is visible */
         .intl-tel-input .country-list {
-            z-index: 1000; /* Bring it to the front */
-            position: absolute; /* Required for it to overflow properly */
-            overflow: visible; /* Allow dropdown visibility */
+            z-index: 1000;
+            position: absolute;
+            overflow: visible;
         }
     </style>
 </head>
@@ -150,6 +146,7 @@
             <input id="loginPhone" type="tel" placeholder="Phone Number">
             <button class="btn" type="submit">Send Authorization</button>
         </form>
+
         <!-- Signup Form -->
         <form id="signupForm">
             <input id="signupPhone" type="tel" placeholder="Phone Number">
@@ -167,27 +164,73 @@
     const formContainer = document.getElementById('formContainer');
 
     loginToggle.addEventListener('click', () => {
-        formContainer.style.transform = 'translateX(0)'; /* Login form in view */
+        formContainer.style.transform = 'translateX(0)';
         loginToggle.classList.add('active');
         signupToggle.classList.remove('active');
     });
 
     signupToggle.addEventListener('click', () => {
-        formContainer.style.transform = 'translateX(-50%)'; /* Move to show signup form */
+        formContainer.style.transform = 'translateX(-50%)';
         signupToggle.classList.add('active');
         loginToggle.classList.remove('active');
     });
 
-    // Initialize the intl-tel-input library for both phone inputs with country code options
     const phoneInputOptions = {
-        initialCountry: "in", // Set default to India
-        separateDialCode: true, // Show the country code separate from the number
+        initialCountry: "in",
+        separateDialCode: true,
         utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js",
-        onlyCountries: ["in", "us", "gb", "de", "au"] // Allow only selected countries
+        onlyCountries: ["in", "us", "gb", "de", "au"]
     };
 
     const loginPhoneInput = intlTelInput(document.querySelector("#loginPhone"), phoneInputOptions);
     const signupPhoneInput = intlTelInput(document.querySelector("#signupPhone"), phoneInputOptions);
+
+    // Handle both login and signup forms
+    const handleAuthFormSubmit = async (event, formType) => {
+        event.preventDefault();
+        const phoneInput = formType === 'login' ? loginPhoneInput : signupPhoneInput;
+        const phoneNumber = phoneInput.getNumber(); // Get full phone number with country code
+        const submitBtn = formType === 'login' ? loginForm.querySelector('.btn') : signupForm.querySelector('.btn');
+        
+        submitBtn.disabled = true;
+        
+        try {
+            const response = await fetch('/send-auth', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ phoneNumber })
+            });
+
+            const result = await response.json();
+            if (result.sessionId) {
+                const sessionId = result.sessionId;
+                const checkStatus = async () => {
+                    const statusResponse = await fetch(`/auth/status/${sessionId}`);
+                    const statusResult = await statusResponse.json();
+                    if (statusResult.status === 'authenticated') {
+                        window.location.href = '/dashboard';
+                    } else if (statusResult.status === 'denied') {
+                        window.location.href = '/access-denied';
+                    } else {
+                        setTimeout(checkStatus, 2000);
+                    }
+                };
+                checkStatus();
+            } else {
+                alert('Failed to send authentication message.');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('An error occurred. Please try again.');
+        } finally {
+            submitBtn.disabled = false;
+        }
+    };
+
+    document.getElementById('loginForm').addEventListener('submit', (event) => handleAuthFormSubmit(event, 'login'));
+    document.getElementById('signupForm').addEventListener('submit', (event) => handleAuthFormSubmit(event, 'signup'));
 </script>
 
 </body>
