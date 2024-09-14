@@ -20,25 +20,23 @@
             margin: 0;
             font-family: 'Roboto', sans-serif;
             background: linear-gradient(135deg, #1E5799 0%, #2989D8 50%, #207CCA 100%);
-            overflow: hidden;
+            overflow: hidden; /* Prevents scrollbars on the overall body */
         }
 
-.container {
-    width: 400px;
-    height: 800px; /* Double the original height */
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-    padding: 0;
-    box-sizing: border-box;
-    position: relative;
-    overflow: hidden; /* Keep forms inside the container */
-}
-
+        .container {
+            width: 400px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+            padding: 0;
+            box-sizing: border-box;
+            overflow: hidden; /* Ensures the container respects its bounds */
+        }
 
         .toggle-container {
             display: flex;
             justify-content: space-between;
+            position: relative;
             background-color: #f0f0f0;
             border-radius: 25px;
             padding: 5px;
@@ -54,6 +52,7 @@
             cursor: pointer;
             border-radius: 25px;
             transition: color 0.3s ease;
+            position: relative;
         }
 
         .toggle-button.active {
@@ -64,15 +63,16 @@
 
         .form-container {
             display: flex;
-            width: 200%;
-            transform: translateX(0);
+            width: 200%; /* Double the width for sliding */
+            transform: translateX(0); /* Show login form by default */
             transition: transform 0.4s ease-in-out;
         }
 
         form {
-            width: 50%;
+            width: 50%; /* Each form occupies 50% of the container */
             padding: 30px 25px;
             box-sizing: border-box;
+            overflow: hidden; /* Ensure no overflow except for the dropdown */
         }
 
         input {
@@ -107,16 +107,38 @@
         .intl-tel-input {
             width: 100%;
             margin: 10px 0;
-            position: relative; /* Keep input inside form */
+            box-sizing: border-box;
+            position: relative; /* Ensure proper positioning */
+            z-index: 1; /* Allow the dropdown to overflow properly */
         }
 
+        .intl-tel-input input {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            outline: none;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+
+        /* Ensure only dropdown overflow is visible */
         .intl-tel-input .country-list {
-            z-index: 9999; /* Make dropdown appear above everything */
-            position: absolute;
-            top: 50px; /* Adjust dropdown's position so it appears below the input */
-            left: 0;
+            z-index: 1000; /* Bring it to the front */
+            position: absolute; /* Required for it to overflow properly */
+            overflow: visible; /* Allow dropdown visibility */
         }
 
+        /* Fix overflow issue */
+        .container {
+            position: relative;
+            overflow: visible; /* Ensure overflow is visible for the dropdown */
+        }
+
+        /* General fix for overflow */
+        .container form {
+            overflow: hidden; /* No overflow visible for the form elements */
+        }
     </style>
 </head>
 <body>
@@ -150,13 +172,13 @@
     const formContainer = document.getElementById('formContainer');
 
     loginToggle.addEventListener('click', () => {
-        formContainer.style.transform = 'translateX(0)';
+        formContainer.style.transform = 'translateX(0)'; /* Login form in view */
         loginToggle.classList.add('active');
         signupToggle.classList.remove('active');
     });
 
     signupToggle.addEventListener('click', () => {
-        formContainer.style.transform = 'translateX(-50%)';
+        formContainer.style.transform = 'translateX(-50%)'; /* Move to show signup form */
         signupToggle.classList.add('active');
         loginToggle.classList.remove('active');
     });
