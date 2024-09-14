@@ -25,12 +25,14 @@
 
         .container {
             width: 400px;
+            height: 80vh; /* Adjust height to 80% of viewport height */
             background: white;
             border-radius: 12px;
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
             padding: 0;
-            box-sizing: border-box;
             overflow: hidden; /* Ensures the container respects its bounds */
+            display: flex;
+            flex-direction: column;
         }
 
         .toggle-container {
@@ -40,7 +42,7 @@
             background-color: #f0f0f0;
             border-radius: 25px;
             padding: 5px;
-            margin: 25px;
+            margin: 10px; /* Adjusted margin for less space */
         }
 
         .toggle-button {
@@ -64,6 +66,7 @@
         .form-container {
             display: flex;
             width: 200%; /* Double the width for sliding */
+            height: calc(100% - 50px); /* Fill remaining height of the container with adjusted space */
             transform: translateX(0); /* Show login form by default */
             transition: transform 0.4s ease-in-out;
         }
@@ -72,6 +75,9 @@
             width: 50%; /* Each form occupies 50% of the container */
             padding: 30px 25px;
             box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: center; /* Center form elements vertically */
             overflow: hidden; /* Ensure no overflow except for the dropdown */
         }
 
@@ -127,17 +133,6 @@
             z-index: 1000; /* Bring it to the front */
             position: absolute; /* Required for it to overflow properly */
             overflow: visible; /* Allow dropdown visibility */
-        }
-
-        /* Fix overflow issue */
-        .container {
-            position: relative;
-            overflow: visible; /* Ensure overflow is visible for the dropdown */
-        }
-
-        /* General fix for overflow */
-        .container form {
-            overflow: hidden; /* No overflow visible for the form elements */
         }
     </style>
 </head>
