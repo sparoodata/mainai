@@ -177,14 +177,12 @@
         separateDialCode: true,
     });
 
-    // Helper function to format phone number
+    // Helper function to format phone number in E.164 format
     function formatPhoneNumber(iti) {
-        const countryData = iti.getSelectedCountryData();
-        const phoneNumber = iti.getNumber().replace(/\D/g, ''); // Removes any non-digit characters
-        return `${countryData.dialCode}${phoneNumber}`;
+        return iti.getNumber(intlTelInputUtils.numberFormat.E164); // E.164 format includes country code
     }
 
-    // Handle form submissions
+    // Handle login form submission
     document.getElementById('loginForm').addEventListener('submit', async (event) => {
         event.preventDefault();
         const phoneNumber = formatPhoneNumber(loginIti);
@@ -212,6 +210,7 @@
         }
     });
 
+    // Handle signup form submission
     document.getElementById('signupForm').addEventListener('submit', async (event) => {
         event.preventDefault();
         const phoneNumber = formatPhoneNumber(signupIti);
