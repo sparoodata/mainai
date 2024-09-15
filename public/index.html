@@ -75,8 +75,7 @@
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
-            justify-content: top;
-            overflow: hidden;
+            justify-content: center;
         }
 
         input {
@@ -108,7 +107,6 @@
             background: #1b4a8b;
         }
 
-        /* Adjust intl-tel-input */
         .intl-tel-input {
             width: 100%;
             margin: 10px 0;
@@ -132,11 +130,6 @@
             position: absolute;
             overflow: visible;
         }
-
-        #message {
-            margin-top: 10px;
-            color: red;
-        }
     </style>
 </head>
 <body>
@@ -149,10 +142,15 @@
 
     <div class="form-container" id="formContainer">
         <!-- Login Form -->
-        <form id="authForm">
-            <input id="phoneNumber" type="tel" placeholder="Phone Number">
-            <button class="btn" id="submitBtn" type="submit">Send Authorization</button>
-            <div id="message"></div>
+        <form id="loginForm">
+            <input id="loginPhone" type="tel" placeholder="Phone Number">
+            <button class="btn" type="submit">Send Authorization</button>
+        </form>
+
+        <!-- Signup Form -->
+        <form id="signupForm">
+            <input id="signupPhone" type="tel" placeholder="Phone Number">
+            <button class="btn" type="submit">Register</button>
         </form>
     </div>
 </div>
@@ -184,25 +182,25 @@
         onlyCountries: ["in", "us", "gb", "de", "au"]
     };
 
-    const phoneInput = intlTelInput(document.querySelector("#phoneNumber"), phoneInputOptions);
+    const loginPhoneInput = intlTelInput(document.querySelector("#loginPhone"), phoneInputOptions);
+    const signupPhoneInput = intlTelInput(document.querySelector("#signupPhone"), phoneInputOptions);
 
-    document.getElementById('authForm').addEventListener('submit', async function(event) {
+    // Handle both login and signup forms
+    const handleAuthFormSubmit = async (event, formType) => {
         event.preventDefault();
-        const phoneNumber = phoneInput.getNumber();  // Get full phone number with country code
-        const countryCode = phoneInput.getSelectedCountryData().dialCode;  // Get the selected country code
-        const submitBtn = document.getElementById('submitBtn');
-        const messageDiv = document.getElementById('message');
-
+        const phoneInput = formType === 'login' ? loginPhoneInput : signupPhoneInput;
+        const phoneNumber = phoneInput.getNumber(); // Get full phone number with country code
+        const submitBtn = formType === 'login' ? loginForm.querySelector('.btn') : signupForm.querySelector('.btn');
+        
         submitBtn.disabled = true;
-        messageDiv.textContent = 'Waiting for response...';
-
+        
         try {
             const response = await fetch('/send-auth', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ phoneNumber, countryCode })
+                body: JSON.stringify({ phoneNumber })
             });
 
             const result = await response.json();
@@ -221,15 +219,18 @@
                 };
                 checkStatus();
             } else {
-                messageDiv.textContent = 'Failed to send authentication message.';
+                alert('Failed to send authentication message.');
             }
         } catch (error) {
             console.error('Error:', error);
-            messageDiv.textContent = 'An error occurred. Please try again.';
+            alert('An error occurred. Please try again.');
         } finally {
             submitBtn.disabled = false;
         }
-    });
+    };
+
+    document.getElementById('loginForm').addEventListener('submit', (event) => handleAuthFormSubmit(event, 'login'));
+    document.getElementById('signupForm').addEventListener('submit', (event) => handleAuthFormSubmit(event, 'signup'));
 </script>
 
 </body>
