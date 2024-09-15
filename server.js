@@ -3,24 +3,27 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const axios = require('axios');
 const session = require('express-session'); // Import session middleware
+const MongoStore = require('connect-mongo');
 const app = express();
 const port = 3000;
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Session configuration
+
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'yourStrongSecretKey', // Use a strong secret key
+    secret: 'yourStrongSecretKey',
     resave: false,
     saveUninitialized: true,
+    store: MongoStore.create({
+        mongoUrl: 'mongodb+srv://ece1saikumar:hyaDfmoR4xRStmYe@tenants.orhtp.mongodb.net/?retryWrites=true&w=majority&appName=Tenants' // Replace with your MongoDB connection string
+    }),
     cookie: {
-        httpOnly: true, // Prevent client-side access
-        secure: process.env.NODE_ENV === 'production', // Ensure secure cookies in production
-        maxAge: 3600000 // 1 hour session expiration
+        httpOnly: true,
+        secure: false,  // Set to true if using HTTPS in production
+        maxAge: 3600000  // 1 hour
     }
 }));
-
 // WhatsApp API credentials
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN; // Replace with your access token
@@ -88,7 +91,6 @@ app.post('/webhook', (req, res) => {
                 const phoneNumber = message.from.replace(/^\+/, ''); // Remove '+' prefix
                 const payload = message.button ? message.button.payload : null;
 
-                // Find session based on phone number
                 for (const [sessionId, session] of Object.entries(sessions)) {
                     if (session.phoneNumber.replace(/^\+/, '') === phoneNumber) {
                         if (payload === 'Yes') {
@@ -97,7 +99,8 @@ app.post('/webhook', (req, res) => {
 
                             // Save session data in express session
                             req.session.user = { phoneNumber, sessionId };
-                           console.log(req.session.user);
+                            console.log('Session after setting user:', req.session); // Log session details
+
                         } else if (payload === 'No') {
                             session.status = 'denied';
                             console.log('Authentication denied');
@@ -110,6 +113,7 @@ app.post('/webhook', (req, res) => {
     }
     res.sendStatus(200);
 });
+
 
 // Authentication status check
 app.get('/auth/status/:sessionId', (req, res) => {
@@ -131,13 +135,13 @@ app.get('/auth/status/:sessionId', (req, res) => {
 
 // Dashboard route with secure access
 app.get('/dashboard', (req, res) => {
-    console.log('Session data:', req.session);  // Log session details to debug
+    console.log('Dashboard session:', req.session);  // Log session details
     if (req.session.user && req.session.user.sessionId) {
         const { phoneNumber } = req.session.user;
         res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number is ${phoneNumber}</p>`);
     } else {
         console.log('No valid session found, redirecting to access-denied');
-        res.redirect('/access-denied');  // Redirect if not authenticated
+        res.redirect('/access-denied');  // Redirect if no session found
     }
 });
 
