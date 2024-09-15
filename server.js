@@ -131,13 +131,16 @@ app.get('/auth/status/:sessionId', (req, res) => {
 
 // Dashboard route with secure access
 app.get('/dashboard', (req, res) => {
+    console.log('Session data:', req.session);  // Log session details to debug
     if (req.session.user && req.session.user.sessionId) {
         const { phoneNumber } = req.session.user;
         res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number is ${phoneNumber}</p>`);
     } else {
-        res.redirect('/access-denied'); // Redirect if not authenticated
+        console.log('No valid session found, redirecting to access-denied');
+        res.redirect('/access-denied');  // Redirect if not authenticated
     }
 });
+
 
 // Access denied route
 app.get('/access-denied', (req, res) => {

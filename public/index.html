@@ -161,9 +161,6 @@
 
 <!-- Intl-Tel-Input JS -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/intlTelInput.min.js"></script>
-
-  <!-- Intl-Tel-Input JS with Utils -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/intlTelInput.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js"></script>
 
 <script>
@@ -266,7 +263,7 @@
 
             const data = await response.json();
             if (data.sessionId) {
-                document.getElementById('signupStatus').innerText = 'Waiting for response...';
+                document.getElementById('signupStatus').innerText = 'Waiting for OTP...';
                 pollAuthStatus(data.sessionId, 'signup');  // Call pollAuthStatus
             } else {
                 document.getElementById('signupStatus').innerText = 'Failed to register.';
@@ -276,10 +273,24 @@
             document.getElementById('signupStatus').innerText = 'An error occurred.';
         }
     });
+
+    // Form slide logic
+    const loginToggle = document.getElementById('loginToggle');
+    const signupToggle = document.getElementById('signupToggle');
+    const formContainer = document.getElementById('formContainer');
+
+    loginToggle.addEventListener('click', () => {
+        formContainer.style.transform = 'translateX(0)';
+        loginToggle.classList.add('active');
+        signupToggle.classList.remove('active');
+    });
+
+    signupToggle.addEventListener('click', () => {
+        formContainer.style.transform = 'translateX(-50%)';
+        signupToggle.classList.add('active');
+        loginToggle.classList.remove('active');
+    });
 </script>
-
-
 
 </body>
 </html>
-
