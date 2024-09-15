@@ -39,7 +39,7 @@ app.get('/webhook', (req, res) => {
 
     if (mode && token === VERIFY_TOKEN) {
         console.log('Webhook verified successfully!');
-        res.status(200).send(challenge);
+   //     res.status(200).send(challenge);
     } else {
         res.sendStatus(403);
     }
@@ -97,6 +97,7 @@ app.post('/webhook', (req, res) => {
 
                             // Save session data in express session
                             req.session.user = { phoneNumber, sessionId };
+                           console.log(req.session.user);
                         } else if (payload === 'No') {
                             session.status = 'denied';
                             console.log('Authentication denied');
