@@ -61,8 +61,11 @@ app.get('/webhook', (req, res) => {
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
 
+
     if (mode && token === VERIFY_TOKEN) {
         console.log('Webhook verified successfully!');
+          console.log('Webhook received:', req.body);
+    res.sendStatus(200);
         res.status(200).send(challenge);
     } else {
         res.sendStatus(403);
@@ -104,7 +107,6 @@ app.post('/send-auth', async (req, res) => {
 // Handle Webhook Callback
 app.post('/webhook', async (req, res) => {
     const { entry } = req.body;
-
     if (entry && entry.length > 0) {
         const changes = entry[0].changes;
         if (changes && changes.length > 0) {
