@@ -167,33 +167,27 @@
     const loginInput = document.getElementById('loginPhone');
     const signupInput = document.getElementById('signupPhone');
 
-    intlTelInput(loginInput, {
+    const loginIti = intlTelInput(loginInput, {
         preferredCountries: ["in"],
         separateDialCode: true,
     });
 
-    intlTelInput(signupInput, {
+    const signupIti = intlTelInput(signupInput, {
         preferredCountries: ["in"],
         separateDialCode: true,
     });
 
-    // Toggle between login and signup forms
-    document.getElementById('loginToggle').addEventListener('click', () => {
-        document.getElementById('loginToggle').classList.add('active');
-        document.getElementById('signupToggle').classList.remove('active');
-        document.getElementById('formContainer').style.transform = 'translateX(0)';
-    });
-
-    document.getElementById('signupToggle').addEventListener('click', () => {
-        document.getElementById('signupToggle').classList.add('active');
-        document.getElementById('loginToggle').classList.remove('active');
-        document.getElementById('formContainer').style.transform = 'translateX(-50%)';
-    });
+    // Helper function to format phone number
+    function formatPhoneNumber(iti) {
+        const countryData = iti.getSelectedCountryData();
+        const phoneNumber = iti.getNumber().replace(/\D/g, ''); // Removes any non-digit characters
+        return `${countryData.dialCode}${phoneNumber}`;
+    }
 
     // Handle form submissions
     document.getElementById('loginForm').addEventListener('submit', async (event) => {
         event.preventDefault();
-        const phoneNumber = loginInput.value;
+        const phoneNumber = formatPhoneNumber(loginIti);
         document.getElementById('loginStatus').innerText = 'Sending WhatsApp message...';
 
         try {
@@ -220,12 +214,11 @@
 
     document.getElementById('signupForm').addEventListener('submit', async (event) => {
         event.preventDefault();
-        const phoneNumber = signupInput.value;
+        const phoneNumber = formatPhoneNumber(signupIti);
         document.getElementById('signupStatus').innerText = 'Registering...';
 
         try {
-            // Handle signup submission (similar to login)
-            const response = await fetch('/signup', {  // Adjust endpoint as needed
+            const response = await fetch('/signup', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -245,38 +238,6 @@
             document.getElementById('signupStatus').innerText = 'An error occurred.';
         }
     });
-
-    async function pollAuthStatus(sessionId, type) {
-        const maxAttempts = 10; 
-        let attempts = 0;
-        const intervalId = setInterval(async () => {
-            if (attempts >= maxAttempts) {
-                clearInterval(intervalId);
-                document.getElementById(`${type}Status`).innerText = 'Authentication timed out.';
-                return;
-            }
-
-            try {
-                const response = await fetch(`/auth/status/${sessionId}`);
-                const data = await response.json();
-
-                              if (data.status === 'verified') {
-                    clearInterval(intervalId);
-                    document.getElementById(`${type}Status`).innerText = 'Authentication successful!';
-                    // Redirect or handle successful authentication
-                } else if (data.status === 'failed') {
-                    clearInterval(intervalId);
-                    document.getElementById(`${type}Status`).innerText = 'Authentication failed.';
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                document.getElementById(`${type}Status`).innerText = 'Error checking authentication status.';
-                clearInterval(intervalId);
-            }
-
-            attempts++;
-        }, 2000); // Poll every 2 seconds
-    }
 </script>
 
 </body>
