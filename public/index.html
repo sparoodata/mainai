@@ -163,19 +163,17 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/intlTelInput.min.js"></script>
 
 <script>
-    // Initialize intl-tel-input for login and signup forms
+    // Initialize intl-tel-input for login and signup forms with specified countries
     const loginInput = document.getElementById('loginPhone');
     const signupInput = document.getElementById('signupPhone');
 
-    intlTelInput(loginInput, {
-        preferredCountries: ["in"],
-        separateDialCode: true,
-    });
+    const telInputOptions = {
+        onlyCountries: ["in", "au", "us", "gb", "ca", "de"], // Restrict to India, Australia, USA, UK, Canada, Germany
+        separateDialCode: true, // Display the country code separately
+    };
 
-    intlTelInput(signupInput, {
-        preferredCountries: ["in"],
-        separateDialCode: true,
-    });
+    const loginTelInput = intlTelInput(loginInput, telInputOptions);
+    const signupTelInput = intlTelInput(signupInput, telInputOptions);
 
     // Toggle between login and signup forms
     document.getElementById('loginToggle').addEventListener('click', () => {
@@ -190,10 +188,14 @@
         document.getElementById('formContainer').style.transform = 'translateX(-50%)';
     });
 
-    // Handle form submissions
+    // Handle login form submission
     document.getElementById('loginForm').addEventListener('submit', async (event) => {
         event.preventDefault();
-        const phoneNumber = loginInput.value;
+        const phoneNumber = loginTelInput.getNumber(); // Get full phone number with country code
+
+        // DEBUG: Log the full phone number to verify it's correct
+        console.log("Login Full Phone Number:", phoneNumber);
+
         document.getElementById('loginStatus').innerText = 'Sending WhatsApp message...';
 
         try {
@@ -218,14 +220,18 @@
         }
     });
 
+    // Handle signup form submission
     document.getElementById('signupForm').addEventListener('submit', async (event) => {
         event.preventDefault();
-        const phoneNumber = signupInput.value;
+        const phoneNumber = signupTelInput.getNumber(); // Get full phone number with country code
+
+        // DEBUG: Log the full phone number to verify it's correct
+        console.log("Signup Full Phone Number:", phoneNumber);
+
         document.getElementById('signupStatus').innerText = 'Registering...';
 
         try {
-            // Handle signup submission (similar to login)
-            const response = await fetch('/signup', {  // Adjust endpoint as needed
+            const response = await fetch('/signup', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -260,25 +266,22 @@
                 const response = await fetch(`/auth/status/${sessionId}`);
                 const data = await response.json();
 
-                              if (data.status === 'verified') {
+                if (data.status === 'verified') {
                     clearInterval(intervalId);
                     document.getElementById(`${type}Status`).innerText = 'Authentication successful!';
                     // Redirect or handle successful authentication
                 } else if (data.status === 'failed') {
                     clearInterval(intervalId);
                     document.getElementById(`${type}Status`).innerText = 'Authentication failed.';
+                } else {
+                    attempts++;
                 }
             } catch (error) {
                 console.error('Error:', error);
-                document.getElementById(`${type}Status`).innerText = 'Error checking authentication status.';
-                clearInterval(intervalId);
             }
-
-            attempts++;
-        }, 2000); // Poll every 2 seconds
+        }, 5000); 
     }
 </script>
 
 </body>
 </html>
-
