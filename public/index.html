@@ -162,6 +162,10 @@
 <!-- Intl-Tel-Input JS -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/intlTelInput.min.js"></script>
 
+  <!-- Intl-Tel-Input JS with Utils -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/intlTelInput.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js"></script>
+
 <script>
     // Initialize intl-tel-input for login and signup forms
     const loginInput = document.getElementById('loginPhone');
@@ -170,16 +174,51 @@
     const loginIti = intlTelInput(loginInput, {
         preferredCountries: ["in"],
         separateDialCode: true,
+        utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js"
     });
 
     const signupIti = intlTelInput(signupInput, {
         preferredCountries: ["in"],
         separateDialCode: true,
+        utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js"
     });
 
     // Helper function to format phone number in E.164 format
     function formatPhoneNumber(iti) {
         return iti.getNumber(intlTelInputUtils.numberFormat.E164); // E.164 format includes country code
+    }
+
+    // Polling function to check authentication status
+    async function pollAuthStatus(sessionId, type) {
+        const maxAttempts = 10; 
+        let attempts = 0;
+        const intervalId = setInterval(async () => {
+            if (attempts >= maxAttempts) {
+                clearInterval(intervalId);
+                document.getElementById(`${type}Status`).innerText = 'Authentication timed out.';
+                return;
+            }
+
+            try {
+                const response = await fetch(`/auth/status/${sessionId}`);
+                const data = await response.json();
+
+                if (data.status === 'verified') {
+                    clearInterval(intervalId);
+                    document.getElementById(`${type}Status`).innerText = 'Authentication successful!';
+                    // Redirect or handle successful authentication here
+                } else if (data.status === 'failed') {
+                    clearInterval(intervalId);
+                    document.getElementById(`${type}Status`).innerText = 'Authentication failed.';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById(`${type}Status`).innerText = 'Error checking authentication status.';
+                clearInterval(intervalId);
+            }
+
+            attempts++;
+        }, 2000); // Poll every 2 seconds
     }
 
     // Handle login form submission
@@ -200,7 +239,7 @@
             const data = await response.json();
             if (data.sessionId) {
                 document.getElementById('loginStatus').innerText = 'Waiting for response...';
-                pollAuthStatus(data.sessionId, 'login');
+                pollAuthStatus(data.sessionId, 'login');  // Call pollAuthStatus
             } else {
                 document.getElementById('loginStatus').innerText = 'Failed to send WhatsApp message.';
             }
@@ -228,7 +267,7 @@
             const data = await response.json();
             if (data.sessionId) {
                 document.getElementById('signupStatus').innerText = 'Waiting for response...';
-                pollAuthStatus(data.sessionId, 'signup');
+                pollAuthStatus(data.sessionId, 'signup');  // Call pollAuthStatus
             } else {
                 document.getElementById('signupStatus').innerText = 'Failed to register.';
             }
@@ -238,6 +277,8 @@
         }
     });
 </script>
+
+
 
 </body>
 </html>
