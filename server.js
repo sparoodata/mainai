@@ -45,9 +45,12 @@ app.use(
 );
 
 // WhatsApp API credentials
-const WHATSAPP_API_URL = 'https://graph.facebook.com/v17.0/110765315459068/messages';
+const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL;
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
+
+// In-memory storage for sessions (for demo purposes, replace with a database in production)
+const sessions = {};
 
 // Serve static files from the public directory
 app.use(express.static('public'));
@@ -68,24 +71,20 @@ app.get('/webhook', (req, res) => {
 
 // Send WhatsApp Authentication Request
 app.post('/send-auth', async (req, res) => {
-    const { phoneNumber, countryCode } = req.body;
-    const formattedPhoneNumber = `${phoneNumber.replace(/^\+/, '')}`;
+    const { phoneNumber } = req.body;
+
+    // Generate a unique session ID
     const sessionId = Date.now().toString();
+    sessions[sessionId] = { phoneNumber, status: 'pending' };
 
     try {
         const response = await axios.post(WHATSAPP_API_URL, {
             messaging_product: 'whatsapp',
-            to: formattedPhoneNumber,
-            type: 'interactive',
-            interactive: {
-                type: 'button',
-                body: { text: 'Do you authorize this login?' },
-                action: {
-                    buttons: [
-                        { type: 'reply', reply: { id: `yes_${sessionId}`, title: 'Yes' } },
-                        { type: 'reply', reply: { id: `no_${sessionId}`, title: 'No' } }
-                    ]
-                }
+            to: phoneNumber,
+            type: 'template',
+            template: {
+                name: 'authorize',
+                language: { code: 'en' }
             }
         }, {
             headers: {
@@ -94,13 +93,10 @@ app.post('/send-auth', async (req, res) => {
             }
         });
 
-        const newSession = new Session({ sessionId, phoneNumber: formattedPhoneNumber, status: 'pending' });
-        await newSession.save();
-
         console.log('Message sent successfully:', response.data);
         res.json({ message: 'Authentication message sent', sessionId });
     } catch (error) {
-        console.error('Failed to send authentication message:', error.response ? error.response.data : error);
+        console.error('Failed to send authentication message:', error);
         res.status(500).json({ error: 'Failed to send authentication message' });
     }
 });

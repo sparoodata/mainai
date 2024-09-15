@@ -142,16 +142,20 @@
 
     <div class="form-container" id="formContainer">
         <!-- Login Form -->
-        <form id="loginForm">
-            <input id="loginPhone" type="tel" placeholder="Phone Number">
-            <button class="btn" type="submit">Send Authorization</button>
-        </form>
+<form id="loginForm">
+    <input id="loginPhone" type="tel" placeholder="Phone Number">
+    <button class="btn" type="submit">Send Authorization</button>
+    <!-- Status message -->
+    <p id="loginStatus" style="color: white; text-align: center; margin-top: 10px;"></p>
+</form>
 
         <!-- Signup Form -->
-        <form id="signupForm">
-            <input id="signupPhone" type="tel" placeholder="Phone Number">
-            <button class="btn" type="submit">Register</button>
-        </form>
+<form id="signupForm">
+    <input id="signupPhone" type="tel" placeholder="Phone Number">
+    <button class="btn" type="submit">Register</button>
+    <!-- Status message -->
+    <p id="signupStatus" style="color: white; text-align: center; margin-top: 10px;"></p>
+</form>
     </div>
 </div>
 
@@ -186,15 +190,14 @@
     const signupPhoneInput = intlTelInput(document.querySelector("#signupPhone"), phoneInputOptions);
 
     // Handle both login and signup forms
-    const handleAuthFormSubmit = async (event, formType) => {
+  const handleAuthFormSubmit = async (event, formType) => {
     event.preventDefault();
-    
+
     // Get the correct phone input based on whether the formType is 'login' or 'signup'
     const phoneInput = formType === 'login' ? loginPhoneInput : signupPhoneInput;
 
     // Retrieve the phone number with the international format
-    const phoneNumber = phoneInput.getNumber(); // This should now include country code and input number
-    console.log('Phone number:', phoneNumber); // Add a console log for debugging
+    const phoneNumber = phoneInput.getNumber();
 
     // Ensure phoneNumber is defined before sending it
     if (!phoneNumber || phoneNumber.includes("undefined")) {
@@ -202,10 +205,16 @@
         return;
     }
 
+    // Get the appropriate status message element
+    const statusElement = formType === 'login' ? document.getElementById('loginStatus') : document.getElementById('signupStatus');
     const submitBtn = formType === 'login' ? loginForm.querySelector('.btn') : signupForm.querySelector('.btn');
-    submitBtn.disabled = true;
     
+    submitBtn.disabled = true;
+
     try {
+        // Show 'Waiting for response' message
+        statusElement.textContent = 'Waiting for response...';
+
         const response = await fetch('/send-auth', {
             method: 'POST',
             headers: {
@@ -217,28 +226,39 @@
         const result = await response.json();
         if (result.sessionId) {
             const sessionId = result.sessionId;
+            
+            // Poll the server to check authentication status
             const checkStatus = async () => {
                 const statusResponse = await fetch(`/auth/status/${sessionId}`);
                 const statusResult = await statusResponse.json();
+                
                 if (statusResult.status === 'authenticated') {
-                    window.location.href = '/dashboard';
+                    // Update message and redirect to dashboard
+                    statusElement.textContent = 'Authentication successful. Redirecting...';
+                    setTimeout(() => {
+                        window.location.href = '/dashboard';
+                    }, 2000);
                 } else if (statusResult.status === 'denied') {
-                    window.location.href = '/access-denied';
+                    // Show access denied message
+                    statusElement.textContent = 'Access denied.';
+                    submitBtn.disabled = false;
                 } else {
+                    // Keep showing 'Waiting for response' if still pending
                     setTimeout(checkStatus, 2000);
                 }
             };
             checkStatus();
         } else {
-            alert('Failed to send authentication message.');
+            statusElement.textContent = 'Failed to send authentication message.';
+            submitBtn.disabled = false;
         }
     } catch (error) {
         console.error('Error:', error);
-        alert('An error occurred. Please try again.');
-    } finally {
+        statusElement.textContent = 'An error occurred. Please try again.';
         submitBtn.disabled = false;
     }
 };
+
 
 
     document.getElementById('loginForm').addEventListener('submit', (event) => handleAuthFormSubmit(event, 'login'));
