@@ -5,12 +5,12 @@ const axios = require('axios');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const mongoose = require('mongoose');
+mongoose.set('strictQuery', false);
 const Session = require('./models/Session');
 const cookieParser = require('cookie-parser');
 
 const app = express();
 const port = 3000;
-
 // Load environment variables
 require('dotenv').config();
 
@@ -30,7 +30,7 @@ app.use(cookieParser());
 // Use session middleware
 app.use(
   session({
-    secret: 'yourSecret', // Ensure this is a secure secret in production
+    secret: 'yourSecret1', // Ensure this is a secure secret in production
     resave: false,
     saveUninitialized: false,
     store: MongoStore.create({
