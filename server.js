@@ -85,7 +85,7 @@ app.post('/webhook', (req, res) => {
                 for (const [sessionId, session] of Object.entries(sessions)) {
                        console.log(session.phoneNumber );
                           console.log(phoneNumber );
-                    if (session.phoneNumber === phoneNumber) { // Compare without '+'
+                    if (session.phoneNumber.replace(/^\+/, '') === phoneNumber) { // Compare without '+'
              
                       
                       if (payload === 'Yes') {
