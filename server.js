@@ -2,34 +2,45 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
 const axios = require('axios');
+const session = require('express-session'); // Import session middleware
 const app = express();
 const port = 3000;
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const sessions = {}; // To store session data
+// Session configuration
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'yourStrongSecretKey', // Use a strong secret key
+    resave: false,
+    saveUninitialized: true,
+    cookie: {
+        httpOnly: true, // Prevent client-side access
+        secure: process.env.NODE_ENV === 'production', // Ensure secure cookies in production
+        maxAge: 3600000 // 1 hour session expiration
+    }
+}));
 
 // WhatsApp API credentials
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN; // Replace with your access token
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN; // Replace with your verify token
 
-// Serve static files from the public directory
+// Serve static files
 app.use(express.static('public'));
 
-// Webhook Verification
+let sessions = {}; // Temporary storage for auth status
+
+// Webhook verification
 app.get('/webhook', (req, res) => {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
 
     if (mode && token === VERIFY_TOKEN) {
-        // Respond with the challenge token from the request to verify the webhook
         console.log('Webhook verified successfully!');
         res.status(200).send(challenge);
     } else {
-        // Respond with '403 Forbidden' if verification fails
         res.sendStatus(403);
     }
 });
@@ -37,10 +48,9 @@ app.get('/webhook', (req, res) => {
 // Send WhatsApp Authentication Request
 app.post('/send-auth', async (req, res) => {
     const { phoneNumber } = req.body;
+    const sessionId = Date.now().toString(); // Generate a unique session ID
 
-    // Generate a unique session ID (could use a more robust approach)
-    const sessionId = Date.now().toString();
-    sessions[sessionId] = { phoneNumber, status: 'pending' };
+    sessions[sessionId] = { phoneNumber, status: 'pending' }; // Track session
 
     try {
         const response = await axios.post(WHATSAPP_API_URL, {
@@ -66,34 +76,30 @@ app.post('/send-auth', async (req, res) => {
     }
 });
 
-/// Handle Webhook Callback
+// Webhook callback for authentication
 app.post('/webhook', (req, res) => {
     const { entry } = req.body;
-    console.log('Webhook Request Received:', req.body);
-
     if (entry && entry.length > 0) {
         const changes = entry[0].changes;
         if (changes && changes.length > 0) {
             const messages = changes[0].value.messages;
             if (messages && messages.length > 0) {
                 const message = messages[0];
-                const phoneNumber = message.from.replace(/^\+/, ''); // Remove the '+' prefix
+                const phoneNumber = message.from.replace(/^\+/, ''); // Remove '+' prefix
                 const payload = message.button ? message.button.payload : null;
-                 console.log(payload);
-                // Find the session associated with the phone number
-              
+
+                // Find session based on phone number
                 for (const [sessionId, session] of Object.entries(sessions)) {
-                       console.log(session.phoneNumber );
-                          console.log(phoneNumber );
-                    if (session.phoneNumber.replace(/^\+/, '') === phoneNumber) { // Compare without '+'
-             
-                      
-                      if (payload === 'Yes') {
+                    if (session.phoneNumber.replace(/^\+/, '') === phoneNumber) {
+                        if (payload === 'Yes') {
                             session.status = 'authenticated';
-                           console.log(session.status);
+                            console.log('User authenticated successfully');
+
+                            // Save session data in express session
+                            req.session.user = { phoneNumber, sessionId };
                         } else if (payload === 'No') {
                             session.status = 'denied';
-                             console.log(session.status);
+                            console.log('Authentication denied');
                         }
                         break;
                     }
@@ -101,12 +107,10 @@ app.post('/webhook', (req, res) => {
             }
         }
     }
-
-    res.sendStatus(200); // Respond to the webhook
+    res.sendStatus(200);
 });
 
-
-// Check Authentication Status
+// Authentication status check
 app.get('/auth/status/:sessionId', (req, res) => {
     const { sessionId } = req.params;
     const session = sessions[sessionId];
@@ -124,17 +128,17 @@ app.get('/auth/status/:sessionId', (req, res) => {
     }
 });
 
-// Serve the HTML file
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));  // Serve index.html from the public directory
-});
-
-// Dashboard route (to be shown after successful authentication)
+// Dashboard route with secure access
 app.get('/dashboard', (req, res) => {
-    res.send('<h1>Welcome to your Dashboard!</h1><p>You have successfully logged in via WhatsApp authentication.</p>');
+    if (req.session.user && req.session.user.sessionId) {
+        const { phoneNumber } = req.session.user;
+        res.send(`<h1>Welcome to your Dashboard!</h1><p>Your phone number is ${phoneNumber}</p>`);
+    } else {
+        res.redirect('/access-denied'); // Redirect if not authenticated
+    }
 });
 
-// Access Denied route
+// Access denied route
 app.get('/access-denied', (req, res) => {
     res.send('<h1>Access Denied</h1><p>You have been denied access.</p>');
 });
