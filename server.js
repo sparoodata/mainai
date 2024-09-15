@@ -2,72 +2,34 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
 const axios = require('axios');
-const session = require('express-session');
-const MongoStore = require('connect-mongo');
-const mongoose = require('mongoose');
-mongoose.set('strictQuery', false);
-const Session = require('./models/Session');
-const cookieParser = require('cookie-parser');
-
 const app = express();
 const port = 3000;
-// Load environment variables
-require('dotenv').config();
 
-// MongoDB connection
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/yourdatabase';
-mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-    .then(() => console.log('Connected to MongoDB'))
-    .catch(err => console.error('MongoDB connection error:', err));
-
-// Use body parser middleware
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Use cookieParser middleware
-app.use(cookieParser());
-
-// Use session middleware
-app.use(
-  session({
-    secret: 'yourSecret1', // Ensure this is a secure secret in production
-    resave: false,
-    saveUninitialized: false,
-    store: MongoStore.create({
-      mongoUrl: MONGO_URI, // Use the same MongoDB connection string
-      collectionName: 'sessions',
-    }),
-    cookie: {
-      maxAge: 1000 * 60 * 60 * 24, // 24 hours
-      httpOnly: true, // For security reasons
-    },
-  })
-);
+const sessions = {}; // To store session data
 
 // WhatsApp API credentials
-const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL;
-const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
-const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
-
-// In-memory storage for sessions (for demo purposes, replace with a database in production)
-const sessions = {};
+const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN; // Replace with your access token
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN; // Replace with your verify token
 
 // Serve static files from the public directory
 app.use(express.static('public'));
 
-// Webhook Verification for WhatsApp
+// Webhook Verification
 app.get('/webhook', (req, res) => {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
 
-
     if (mode && token === VERIFY_TOKEN) {
+        // Respond with the challenge token from the request to verify the webhook
         console.log('Webhook verified successfully!');
-          console.log('Webhook received:', req.body);
-    res.sendStatus(200);
         res.status(200).send(challenge);
     } else {
+        // Respond with '403 Forbidden' if verification fails
         res.sendStatus(403);
     }
 });
@@ -76,9 +38,8 @@ app.get('/webhook', (req, res) => {
 app.post('/send-auth', async (req, res) => {
     const { phoneNumber } = req.body;
 
-    // Generate a unique session ID
+    // Generate a unique session ID (could use a more robust approach)
     const sessionId = Date.now().toString();
-   console.log(sessionId);
     sessions[sessionId] = { phoneNumber, status: 'pending' };
 
     try {
@@ -105,120 +66,72 @@ app.post('/send-auth', async (req, res) => {
     }
 });
 
-// Handle Webhook Callback
-app.post('/webhook', async (req, res) => {
+/// Handle Webhook Callback
+app.post('/webhook', (req, res) => {
     const { entry } = req.body;
+    console.log('Webhook Request Received:', req.body);
+
     if (entry && entry.length > 0) {
         const changes = entry[0].changes;
         if (changes && changes.length > 0) {
-            const value = changes[0].value;
-            const messages = value.messages;
-
+            const messages = changes[0].value.messages;
             if (messages && messages.length > 0) {
                 const message = messages[0];
-                const phoneNumber = message.from.replace(/^\+/, '');
-                let payload;
-
-                if (message.interactive && message.interactive.button_reply && message.interactive.button_reply.id) {
-                    payload = message.interactive.button_reply.id;
-                }
-
-                if (payload) {
-                    const [action, sessionId] = payload.split('_');
-
-                    try {
-                        const session = await Session.findOne({ sessionId });
-
-                        if (session) {
-                            if (action === 'yes') {
-                                session.status = 'authenticated';
-                                await session.save();
-
-                                req.session.authenticatedSessionId = sessionId;
-                                req.session.phoneNumber = phoneNumber;
-
-                                req.session.save((err) => {
-                                    if (err) {
-                                        console.error('Error saving session:', err);
-                                        return res.status(500).send('Internal Server Error');
-                                    } else {
-                                        console.log('Session saved successfully:', req.session);
-                                        res.status(200).send();
-                                    }
-                                });
-                            } else if (action === 'no') {
-                                session.status = 'denied';
-                                await session.save();
-                            }
-                        } else {
-                            console.log('Session not found for sessionId:', sessionId);
+                const phoneNumber = message.from.replace(/^\+/, ''); // Remove the '+' prefix
+                const payload = message.button ? message.button.payload : null;
+                 console.log(payload);
+                // Find the session associated with the phone number
+              
+                for (const [sessionId, session] of Object.entries(sessions)) {
+                       console.log(session.phoneNumber );
+                          console.log(phoneNumber );
+                    if (session.phoneNumber === phoneNumber) { // Compare without '+'
+             
+                      
+                      if (payload === 'Yes') {
+                            session.status = 'authenticated';
+                           console.log(session.status);
+                        } else if (payload === 'No') {
+                            session.status = 'denied';
+                             console.log(session.status);
                         }
-                    } catch (error) {
-                        console.error('Error handling session:', error);
-                        return res.status(500).send('Internal Server Error');
+                        break;
                     }
                 }
             }
         }
     }
 
-    res.sendStatus(200);
+    res.sendStatus(200); // Respond to the webhook
 });
+
 
 // Check Authentication Status
-app.use(express.json());
-app.get('/auth/status/:sessionId', async (req, res) => {
+app.get('/auth/status/:sessionId', (req, res) => {
     const { sessionId } = req.params;
+    const session = sessions[sessionId];
 
-    try {
-        const session = await Session.findOne({ sessionId });
-        if (session) {
-            if (session.status === 'authenticated') {
-                res.json({ status: 'authenticated', message: 'Login successful' });
-            } else if (session.status === 'denied') {
-                res.json({ status: 'denied', message: 'Access denied' });
-            } else {
-                res.json({ status: 'pending', message: 'Waiting for authorization' });
-            }
+    if (session) {
+        if (session.status === 'authenticated') {
+            res.json({ status: 'authenticated', message: 'Login successful' });
+        } else if (session.status === 'denied') {
+            res.json({ status: 'denied', message: 'Access denied' });
         } else {
-            res.status(404).json({ status: 'not_found', message: 'Session not found' });
+            res.json({ status: 'pending', message: 'Waiting for authorization' });
         }
-    } catch (error) {
-        console.error('Error retrieving session:', error);
-        res.status(500).json({ error: 'Internal server error' });
+    } else {
+        res.status(404).json({ status: 'not_found', message: 'Session not found' });
     }
 });
-
-async function checkStatus(sessionId) {
-    try {
-        const response = await fetch(`/auth/status/${sessionId}`);
-        if (!response.ok) {
-            throw new Error('Network response was not ok');
-        }
-        const data = await response.json();
-        console.log('Status:', data.status);
-    } catch (error) {
-        console.error('Error checking status:', error);
-    }
-}
 
 // Serve the HTML file
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));  // Serve index.html from the public directory
 });
 
-// Dashboard route (protected)
-app.get('/dashboard', async (req, res) => {
-    try {
-        if (!req.session.authenticatedSessionId) {
-            return res.redirect('/access-denied');
-        }
-
-        return res.send(`<h1>Welcome to your Dashboard!</h1><p>Your session ID: ${req.session.authenticatedSessionId}</p>`);
-    } catch (error) {
-        console.error('Error retrieving session:', error);
-        res.status(500).send('Internal Server Error');
-    }
+// Dashboard route (to be shown after successful authentication)
+app.get('/dashboard', (req, res) => {
+    res.send('<h1>Welcome to your Dashboard!</h1><p>You have successfully logged in via WhatsApp authentication.</p>');
 });
 
 // Access Denied route
@@ -226,7 +139,6 @@ app.get('/access-denied', (req, res) => {
     res.send('<h1>Access Denied</h1><p>You have been denied access.</p>');
 });
 
-// Start the server
 app.listen(port, () => {
     console.log(`Server is running on http://localhost:${port}`);
 });
