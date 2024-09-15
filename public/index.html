@@ -163,56 +163,93 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/intlTelInput.min.js"></script>
 
 <script>
-    // Initialize intlTelInput for both forms
-    const loginPhoneInput = document.querySelector("#loginPhone");
-    const loginIntlInput = window.intlTelInput(loginPhoneInput, {
-        initialCountry: "in", // Set default country (optional)
-        separateDialCode: true, // Shows the dial code separately
+    // Initialize intl-tel-input for login and signup forms
+    const loginInput = document.getElementById('loginPhone');
+    const signupInput = document.getElementById('signupPhone');
+
+    intlTelInput(loginInput, {
+        preferredCountries: ["in"],
+        separateDialCode: true,
     });
 
-    const signupPhoneInput = document.querySelector("#signupPhone");
-    const signupIntlInput = window.intlTelInput(signupPhoneInput, {
-        initialCountry: "in", // Set default country (optional)
-        separateDialCode: true, // Shows the dial code separately
+    intlTelInput(signupInput, {
+        preferredCountries: ["in"],
+        separateDialCode: true,
     });
 
-    // Function to concatenate country code and phone number, removing the '+' at the beginning
-    function getFullPhoneNumber(intlInput, phoneInput) {
-        const countryCode = intlInput.getSelectedCountryData().dialCode;
-        const phoneNumber = phoneInput.value.trim();
-
-        // Concatenate country code and phone number, and remove any leading '+'
-        const fullPhoneNumber = `${countryCode}${phoneNumber}`;
-        return fullPhoneNumber;
-    }
-
-    // Handle login form submission
-    document.getElementById('loginForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        const fullPhoneNumber = getFullPhoneNumber(loginIntlInput, loginPhoneInput);
-        console.log('Login Phone:', fullPhoneNumber); // Debugging, to see the result
-        sendAuth(fullPhoneNumber, 'login');
+    // Toggle between login and signup forms
+    document.getElementById('loginToggle').addEventListener('click', () => {
+        document.getElementById('loginToggle').classList.add('active');
+        document.getElementById('signupToggle').classList.remove('active');
+        document.getElementById('formContainer').style.transform = 'translateX(0)';
     });
 
-    // Handle signup form submission
-    document.getElementById('signupForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        const fullPhoneNumber = getFullPhoneNumber(signupIntlInput, signupPhoneInput);
-        console.log('Signup Phone:', fullPhoneNumber); // Debugging, to see the result
-        sendAuth(fullPhoneNumber, 'signup');
+    document.getElementById('signupToggle').addEventListener('click', () => {
+        document.getElementById('signupToggle').classList.add('active');
+        document.getElementById('loginToggle').classList.remove('active');
+        document.getElementById('formContainer').style.transform = 'translateX(-50%)';
     });
 
-    // Toggle form between login and signup
-    document.getElementById('toggleButton').addEventListener('click', function() {
-        const container = document.querySelector('.container');
-        container.classList.toggle('signup-active');
+    // Handle form submissions
+    document.getElementById('loginForm').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const phoneNumber = loginInput.value;
+        document.getElementById('loginStatus').innerText = 'Sending WhatsApp message...';
+
+        try {
+            const response = await fetch('/send-auth', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ phoneNumber }),
+            });
+
+            const data = await response.json();
+            if (data.sessionId) {
+                document.getElementById('loginStatus').innerText = 'Waiting for response...';
+                pollAuthStatus(data.sessionId, 'login');
+            } else {
+                document.getElementById('loginStatus').innerText = 'Failed to send WhatsApp message.';
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            document.getElementById('loginStatus').innerText = 'An error occurred.';
+        }
     });
 
-    // Poll authentication status function
-    function pollAuthStatus(phoneNumber, type) {
+    document.getElementById('signupForm').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const phoneNumber = signupInput.value;
+        document.getElementById('signupStatus').innerText = 'Registering...';
+
+        try {
+            // Handle signup submission (similar to login)
+            const response = await fetch('/signup', {  // Adjust endpoint as needed
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ phoneNumber }),
+            });
+
+            const data = await response.json();
+            if (data.sessionId) {
+                document.getElementById('signupStatus').innerText = 'Waiting for response...';
+                pollAuthStatus(data.sessionId, 'signup');
+            } else {
+                document.getElementById('signupStatus').innerText = 'Failed to register.';
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            document.getElementById('signupStatus').innerText = 'An error occurred.';
+        }
+    });
+
+    async function pollAuthStatus(sessionId, type) {
+        const maxAttempts = 10; 
         let attempts = 0;
-        const maxAttempts = 10;
-        const intervalId = setInterval(async function() {
+        const intervalId = setInterval(async () => {
             if (attempts >= maxAttempts) {
                 clearInterval(intervalId);
                 document.getElementById(`${type}Status`).innerText = 'Authentication timed out.';
@@ -220,10 +257,10 @@
             }
 
             try {
-                const response = await fetch(`/check-auth-status?phone=${phoneNumber}&type=${type}`);
+                const response = await fetch(`/auth/status/${sessionId}`);
                 const data = await response.json();
 
-                if (data.status === 'verified') {
+                              if (data.status === 'verified') {
                     clearInterval(intervalId);
                     document.getElementById(`${type}Status`).innerText = 'Authentication successful!';
                     // Redirect or handle successful authentication
@@ -240,23 +277,7 @@
             attempts++;
         }, 2000); // Poll every 2 seconds
     }
-
-    // Function to send the phone number to the server for authentication
-    async function sendAuth(phoneNumber, type) {
-        const response = await fetch(`/send-auth?phone=${phoneNumber}&type=${type}`, {
-            method: 'POST',
-        });
-        const data = await response.json();
-
-        if (data.status === 'sent') {
-            document.getElementById(`${type}Status`).innerText = 'Authentication message sent. Please check your WhatsApp.';
-            pollAuthStatus(phoneNumber, type);
-        } else {
-            document.getElementById(`${type}Status`).innerText = 'Failed to send authentication message.';
-        }
-    }
 </script>
-
 
 </body>
 </html>
