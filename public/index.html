@@ -187,47 +187,59 @@
 
     // Handle both login and signup forms
     const handleAuthFormSubmit = async (event, formType) => {
-        event.preventDefault();
-        const phoneInput = formType === 'login' ? loginPhoneInput : signupPhoneInput;
-        const phoneNumber = phoneInput.getNumber(); // Get full phone number with country code
-        const submitBtn = formType === 'login' ? loginForm.querySelector('.btn') : signupForm.querySelector('.btn');
-        
-        submitBtn.disabled = true;
-        
-        try {
-            const response = await fetch('/send-auth', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ phoneNumber })
-            });
+    event.preventDefault();
+    
+    // Get the correct phone input based on whether the formType is 'login' or 'signup'
+    const phoneInput = formType === 'login' ? loginPhoneInput : signupPhoneInput;
 
-            const result = await response.json();
-            if (result.sessionId) {
-                const sessionId = result.sessionId;
-                const checkStatus = async () => {
-                    const statusResponse = await fetch(`/auth/status/${sessionId}`);
-                    const statusResult = await statusResponse.json();
-                    if (statusResult.status === 'authenticated') {
-                        window.location.href = '/dashboard';
-                    } else if (statusResult.status === 'denied') {
-                        window.location.href = '/access-denied';
-                    } else {
-                        setTimeout(checkStatus, 2000);
-                    }
-                };
-                checkStatus();
-            } else {
-                alert('Failed to send authentication message.');
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            alert('An error occurred. Please try again.');
-        } finally {
-            submitBtn.disabled = false;
+    // Retrieve the phone number with the international format
+    const phoneNumber = phoneInput.getNumber(); // This should now include country code and input number
+    console.log('Phone number:', phoneNumber); // Add a console log for debugging
+
+    // Ensure phoneNumber is defined before sending it
+    if (!phoneNumber || phoneNumber.includes("undefined")) {
+        alert("Please enter a valid phone number");
+        return;
+    }
+
+    const submitBtn = formType === 'login' ? loginForm.querySelector('.btn') : signupForm.querySelector('.btn');
+    submitBtn.disabled = true;
+    
+    try {
+        const response = await fetch('/send-auth', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ phoneNumber })
+        });
+
+        const result = await response.json();
+        if (result.sessionId) {
+            const sessionId = result.sessionId;
+            const checkStatus = async () => {
+                const statusResponse = await fetch(`/auth/status/${sessionId}`);
+                const statusResult = await statusResponse.json();
+                if (statusResult.status === 'authenticated') {
+                    window.location.href = '/dashboard';
+                } else if (statusResult.status === 'denied') {
+                    window.location.href = '/access-denied';
+                } else {
+                    setTimeout(checkStatus, 2000);
+                }
+            };
+            checkStatus();
+        } else {
+            alert('Failed to send authentication message.');
         }
-    };
+    } catch (error) {
+        console.error('Error:', error);
+        alert('An error occurred. Please try again.');
+    } finally {
+        submitBtn.disabled = false;
+    }
+};
+
 
     document.getElementById('loginForm').addEventListener('submit', (event) => handleAuthFormSubmit(event, 'login'));
     document.getElementById('signupForm').addEventListener('submit', (event) => handleAuthFormSubmit(event, 'signup'));
