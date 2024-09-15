@@ -69,7 +69,7 @@ app.get('/webhook', (req, res) => {
 // Send WhatsApp Authentication Request
 app.post('/send-auth', async (req, res) => {
     const { phoneNumber, countryCode } = req.body;
-    const formattedPhoneNumber = `${countryCode}${phoneNumber.replace(/^\+/, '')}`;
+    const formattedPhoneNumber = `${phoneNumber.replace(/^\+/, '')}`;
     const sessionId = Date.now().toString();
 
     try {
