@@ -78,6 +78,7 @@ app.post('/send-auth', async (req, res) => {
 
     // Generate a unique session ID
     const sessionId = Date.now().toString();
+   console.log(sessionId);
     sessions[sessionId] = { phoneNumber, status: 'pending' };
 
     try {
@@ -165,6 +166,7 @@ app.post('/webhook', async (req, res) => {
 });
 
 // Check Authentication Status
+app.use(express.json());
 app.get('/auth/status/:sessionId', async (req, res) => {
     const { sessionId } = req.params;
 
@@ -186,6 +188,19 @@ app.get('/auth/status/:sessionId', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+
+async function checkStatus(sessionId) {
+    try {
+        const response = await fetch(`/auth/status/${sessionId}`);
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        const data = await response.json();
+        console.log('Status:', data.status);
+    } catch (error) {
+        console.error('Error checking status:', error);
+    }
+}
 
 // Serve the HTML file
 app.get('/', (req, res) => {
