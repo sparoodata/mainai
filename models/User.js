@@ -1,11 +1,12 @@
+// models/User.js
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
-    phoneNumber: { type: String, required: true, unique: true },
+    phoneNumber: { type: String, unique: true, required: true },
     verified: { type: Boolean, default: false },
-    createdAt: { type: Date, default: Date.now }
+    otp: { type: String },
+    otpExpiresAt: { type: Date },
+    // Add other user fields as needed
 });
 
-const User = mongoose.model('User', userSchema);
-
-module.exports = User;
+module.exports = mongoose.model('User', userSchema);
