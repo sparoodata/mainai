@@ -11,6 +11,16 @@ const User = require('./models/User');
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+const mongoose = require('mongoose');
+
+// MongoDB connection
+mongoose.connect('mongodb+srv://ece1saikumar:hyaDfmoR4xRStmYe@tenants.orhtp.mongodb.net/?retryWrites=true&w=majority&appName=Tenants', {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+})
+.then(() => console.log('MongoDB connected'))
+.catch((error) => console.error('MongoDB connection error:', error));
+
 
 app.use(session({
     secret: 'yourStrongSecretKey',
