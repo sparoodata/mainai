@@ -131,25 +131,32 @@
             overflow: visible;
         }
 
-        .otp-input-container {
+        .otp-inputs {
             display: flex;
             justify-content: space-between;
-            width: 100%;
+            gap: 10px;
         }
 
         .otp-input {
-            width: 30px;
-            height: 30px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+            width: 50px;
+            height: 50px;
+            font-size: 1.5rem;
             text-align: center;
-            font-size: 1rem;
-            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-sizing: border-box;
+            padding: 0;
         }
 
         .otp-input:focus {
             outline: none;
             border-color: #1E5799;
+        }
+
+        .otp-status {
+            color: white;
+            text-align: center;
+            margin-top: 10px;
         }
     </style>
 </head>
@@ -166,29 +173,32 @@
         <form id="loginForm">
             <input id="loginPhone" type="tel" placeholder="Phone Number">
             <button class="btn" type="submit">Send Authorization</button>
-            <p id="loginStatus" style="color: white; text-align: center; margin-top: 10px;"></p>
+            <!-- Status message -->
+            <p id="loginStatus" class="otp-status"></p>
         </form>
 
         <!-- Signup Form -->
         <form id="signupForm">
             <input id="signupPhone" type="tel" placeholder="Phone Number">
             <button class="btn" type="submit">Register</button>
-            <p id="signupStatus" style="color: white; text-align: center; margin-top: 10px;"></p>
+            <!-- Status message -->
+            <p id="signupStatus" class="otp-status"></p>
         </form>
 
         <!-- OTP Form -->
         <form id="otpForm" style="display: none;">
-            <div class="otp-input-container">
-                <input class="otp-input" type="text" maxlength="1">
-                <input class="otp-input" type="text" maxlength="1">
-                <input class="otp-input" type="text" maxlength="1">
-                <input class="otp-input" type="text" maxlength="1">
-                <input class="otp-input" type="text" maxlength="1">
-                <input class="otp-input" type="text" maxlength="1">
+            <div class="otp-inputs">
+                <input class="otp-input" type="text" maxlength="1" data-index="0" />
+                <input class="otp-input" type="text" maxlength="1" data-index="1" />
+                <input class="otp-input" type="text" maxlength="1" data-index="2" />
+                <input class="otp-input" type="text" maxlength="1" data-index="3" />
+                <input class="otp-input" type="text" maxlength="1" data-index="4" />
+                <input class="otp-input" type="text" maxlength="1" data-index="5" />
             </div>
             <button class="btn" type="submit">Verify OTP</button>
-            <button class="btn" type="button" id="resendOtp" style="background: #e74c3c; margin-top: 10px;">Resend OTP</button>
-            <p id="otpStatus" style="color: white; text-align: center; margin-top: 10px;"></p>
+            <button type="button" id="resendOtp" class="btn" style="background: #f0f0f0; color: #1E5799; margin-top: 10px;">Resend OTP</button>
+            <!-- Status message -->
+            <p id="otpStatus" class="otp-status"></p>
         </form>
     </div>
 </div>
@@ -201,7 +211,6 @@
     // Initialize intl-tel-input for login and signup forms
     const loginInput = document.getElementById('loginPhone');
     const signupInput = document.getElementById('signupPhone');
-    const otpInputs = document.querySelectorAll('.otp-input');
 
     const loginIti = intlTelInput(loginInput, {
         preferredCountries: ["in"],
@@ -215,12 +224,14 @@
         utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js"
     });
 
+    // Helper function to format phone number in E.164 format
     function formatPhoneNumber(iti) {
-        return iti.getNumber(intlTelInputUtils.numberFormat.E164);
+        return iti.getNumber(intlTelInputUtils.numberFormat.E164); // E.164 format includes country code
     }
 
+    // Polling function to check authentication status
     async function pollAuthStatus(sessionId, type) {
-        const maxAttempts = 30;
+        const maxAttempts = 30; 
         let attempts = 0;
         const intervalId = setInterval(async () => {
             if (attempts >= maxAttempts) {
@@ -243,19 +254,19 @@
                 }
             } catch (error) {
                 console.error('Error:', error);
-                document.getElementById(`${type}Status`).innerText = 'Error checking authentication status.';
-                clearInterval(intervalId);
+                document.getElementById(`${type}Status`).innerText = 'An error occurred while checking authentication status.';
             }
 
             attempts++;
-        }, 2000);
+        }, 5000);
     }
 
     // Handle login form submission
     document.getElementById('loginForm').addEventListener('submit', async (event) => {
         event.preventDefault();
         const phoneNumber = formatPhoneNumber(loginIti);
-        document.getElementById('loginStatus').innerText = 'Sending WhatsApp message...';
+        document.getElementById('loginStatus').innerText = 'Sending authorization...';
+
         try {
             const response = await fetch('/send-auth', {
                 method: 'POST',
@@ -311,7 +322,7 @@
     // Handle OTP form submission
     document.getElementById('otpForm').addEventListener('submit', async (event) => {
         event.preventDefault();
-        const otp = Array.from(otpInputs).map(input => input.value).join('');
+        const otp = Array.from(document.querySelectorAll('.otp-input')).map(input => input.value).join('');
         const sessionId = document.getElementById('otpForm').getAttribute('data-session-id');
 
         document.getElementById('otpStatus').innerText = 'Verifying OTP...';
@@ -339,6 +350,7 @@
     });
 
     // Handle OTP input focusing and auto-tab
+    const otpInputs = document.querySelectorAll('.otp-input');
     otpInputs.forEach((input, index) => {
         input.addEventListener('input', () => {
             if (input.value.length === 1 && index < otpInputs.length - 1) {
@@ -395,5 +407,3 @@
 
 </body>
 </html>
-
-       
