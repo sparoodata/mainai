@@ -363,4 +363,63 @@ app.get('/auth/status/:sessionId', (req, res) => {
             res.json({ status: 'pending', message: 'Waiting for authorization' });
         }
     } else {
-        res.status(404).json({ status: 'not_found', message
+        res.status(404).json({ status: 'not_found', message : 'Session not found' });
+    }
+});
+
+// Login Route
+app.post('/login', async (req, res) => {
+    const { phoneNumber } = req.body;
+    const sessionId = Date.now().toString();
+
+    // Check if the user exists and is verified
+    try {
+        const user = await User.findOne({ phoneNumber });
+
+        if (user && user.verified) {
+            // User is verified, send WhatsApp authentication message
+            sessions[sessionId] = { phoneNumber, status: 'pending' };
+
+            const response = await axios.post(WHATSAPP_API_URL, {
+                messaging_product: 'whatsapp',
+                to: phoneNumber,
+                type: 'template',
+                template: {
+                    name: 'authorize',
+                    language: { code: 'en' }
+                }
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            console.log('Authentication message sent successfully:', response.data);
+            res.json({ message: 'Authentication message sent', sessionId });
+        } else {
+            res.status(404).json({ error: 'User not found or not verified' });
+        }
+    } catch (error) {
+        console.error('Login failed:', error.response ? error.response.data : error);
+        res.status(500).json({ error: 'Login failed' });
+    }
+});
+
+// Logout Route
+app.post('/logout', (req, res) => {
+    req.session.destroy((err) => {
+        if (err) {
+            console.error('Failed to destroy session:', err);
+            return res.status(500).json({ error: 'Failed to logout' });
+        }
+        res.clearCookie('connect.sid');
+        res.json({ message: 'Logged out successfully' });
+    });
+});
+
+// Start the server
+app.listen(port, () => {
+    console.log(`Server running on http://localhost:${port}`);
+});
+

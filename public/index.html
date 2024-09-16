@@ -130,6 +130,39 @@
             position: absolute;
             overflow: visible;
         }
+
+        .otp-section {
+            display: none; /* Hidden by default */
+            flex-direction: column;
+        }
+
+        .otp-input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+            outline: none;
+            box-sizing: border-box;
+            font-weight: 600;
+        }
+
+        .verify-btn {
+            width: 100%;
+            padding: 12px;
+            background: #1E5799;
+            border: none;
+            color: white;
+            font-size: 1.1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .verify-btn:hover {
+            background: #1b4a8b;
+        }
     </style>
 </head>
 <body>
@@ -147,6 +180,11 @@
             <button class="btn" type="submit">Send Authorization</button>
             <!-- Status message -->
             <p id="loginStatus" style="color: white; text-align: center; margin-top: 10px;"></p>
+            <!-- OTP Input -->
+            <div class="otp-section" id="loginOtpSection">
+                <input id="loginOtp" class="otp-input" type="text" placeholder="Enter OTP">
+                <button class="verify-btn" id="loginVerifyOtp">Verify OTP</button>
+            </div>
         </form>
 
         <!-- Signup Form -->
@@ -155,6 +193,11 @@
             <button class="btn" type="submit">Register</button>
             <!-- Status message -->
             <p id="signupStatus" style="color: white; text-align: center; margin-top: 10px;"></p>
+            <!-- OTP Input -->
+            <div class="otp-section" id="signupOtpSection">
+                <input id="signupOtp" class="otp-input" type="text" placeholder="Enter OTP">
+                <button class="verify-btn" id="signupVerifyOtp">Verify OTP</button>
+            </div>
         </form>
     </div>
 </div>
@@ -236,6 +279,7 @@
             const data = await response.json();
             if (data.sessionId) {
                 document.getElementById('loginStatus').innerText = 'Waiting for response...';
+                document.getElementById('loginOtpSection').style.display = 'flex'; // Show OTP section
                 pollAuthStatus(data.sessionId, 'login');  // Call pollAuthStatus
             } else {
                 document.getElementById('loginStatus').innerText = 'Failed to send WhatsApp message.';
@@ -264,9 +308,64 @@
             const data = await response.json();
             if (data.sessionId) {
                 document.getElementById('signupStatus').innerText = 'Waiting for OTP...';
+                document.getElementById('signupOtpSection').style.display = 'flex'; // Show OTP section
                 pollAuthStatus(data.sessionId, 'signup');  // Call pollAuthStatus
             } else {
                 document.getElementById('signupStatus').innerText = 'Failed to register.';
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            document.getElementById('signupStatus').innerText = 'An error occurred.';
+        }
+    });
+
+    // Handle OTP verification for login
+    document.getElementById('loginVerifyOtp').addEventListener('click', async () => {
+        const otp = document.getElementById('loginOtp').value;
+        document.getElementById('loginStatus').innerText = 'Verifying OTP...';
+
+        try {
+            const response = await fetch('/verify-otp', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ otp }),
+            });
+
+            const data = await response.json();
+            if (data.status === 'verified') {
+                document.getElementById('loginStatus').innerText = 'Login successful!';
+                // Redirect or handle successful login here
+            } else {
+                document.getElementById('loginStatus').innerText = 'Invalid OTP.';
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            document.getElementById('loginStatus').innerText = 'An error occurred.';
+        }
+    });
+
+    // Handle OTP verification for signup
+    document.getElementById('signupVerifyOtp').addEventListener('click', async () => {
+        const otp = document.getElementById('signupOtp').value;
+        document.getElementById('signupStatus').innerText = 'Verifying OTP...';
+
+        try {
+            const response = await fetch('/verify-otp', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ otp }),
+            });
+
+            const data = await response.json();
+            if (data.status === 'verified') {
+                document.getElementById('signupStatus').innerText = 'Signup successful!';
+                // Redirect or handle successful signup here
+            } else {
+                document.getElementById('signupStatus').innerText = 'Invalid OTP.';
             }
         } catch (error) {
             console.error('Error:', error);
