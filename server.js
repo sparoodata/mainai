@@ -56,7 +56,7 @@ app.post('/signup', async (req, res) => {
                     to: phoneNumber,
                     type: 'template',
                     template: {
-                        name: 'registered_customer',  // Create a new template for this
+                        name: 'onboard',  // Create a new template for this
                         language: { code: 'en' }
                     }
                 }, {
