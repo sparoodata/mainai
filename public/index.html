@@ -63,14 +63,14 @@
 
         .form-container {
             display: flex;
-            width: 200%;
+            width: 300%;
             height: calc(100% - 50px);
             transform: translateX(0);
             transition: transform 0.6s ease-in-out;
         }
 
         form {
-            width: 50%;
+            width: 33.33%;
             padding: 30px 25px;
             box-sizing: border-box;
             display: flex;
@@ -131,37 +131,25 @@
             overflow: visible;
         }
 
-        .otp-section {
-            display: none; /* Hidden by default */
-            flex-direction: column;
+        .otp-input-container {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
         }
 
         .otp-input {
-            width: 100%;
-            padding: 12px;
-            margin: 10px 0;
+            width: 30px;
+            height: 30px;
             border: 1px solid #ddd;
-            border-radius: 8px;
+            border-radius: 4px;
+            text-align: center;
             font-size: 1rem;
+            margin: 5px;
+        }
+
+        .otp-input:focus {
             outline: none;
-            box-sizing: border-box;
-            font-weight: 600;
-        }
-
-        .verify-btn {
-            width: 100%;
-            padding: 12px;
-            background: #1E5799;
-            border: none;
-            color: white;
-            font-size: 1.1rem;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: background 0.3s ease;
-        }
-
-        .verify-btn:hover {
-            background: #1b4a8b;
+            border-color: #1E5799;
         }
     </style>
 </head>
@@ -178,26 +166,29 @@
         <form id="loginForm">
             <input id="loginPhone" type="tel" placeholder="Phone Number">
             <button class="btn" type="submit">Send Authorization</button>
-            <!-- Status message -->
             <p id="loginStatus" style="color: white; text-align: center; margin-top: 10px;"></p>
-            <!-- OTP Input -->
-            <div class="otp-section" id="loginOtpSection">
-                <input id="loginOtp" class="otp-input" type="text" placeholder="Enter OTP">
-                <button class="verify-btn" id="loginVerifyOtp">Verify OTP</button>
-            </div>
         </form>
 
         <!-- Signup Form -->
         <form id="signupForm">
             <input id="signupPhone" type="tel" placeholder="Phone Number">
             <button class="btn" type="submit">Register</button>
-            <!-- Status message -->
             <p id="signupStatus" style="color: white; text-align: center; margin-top: 10px;"></p>
-            <!-- OTP Input -->
-            <div class="otp-section" id="signupOtpSection">
-                <input id="signupOtp" class="otp-input" type="text" placeholder="Enter OTP">
-                <button class="verify-btn" id="signupVerifyOtp">Verify OTP</button>
+        </form>
+
+        <!-- OTP Form -->
+        <form id="otpForm" style="display: none;">
+            <div class="otp-input-container">
+                <input class="otp-input" type="text" maxlength="1">
+                <input class="otp-input" type="text" maxlength="1">
+                <input class="otp-input" type="text" maxlength="1">
+                <input class="otp-input" type="text" maxlength="1">
+                <input class="otp-input" type="text" maxlength="1">
+                <input class="otp-input" type="text" maxlength="1">
             </div>
+            <button class="btn" type="submit">Verify OTP</button>
+            <button class="btn" type="button" id="resendOtp" style="background: #e74c3c; margin-top: 10px;">Resend OTP</button>
+            <p id="otpStatus" style="color: white; text-align: center; margin-top: 10px;"></p>
         </form>
     </div>
 </div>
@@ -210,6 +201,7 @@
     // Initialize intl-tel-input for login and signup forms
     const loginInput = document.getElementById('loginPhone');
     const signupInput = document.getElementById('signupPhone');
+    const otpInputs = document.querySelectorAll('.otp-input');
 
     const loginIti = intlTelInput(loginInput, {
         preferredCountries: ["in"],
@@ -223,14 +215,12 @@
         utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js"
     });
 
-    // Helper function to format phone number in E.164 format
     function formatPhoneNumber(iti) {
-        return iti.getNumber(intlTelInputUtils.numberFormat.E164); // E.164 format includes country code
+        return iti.getNumber(intlTelInputUtils.numberFormat.E164);
     }
 
-    // Polling function to check authentication status
     async function pollAuthStatus(sessionId, type) {
-        const maxAttempts = 30; 
+        const maxAttempts = 30;
         let attempts = 0;
         const intervalId = setInterval(async () => {
             if (attempts >= maxAttempts) {
@@ -258,7 +248,7 @@
             }
 
             attempts++;
-        }, 2000); // Poll every 2 seconds
+        }, 2000);
     }
 
     // Handle login form submission
@@ -266,7 +256,6 @@
         event.preventDefault();
         const phoneNumber = formatPhoneNumber(loginIti);
         document.getElementById('loginStatus').innerText = 'Sending WhatsApp message...';
-
         try {
             const response = await fetch('/send-auth', {
                 method: 'POST',
@@ -279,8 +268,7 @@
             const data = await response.json();
             if (data.sessionId) {
                 document.getElementById('loginStatus').innerText = 'Waiting for response...';
-                document.getElementById('loginOtpSection').style.display = 'flex'; // Show OTP section
-                pollAuthStatus(data.sessionId, 'login');  // Call pollAuthStatus
+                pollAuthStatus(data.sessionId, 'login');
             } else {
                 document.getElementById('loginStatus').innerText = 'Failed to send WhatsApp message.';
             }
@@ -308,8 +296,9 @@
             const data = await response.json();
             if (data.sessionId) {
                 document.getElementById('signupStatus').innerText = 'Waiting for OTP...';
-                document.getElementById('signupOtpSection').style.display = 'flex'; // Show OTP section
-                pollAuthStatus(data.sessionId, 'signup');  // Call pollAuthStatus
+                document.getElementById('signupForm').style.display = 'none';
+                document.getElementById('otpForm').style.display = 'block';
+                document.getElementById('otpForm').setAttribute('data-session-id', data.sessionId);
             } else {
                 document.getElementById('signupStatus').innerText = 'Failed to register.';
             }
@@ -319,10 +308,13 @@
         }
     });
 
-    // Handle OTP verification for login
-    document.getElementById('loginVerifyOtp').addEventListener('click', async () => {
-        const otp = document.getElementById('loginOtp').value;
-        document.getElementById('loginStatus').innerText = 'Verifying OTP...';
+    // Handle OTP form submission
+    document.getElementById('otpForm').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const otp = Array.from(otpInputs).map(input => input.value).join('');
+        const sessionId = document.getElementById('otpForm').getAttribute('data-session-id');
+
+        document.getElementById('otpStatus').innerText = 'Verifying OTP...';
 
         try {
             const response = await fetch('/verify-otp', {
@@ -330,46 +322,56 @@
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ otp }),
+                body: JSON.stringify({ otp, sessionId }),
             });
 
             const data = await response.json();
-            if (data.status === 'verified') {
-                document.getElementById('loginStatus').innerText = 'Login successful!';
-                // Redirect or handle successful login here
+            if (data.success) {
+                document.getElementById('otpStatus').innerText = 'OTP verified successfully!';
+                // Redirect or handle successful registration here
             } else {
-                document.getElementById('loginStatus').innerText = 'Invalid OTP.';
+                document.getElementById('otpStatus').innerText = 'Failed to verify OTP.';
             }
         } catch (error) {
             console.error('Error:', error);
-            document.getElementById('loginStatus').innerText = 'An error occurred.';
+            document.getElementById('otpStatus').innerText = 'An error occurred.';
         }
     });
 
-    // Handle OTP verification for signup
-    document.getElementById('signupVerifyOtp').addEventListener('click', async () => {
-        const otp = document.getElementById('signupOtp').value;
-        document.getElementById('signupStatus').innerText = 'Verifying OTP...';
+    // Handle OTP input focusing and auto-tab
+    otpInputs.forEach((input, index) => {
+        input.addEventListener('input', () => {
+            if (input.value.length === 1 && index < otpInputs.length - 1) {
+                otpInputs[index + 1].focus();
+            } else if (input.value.length === 0 && index > 0) {
+                otpInputs[index - 1].focus();
+            }
+        });
+    });
+
+    // Handle resend OTP button
+    document.getElementById('resendOtp').addEventListener('click', async () => {
+        const phoneNumber = formatPhoneNumber(signupIti);
+        document.getElementById('otpStatus').innerText = 'Resending OTP...';
 
         try {
-            const response = await fetch('/verify-otp', {
+            const response = await fetch('/resend-otp', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ otp }),
+                body: JSON.stringify({ phoneNumber }),
             });
 
             const data = await response.json();
-            if (data.status === 'verified') {
-                document.getElementById('signupStatus').innerText = 'Signup successful!';
-                // Redirect or handle successful signup here
+            if (data.success) {
+                document.getElementById('otpStatus').innerText = 'OTP sent again!';
             } else {
-                document.getElementById('signupStatus').innerText = 'Invalid OTP.';
+                document.getElementById('otpStatus').innerText = 'Failed to resend OTP.';
             }
         } catch (error) {
             console.error('Error:', error);
-            document.getElementById('signupStatus').innerText = 'An error occurred.';
+            document.getElementById('otpStatus').innerText = 'An error occurred.';
         }
     });
 
@@ -385,7 +387,7 @@
     });
 
     signupToggle.addEventListener('click', () => {
-        formContainer.style.transform = 'translateX(-50%)';
+        formContainer.style.transform = 'translateX(-33.33%)';
         signupToggle.classList.add('active');
         loginToggle.classList.remove('active');
     });
@@ -393,3 +395,5 @@
 
 </body>
 </html>
+
+       
