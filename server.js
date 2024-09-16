@@ -84,7 +84,7 @@ app.post('/signup', async (req, res) => {
             to: phoneNumber,
             type: 'template',
             template: {
-                name: 'send_otp',  // Create a new template for OTP
+                name: 'otp',  // Create a new template for OTP
                 language: { code: 'en' }
             }
         }, {
