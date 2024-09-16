@@ -8,6 +8,7 @@ const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messa
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 
 router.post('/send-auth', async (req, res) => {
+   console.log('sendauth');
     const { phoneNumber } = req.body;
     const sessionId = Date.now().toString(); 
     sessions[sessionId] = { phoneNumber, status: 'pending' }; 
