@@ -327,7 +327,8 @@ app.post('/verify-otp', [
     body('otp').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits')
 ], async (req, res) => {
     const { phoneNumber, otp } = req.body;
-
+  console.log(req.body);
+     
     // Validate input
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
