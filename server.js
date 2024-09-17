@@ -17,6 +17,9 @@ const port = 3000;
 // Middleware
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.set('trust proxy', 1);
+mongoose.set('strictQuery', false);
+
 
 // MongoDB connection
 mongoose.connect(process.env.MONGODB_URI, {
@@ -24,7 +27,7 @@ mongoose.connect(process.env.MONGODB_URI, {
     useUnifiedTopology: true
 })
 .then(() => console.log('MongoDB connected'))
-.catch((error) => console.error('MongoDB connection error:', error));
+.catch((error) => console.error('MongoDB connection error :', error));
 
 // Session middleware
 app.use(session({
@@ -350,20 +353,20 @@ app.post('/verify-otp', [
             console.log('User verified successfully:', phoneNumber);
 
             // Optionally send a success message to WhatsApp
-            await axios.post(WHATSAPP_API_URL, {
-                messaging_product: 'whatsapp',
-                to: phoneNumber,
-                type: 'template',
-                template: {
-                    name: 'otp_success',  // Ensure this template exists
-                    language: { code: 'en' }
-                }
-            }, {
-                headers: {
-                    'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                    'Content-Type': 'application/json'
-                }
-            });
+       //     await axios.post(WHATSAPP_API_URL, {
+       //         messaging_product: 'whatsapp',
+       //         to: phoneNumber,
+       //         type: 'template',
+         //       template: {
+         //           name: 'otp_success',  // Ensure this template exists
+      //              language: { code: 'en' }
+        //        }
+      //      }, {
+    //            headers: {
+      //              'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      //              'Content-Type': 'application/json'
+    //            }
+     //       });
 
             return res.json({ message: 'User verified successfully' });
         } else {
