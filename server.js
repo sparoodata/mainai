@@ -82,7 +82,7 @@ app.post('/signup', signupLimiter, [
                         to: phoneNumber,
                         type: 'template',
                         template: {
-                            name: 'onboard',
+                            name: 'userexists',
                             language: { code: 'en' }
                         }
                     }, {
