@@ -77,20 +77,20 @@ app.post('/signup', signupLimiter, [
             if (existingUser.verified) {
                 // User is already verified
                 try {
-                    const response = await axios.post(WHATSAPP_API_URL, {
-                        messaging_product: 'whatsapp',
-                        to: phoneNumber,
-                        type: 'template',
-                        template: {
-                            name: 'userexists',
-                            language: { code: 'en' }
-                        }
-                    }, {
-                        headers: {
-                            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
+                const response = await axios.post(WHATSAPP_API_URL, {
+                    messaging_product: 'whatsapp',
+                    to: phoneNumber,
+                    type: 'template',
+                    template: {
+                        name: 'userexists',
+                        language: { code: 'en' }
+                    }
+                }, {
+                    headers: {
+                        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
 
                     console.log('User already registered and verified, message sent:', response.data);
                     return res.json({ message: 'User already registered and verified', sessionId });
