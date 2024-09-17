@@ -149,7 +149,7 @@ app.post('/signup', signupLimiter, [
             to: phoneNumber,
             type: 'template',
             template: {
-                name: 'otp',
+                name: 'onboard_otp',
                 language: { code: 'en' },
                 components: [
                     {
