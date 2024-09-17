@@ -272,20 +272,20 @@ app.post('/webhook', async (req, res) => {
                                 console.log('Session after setting user:', req.session);
 
                                 // Optionally, send a success message
-                                await axios.post(WHATSAPP_API_URL, {
-                                    messaging_product: 'whatsapp',
-                                    to: phoneNumber,
-                                    type: 'template',
-                                    template: {
-                                        name: 'auth_success',  // Ensure this template exists
-                                        language: { code: 'en' }
-                                    }
-                                }, {
-                                    headers: {
-                                        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                                        'Content-Type': 'application/json'
-                                    }
-                                });
+                         //       await axios.post(WHATSAPP_API_URL, {
+                          //          messaging_product: 'whatsapp',
+                           //         to: phoneNumber,
+                           //         type: 'template',
+                            //        template: {
+                             //           name: 'auth_success',  // Ensure this template exists
+                             //           language: { code: 'en' }
+                           //         }
+                            //    }, {
+                             //       headers: {
+                           //             'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                           //             'Content-Type': 'application/json'
+                           //         }
+                           //     });
 
                             } else if (payload === 'No') {
                                 session.status = 'denied';
