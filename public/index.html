@@ -186,20 +186,21 @@
         </form>
 
         <!-- OTP Form -->
-        <form id="otpForm" style="display: none;">
-            <div class="otp-inputs">
-                <input class="otp-input" type="text" maxlength="1" data-index="0" />
-                <input class="otp-input" type="text" maxlength="1" data-index="1" />
-                <input class="otp-input" type="text" maxlength="1" data-index="2" />
-                <input class="otp-input" type="text" maxlength="1" data-index="3" />
-                <input class="otp-input" type="text" maxlength="1" data-index="4" />
-                <input class="otp-input" type="text" maxlength="1" data-index="5" />
-            </div>
-            <button class="btn" type="submit">Verify OTP</button>
-            <button type="button" id="resendOtp" class="btn" style="background: #f0f0f0; color: #1E5799; margin-top: 10px;">Resend OTP</button>
-            <!-- Status message -->
-            <p id="otpStatus" class="otp-status"></p>
-        </form>
+<form id="otpForm" style="display: none;">
+    <input type="hidden" id="otpPhoneNumber" name="otpPhoneNumber" />
+    <div class="otp-inputs">
+        <input class="otp-input" type="text" maxlength="1" data-index="0" />
+        <input class="otp-input" type="text" maxlength="1" data-index="1" />
+        <input class="otp-input" type="text" maxlength="1" data-index="2" />
+        <input class="otp-input" type="text" maxlength="1" data-index="3" />
+        <input class="otp-input" type="text" maxlength="1" data-index="4" />
+        <input class="otp-input" type="text" maxlength="1" data-index="5" />
+    </div>
+    <button class="btn" type="submit">Verify OTP</button>
+    <button type="button" id="resendOtp" class="btn" style="background: #f0f0f0; color: #1E5799; margin-top: 10px;">Resend OTP</button>
+    <p id="otpStatus" class="otp-status"></p>
+</form>
+
     </div>
 </div>
 
@@ -289,65 +290,66 @@
         }
     });
 
-    // Handle signup form submission
-    document.getElementById('signupForm').addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const phoneNumber = formatPhoneNumber(signupIti);
-        document.getElementById('signupStatus').innerText = 'Registering...';
+  document.getElementById('signupForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const phoneNumber = formatPhoneNumber(signupIti);
+    document.getElementById('signupStatus').innerText = 'Registering...';
 
-        try {
-            const response = await fetch('/signup', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ phoneNumber }),
-            });
+    try {
+        const response = await fetch('/signup', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ phoneNumber }),
+        });
 
-            const data = await response.json();
-            if (data.sessionId) {
-                document.getElementById('signupStatus').innerText = 'Waiting for OTP...';
-                document.getElementById('signupForm').style.display = 'none';
-                document.getElementById('otpForm').style.display = 'block';
-                document.getElementById('otpForm').setAttribute('data-session-id', data.sessionId);
-            } else {
-                document.getElementById('signupStatus').innerText = 'Failed to register.';
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            document.getElementById('signupStatus').innerText = 'An error occurred.';
+        const data = await response.json();
+        if (data.sessionId) {
+            document.getElementById('signupStatus').innerText = 'Waiting for OTP...';
+            document.getElementById('signupForm').style.display = 'none';
+            document.getElementById('otpForm').style.display = 'block';
+            document.getElementById('otpForm').setAttribute('data-session-id', data.sessionId);
+            document.getElementById('otpPhoneNumber').value = phoneNumber;  // Populate phone number in OTP form
+        } else {
+            document.getElementById('signupStatus').innerText = 'Failed to register.';
         }
-    });
+    } catch (error) {
+        console.error('Error:', error);
+        document.getElementById('signupStatus').innerText = 'An error occurred.';
+    }
+});
 
-    // Handle OTP form submission
-    document.getElementById('otpForm').addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const otp = Array.from(document.querySelectorAll('.otp-input')).map(input => input.value).join('');
-        const sessionId = document.getElementById('otpForm').getAttribute('data-session-id');
+   document.getElementById('otpForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const otp = Array.from(document.querySelectorAll('.otp-input')).map(input => input.value).join('');
+    const sessionId = document.getElementById('otpForm').getAttribute('data-session-id');
+    const phoneNumber = document.getElementById('otpPhoneNumber').value;  // Retrieve phone number from hidden input
 
-        document.getElementById('otpStatus').innerText = 'Verifying OTP...';
+    document.getElementById('otpStatus').innerText = 'Verifying OTP...';
 
-        try {
-            const response = await fetch('/verify-otp', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ otp, sessionId }),
-            });
+    try {
+        const response = await fetch('/verify-otp', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ otp, sessionId, phoneNumber }),  // Include phone number in request
+        });
 
-            const data = await response.json();
-            if (data.success) {
-                document.getElementById('otpStatus').innerText = 'OTP verified successfully!';
-                // Redirect or handle successful registration here
-            } else {
-                document.getElementById('otpStatus').innerText = 'Failed to verify OTP.';
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            document.getElementById('otpStatus').innerText = 'An error occurred.';
+        const data = await response.json();
+        if (data.success) {
+            document.getElementById('otpStatus').innerText = 'OTP verified successfully!';
+            // Redirect or handle successful registration here
+        } else {
+            document.getElementById('otpStatus').innerText = 'Failed to verify OTP.';
         }
-    });
+    } catch (error) {
+        console.error('Error:', error);
+        document.getElementById('otpStatus').innerText = 'An error occurred.';
+    }
+});
+
 
     // Handle OTP input focusing and auto-tab
     const otpInputs = document.querySelectorAll('.otp-input');

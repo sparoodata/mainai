@@ -354,40 +354,26 @@ app.post('/verify-otp', [
             console.log('User verified successfully:', phoneNumber);
 
             // Optionally send a success message to WhatsApp
-       //     await axios.post(WHATSAPP_API_URL, {
-       //         messaging_product: 'whatsapp',
-       //         to: phoneNumber,
-       //         type: 'template',
-         //       template: {
-         //           name: 'otp_success',  // Ensure this template exists
-      //              language: { code: 'en' }
-        //        }
-      //      }, {
-    //            headers: {
-      //              'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      //              'Content-Type': 'application/json'
-    //            }
-     //       });
-
-            return res.json({ message: 'User verified successfully' });
-        } else {
-            console.log('Invalid or expired OTP for:', phoneNumber);
-
-            // Optionally send a failure message to WhatsApp
             await axios.post(WHATSAPP_API_URL, {
                 messaging_product: 'whatsapp',
                 to: phoneNumber,
                 type: 'template',
                 template: {
-                    name: 'otp_failure',  // Ensure this template exists
+                    name: 'otp_success',  // Ensure this template exists
                     language: { code: 'en' }
                 }
             }, {
-                headers: {
+               headers: {
                     'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
                     'Content-Type': 'application/json'
                 }
             });
+
+            return res.json({ message: 'User verified successfully' });
+        } else {
+            console.log('Invalid or expired OTP for:', phoneNumber);
+
+         
 
             return res.status(400).json({ message: 'Invalid or expired OTP' });
         }
