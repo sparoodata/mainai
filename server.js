@@ -359,7 +359,7 @@ app.post('/verify-otp', [
                 to: phoneNumber,
                 type: 'template',
                 template: {
-                    name: 'otp_success',  // Ensure this template exists
+                    name: 'registration_success',  // Ensure this template exists
                     language: { code: 'en' }
                 }
             }, {
