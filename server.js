@@ -210,6 +210,7 @@ app.post('/webhook', async (req, res) => {
                 const phoneNumber = message.from.replace(/^\+/, ''); // Remove '+' prefix
                 const text = message.text ? message.text.body.trim() : null;
                 const payload = message.button ? message.button.payload : null;
+              console.log(payload);
 
                 // Handle OTP Verification
                 if (text && /^\d{6}$/.test(text)) { // Check if the message is a 6-digit OTP
