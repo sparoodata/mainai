@@ -210,7 +210,7 @@ app.post('/webhook', async (req, res) => {
                 const phoneNumber = message.from.replace(/^\+/, ''); // Remove '+' prefix
                 const text = message.text ? message.text.body.trim() : null;
                 const payload = message.button ? message.button.payload : null;
-              console.log(payload);
+              console.log(messages);
 
                 // Handle OTP Verification
                 if (text && /^\d{6}$/.test(text)) { // Check if the message is a 6-digit OTP
@@ -318,7 +318,7 @@ app.post('/webhook', async (req, res) => {
                 }
 
                 // Handle Rent Payment Payload
-                if (payload === 'Rent paid') {
+                if (text === 'Rent paid') {
                     // Extract tenant_id from the message text or payload
                     const tenantId = text; // Assuming tenant_id is sent in the message text
 
