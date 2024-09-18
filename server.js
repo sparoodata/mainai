@@ -320,7 +320,7 @@ app.post('/webhook', async (req, res) => {
                 // Handle Rent Payment Payload
                 if (text === 'Rent paid') {
                     // Extract tenant_id from the message text or payload
-                    const tenantId = text; // Assuming tenant_id is sent in the message text
+                    const tenantId = payload.split('-')[1].split(' ')[0]; // Assuming tenant_id is sent in the message text
 
                     try {
                         const tenant = await Tenant.findOne({ tenant_id: tenantId });
