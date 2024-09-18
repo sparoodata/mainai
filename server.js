@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 const generateOTP = require('./utils/generateOTP'); // Utility to generate OTP
 const User = require('./models/User'); 
+const Tenant = require('./models/Tenant');
 
 const app = express();
 const port = 3000;
@@ -275,20 +276,20 @@ app.post('/webhook', async (req, res) => {
                                 console.log('Session after setting user:', req.session);
 
                                 // Optionally, send a success message
-                         //       await axios.post(WHATSAPP_API_URL, {
-                          //          messaging_product: 'whatsapp',
-                           //         to: phoneNumber,
-                           //         type: 'template',
-                            //        template: {
-                             //           name: 'auth_success',  // Ensure this template exists
-                             //           language: { code: 'en' }
-                           //         }
-                            //    }, {
-                             //       headers: {
-                           //             'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                           //             'Content-Type': 'application/json'
-                           //         }
-                           //     });
+                                // await axios.post(WHATSAPP_API_URL, {
+                                //     messaging_product: 'whatsapp',
+                                //     to: phoneNumber,
+                                //     type: 'template',
+                                //     template: {
+                                //         name: 'auth_success',  // Ensure this template exists
+                                //         language: { code: 'en' }
+                                //     }
+                                // }, {
+                                //     headers: {
+                                //         'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                                //         'Content-Type': 'application/json'
+                                //     }
+                                // });
 
                             } else if (payload === 'No') {
                                 session.status = 'denied';
@@ -314,12 +315,51 @@ app.post('/webhook', async (req, res) => {
                         }
                     }
                 }
+
+                // Handle Rent Payment Payload
+                if (payload === 'Rent paid') {
+                    // Extract tenant_id from the message text or payload
+                    const tenantId = text; // Assuming tenant_id is sent in the message text
+
+                    try {
+                        const tenant = await Tenant.findOne({ tenant_id: tenantId });
+
+                        if (tenant) {
+                            tenant.status = 'PAID';
+                            await tenant.save();
+
+                            console.log('Tenant rent status updated to PAID:', tenantId);
+
+                            // Optionally, send a confirmation message
+                            await axios.post(WHATSAPP_API_URL, {
+                                messaging_product: 'whatsapp',
+                                to: phoneNumber,
+                                type: 'template',
+                                template: {
+                                    name: 'rent_payment_success',  // Ensure this template exists
+                                    language: { code: 'en' }
+                                }
+                            }, {
+                                headers: {
+                                    'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                                    'Content-Type': 'application/json'
+                                }
+                            });
+
+                        } else {
+                            console.log('Tenant not found for tenant_id:', tenantId);
+                        }
+                    } catch (error) {
+                        console.error('Error updating rent status:', error.response ? error.response.data : error);
+                    }
+                }
             }
         }
     }
 
     res.sendStatus(200);
 });
+
 
 // Verify OTP Route
 app.post('/verify-otp', [
