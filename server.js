@@ -513,6 +513,15 @@ app.post('/login', async (req, res) => {
     }
 });
 
+app.get('/wa/:phone_no', (req, res) => {
+  const phoneNo = req.params.phone_no;
+  const whatsappUrl = `https://wa.me/${phoneNo}`;
+  
+  // Redirect to WhatsApp link
+  res.redirect(whatsappUrl);
+});
+
+
 // Logout Route
 app.post('/logout', (req, res) => {
     req.session.destroy((err) => {
