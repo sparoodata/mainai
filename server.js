@@ -514,7 +514,7 @@ app.post('/login', async (req, res) => {
 });
 
 app.get('/wa/:phone_no', (req, res) => {
-  const phoneNo = req.params.phone_no;
+  const phoneNo = req.params.phone_no.replace(/^\+/, '');
   const whatsappUrl = `https://wa.me/${phoneNo}`;
   
   // Redirect to WhatsApp link
