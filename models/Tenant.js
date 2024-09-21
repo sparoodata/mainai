@@ -16,4 +16,4 @@ const tenantSchema = new mongoose.Schema({
     tenant_id: String
 });
 
-module.exports = mongoose.model('Tenant', tenantSchema);
+module.exports = mongoose.model('tenants', tenantSchema);
