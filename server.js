@@ -333,28 +333,20 @@ app.post('/webhook', async (req, res) => {
                             console.log('Tenant rent status updated to PAID:', tenantId);
 
                             // Optionally, send a confirmation message
-      await axios.post(WHATSAPP_API_URL, {
-            messaging_product: 'whatsapp',
-            to: phoneNumber,
-            type: 'template',
-            template: {
-                name: 'rent_payment_success',
-                language: { code: 'en' },
-                components: [
-                    {
-                        type: 'body',
-                        parameters: [
-                            { type: 'text', text: payload }
-                        ]
-                    }
-                ]
-            }
-        }, {
-            headers: {
-                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                'Content-Type': 'application/json'
-            }
-        });
+await axios.post(WHATSAPP_API_URL, {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'text',
+    text: {
+        body: `${payload}* marked a 🙂👍`
+    }
+}, {
+    headers: {
+        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json'
+    }
+});
+
 
                         } else {
                             console.log('Tenant not found for tenant_id:', tenantId);
