@@ -338,7 +338,7 @@ await axios.post(WHATSAPP_API_URL, {
     to: phoneNumber,
     type: 'text',
     text: {
-        body: `*${extractedPart}* is marked as PAID 🙂👍`
+        body: `*${extractedPart}* marked as PAID 🙂👍`
     }
 }, {
     headers: {
