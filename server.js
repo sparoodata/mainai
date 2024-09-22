@@ -331,14 +331,14 @@ app.post('/webhook', async (req, res) => {
                             await tenant.save();
 
                             console.log('Tenant rent status updated to PAID:', tenantId);
-
+let extractedPart = payload.match(/[A-Za-z]+-T\d+/)[0]; 
                             // Optionally, send a confirmation message
 await axios.post(WHATSAPP_API_URL, {
     messaging_product: 'whatsapp',
     to: phoneNumber,
     type: 'text',
     text: {
-        body: `${payload}* marked a 🙂👍`
+        body: `*${extractedPart}* is marked as PAID 🙂👍`
     }
 }, {
     headers: {
