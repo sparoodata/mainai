@@ -484,6 +484,11 @@ app.post('/login', async (req, res) => {
     try {
         const user = await User.findOne({ phoneNumber });
 
+        if (!user) {
+            // Phone number not registered
+            return res.status(404).json({ error: 'Phone number not registered. Please sign up.' });
+        }
+
         if (user && user.verified) {
             // User is verified, send WhatsApp authentication message
             sessions[sessionId] = { phoneNumber, status: 'pending' };
@@ -506,13 +511,16 @@ app.post('/login', async (req, res) => {
             console.log('Authentication message sent successfully:', response.data);
             res.json({ message: 'Authentication message sent', sessionId });
         } else {
-            res.status(404).json({ error: 'User not found or not verified' });
+            res.status(403).json({ error: 'User not verified. Please verify your account.' });
         }
     } catch (error) {
         console.error('Login failed:', error.response ? error.response.data : error);
         res.status(500).json({ error: 'Login failed' });
     }
 });
+
+// Export the router
+
 
 app.get('/wa/:phone_no', (req, res) => {
   const phoneNo = req.params.phone_no.replace(/^\+/, '');
