@@ -34,14 +34,23 @@
             flex-direction: column;
         }
 
-        .toggle-container {
-            display: flex;
-            justify-content: space-between;
-            position: relative;
-            background-color: #f0f0f0;
-            border-radius: 25px;
-            margin: 20px;
-        }
+.toggle-container {
+    display: flex;
+    justify-content: space-between;
+    position: relative;
+    background-color: #f0f0f0;
+    border-radius: 25px;
+    margin: 0; /* Remove margin */
+}
+
+.form-container {
+    display: flex;
+    width: 300%;
+    height: calc(100% - 40px); /* Reduce the height calculation to tighten the space */
+    transform: translateX(0);
+    transition: transform 0.6s ease-in-out;
+}
+
 
         .toggle-button {
             width: 50%;
@@ -61,13 +70,7 @@
             border-radius: 25px;
         }
 
-        .form-container {
-            display: flex;
-            width: 300%;
-            height: calc(100% - 50px);
-            transform: translateX(0);
-            transition: transform 0.6s ease-in-out;
-        }
+
 
         form {
             width: 33.33%;
@@ -158,6 +161,7 @@
             text-align: center;
             margin-top: 10px;
         }
+      
     </style>
 </head>
 <body>
