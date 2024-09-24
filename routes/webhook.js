@@ -1,3 +1,20 @@
+require('dotenv').config();
+const express = require('express');
+const bodyParser = require('body-parser');
+const path = require('path');
+const axios = require('axios');
+const session = require('express-session');
+const MongoStore = require('connect-mongo');
+const mongoose = require('mongoose');
+const rateLimit = require('express-rate-limit');
+const { body, validationResult } = require('express-validator');
+const generateOTP = require('./utils/generateOTP'); // Utility to generate OTP
+const User = require('./models/User'); 
+const Tenant = require('./models/Tenant');
+
+const app = express();
+const port = 3000;
+
 // Unified Webhook Callback
 app.post('/webhook', async (req, res) => {
     const { entry } = req.body;
