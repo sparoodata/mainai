@@ -1,182 +1,193 @@
-require('dotenv').config();
 const express = require('express');
-const bodyParser = require('body-parser');
-const path = require('path');
 const axios = require('axios');
-const session = require('express-session');
-const MongoStore = require('connect-mongo');
-const mongoose = require('mongoose');
-const rateLimit = require('express-rate-limit');
-const { body, validationResult } = require('express-validator');
-const generateOTP = require('./utils/generateOTP'); // Utility to generate OTP
-const User = require('./models/User'); 
-const Tenant = require('./models/Tenant');
+const User = require('../models/User'); // Assuming you have a User model
+const Tenant = require('../models/Tenant'); // Assuming you have a Tenant model
+const router = express.Router();
 
-const app = express();
-const port = 3000;
+// WhatsApp API credentials
+const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 
-// Unified Webhook Callback
-app.post('/webhook', async (req, res) => {
-    const { entry } = req.body;
+// Webhook verification for WhatsApp API
+router.get('/', (req, res) => {
+    const VERIFY_TOKEN = process.env.VERIFY_TOKEN; // Your WhatsApp verification token
+    
+    // Parse query parameters
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
 
-    if (entry && entry.length > 0) {
-        const changes = entry[0].changes;
-        if (changes && changes.length > 0) {
-            const messages = changes[0].value.messages;
-            if (messages && messages.length > 0) {
-                const message = messages[0];
-                const phoneNumber = message.from.replace(/^\+/, ''); // Remove '+' prefix
-                const text = message.text ? message.text.body.trim() : null;
-                const payload = message.button ? message.button.payload : null;
-                const text1 = message.button ? message.button.text : null;
-              console.log(messages);
-
-                // Handle OTP Verification
-                if (text && /^\d{6}$/.test(text)) { // Check if the message is a 6-digit OTP
-                    try {
-                        const user = await User.findOne({ phoneNumber });
-
-                        if (user && user.otp === text && user.otpExpiresAt > Date.now()) {
-                            user.verified = true;
-                            user.otp = undefined;
-                            user.otpExpiresAt = undefined;
-                            await user.save();
-
-                            console.log('User verified via WhatsApp:', phoneNumber);
-
-                            // Send confirmation message
-                            await axios.post(WHATSAPP_API_URL, {
-                                messaging_product: 'whatsapp',
-                                to: phoneNumber,
-                                type: 'template',
-                                template: {
-                                    name: 'otp_success',  // Ensure this template exists
-                                    language: { code: 'en' }
-                                }
-                            }, {
-                                headers: {
-                                    'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                                    'Content-Type': 'application/json'
-                                }
-                            });
-
-                        } else {
-                            console.log('Invalid or expired OTP for:', phoneNumber);
-                            // Send failure message
-                            await axios.post(WHATSAPP_API_URL, {
-                                messaging_product: 'whatsapp',
-                                to: phoneNumber,
-                                type: 'template',
-                                template: {
-                                    name: 'otp_failure',  // Ensure this template exists
-                                    language: { code: 'en' }
-                                }
-                            }, {
-                                headers: {
-                                    'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                                    'Content-Type': 'application/json'
-                                }
-                            });
-                        }
-                    } catch (error) {
-                        console.error('Error verifying OTP:', error.response ? error.response.data : error);
-                    }
-                }
-
-                // Handle Authentication Payloads
-                if (payload) {
-                    for (const [sessionId, session] of Object.entries(sessions)) {
-                        if (session.phoneNumber.replace(/^\+/, '') === phoneNumber) {
-                            if (payload === 'Yes') {
-                                session.status = 'authenticated';
-                                console.log('User authenticated successfully');
-
-                                // Save session data in express session
-                                req.session.user = { phoneNumber, sessionId };
-                                console.log('Session after setting user:', req.session);
-
-                                // Optionally, send a success message
-                                // await axios.post(WHATSAPP_API_URL, {
-                                //     messaging_product: 'whatsapp',
-                                //     to: phoneNumber,
-                                //     type: 'template',
-                                //     template: {
-                                //         name: 'auth_success',  // Ensure this template exists
-                                //         language: { code: 'en' }
-                                //     }
-                                // }, {
-                                //     headers: {
-                                //         'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                                //         'Content-Type': 'application/json'
-                                //     }
-                                // });
-
-                            } else if (payload === 'No') {
-                                session.status = 'denied';
-                                console.log('Authentication denied');
-
-                                // Optionally, send a denial message
-                                await axios.post(WHATSAPP_API_URL, {
-                                    messaging_product: 'whatsapp',
-                                    to: phoneNumber,
-                                    type: 'template',
-                                    template: {
-                                        name: 'auth_denied',  // Ensure this template exists
-                                        language: { code: 'en' }
-                                    }
-                                }, {
-                                    headers: {
-                                        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                                        'Content-Type': 'application/json'
-                                    }
-                                });
-                            }
-                            break;
-                        }
-                    }
-                }
-
-                // Handle Rent Payment Payload
-                if (text1 === 'Rent paid') {
-                    // Extract tenant_id from the message text or payload
-                    const tenantId = payload.split('-')[1].split(' ')[0]; // Assuming tenant_id is sent in the message text
-                    console.log(tenantId);
-                    try {
-                        const tenant = await Tenant.findOne({ tenant_id: tenantId });
-
-                        if (tenant) {
-                            tenant.status = 'PAID';
-                            await tenant.save();
-
-                            console.log('Tenant rent status updated to PAID:', tenantId);
-let extractedPart = payload.match(/[A-Za-z]+-T\d+/)[0]; 
-                            // Optionally, send a confirmation message
-await axios.post(WHATSAPP_API_URL, {
-    messaging_product: 'whatsapp',
-    to: phoneNumber,
-    type: 'text',
-    text: {
-        body: `*${extractedPart}* marked as PAID 🙂👍`
-    }
-}, {
-    headers: {
-        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json'
+    // Check if mode and token are present
+    if (mode && token) {
+        // Verify the token matches
+        if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+            console.log('Webhook verified successfully');
+            res.status(200).send(challenge);
+        } else {
+            // Respond with '403 Forbidden' if token is invalid
+            console.error('Webhook verification failed');
+            res.sendStatus(403);
+        }
     }
 });
 
+// Webhook event handling
+router.post('/', async (req, res) => {
+    const body = req.body;
 
-                        } else {
-                            console.log('Tenant not found for tenant_id:', tenantId);
-                        }
-                    } catch (error) {
-                        console.error('Error updating rent status:', error.response ? error.response.data : error);
+    console.log('Webhook received:', JSON.stringify(body, null, 2));
+
+    // Check if this is an event from WhatsApp Business API
+    if (body.object === 'whatsapp_business_account') {
+        const entry = body.entry[0];
+        const changes = entry.changes[0];
+
+        if (changes.value.messages) {
+            const message = changes.value.messages[0];
+            const phoneNumber = message.from.replace(/^\+/, ''); // Phone number of the sender
+            const text = message.text ? message.text.body.trim() : null; // Message body
+            const payload = message.button ? message.button.payload : null; // Button payload if it exists
+            const text1 = message.button ? message.button.text : null; // Button text if exists
+
+            // Log the received message
+            console.log(`Received message from ${phoneNumber}: ${text || payload || text1}`);
+
+            // Handle OTP Verification
+            if (text && /^\d{6}$/.test(text)) { // If the message is a 6-digit OTP
+                try {
+                    const user = await User.findOne({ phoneNumber });
+
+                    if (user && user.otp === text && user.otpExpiresAt > Date.now()) {
+                        user.verified = true;
+                        user.otp = undefined;
+                        user.otpExpiresAt = undefined;
+                        await user.save();
+
+                        console.log('User verified successfully:', phoneNumber);
+
+                        // Send confirmation message
+                        await axios.post(WHATSAPP_API_URL, {
+                            messaging_product: 'whatsapp',
+                            to: phoneNumber,
+                            type: 'template',
+                            template: {
+                                name: 'otp_success', // Template for OTP success
+                                language: { code: 'en' }
+                            }
+                        }, {
+                            headers: {
+                                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                    } else {
+                        console.log('Invalid or expired OTP for:', phoneNumber);
+
+                        // Send OTP failure message
+                        await axios.post(WHATSAPP_API_URL, {
+                            messaging_product: 'whatsapp',
+                            to: phoneNumber,
+                            type: 'template',
+                            template: {
+                                name: 'otp_failure', // Template for OTP failure
+                                language: { code: 'en' }
+                            }
+                        }, {
+                            headers: {
+                                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
                     }
+                } catch (error) {
+                    console.error('Error verifying OTP:', error.response ? error.response.data : error);
+                }
+            }
+
+            // Handle authentication via button payloads
+            if (payload) {
+                if (payload === 'Yes') {
+                    console.log('Authentication confirmed for:', phoneNumber);
+
+                    // Send success message
+                    await axios.post(WHATSAPP_API_URL, {
+                        messaging_product: 'whatsapp',
+                        to: phoneNumber,
+                        type: 'template',
+                        template: {
+                            name: 'auth_success', // Template for successful authentication
+                            language: { code: 'en' }
+                        }
+                    }, {
+                        headers: {
+                            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                } else if (payload === 'No') {
+                    console.log('Authentication denied for:', phoneNumber);
+
+                    // Send denial message
+                    await axios.post(WHATSAPP_API_URL, {
+                        messaging_product: 'whatsapp',
+                        to: phoneNumber,
+                        type: 'template',
+                        template: {
+                            name: 'auth_denied', // Template for denied authentication
+                            language: { code: 'en' }
+                        }
+                    }, {
+                        headers: {
+                            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                }
+            }
+
+            // Handle rent payment confirmation
+            if (text1 === 'Rent paid') {
+                const tenantId = payload.split('-')[1].split(' ')[0]; // Extract tenant ID
+                console.log('Processing rent payment for tenant ID:', tenantId);
+
+                try {
+                    const tenant = await Tenant.findOne({ tenant_id: tenantId });
+
+                    if (tenant) {
+                        tenant.status = 'PAID';
+                        await tenant.save();
+
+                        console.log('Tenant rent status updated to PAID:', tenantId);
+
+                        // Send confirmation message
+                        await axios.post(WHATSAPP_API_URL, {
+                            messaging_product: 'whatsapp',
+                            to: phoneNumber,
+                            type: 'text',
+                            text: {
+                                body: `Tenant ID: *${tenantId}* has been marked as PAID. 👍`
+                            }
+                        }, {
+                            headers: {
+                                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                    } else {
+                        console.log('Tenant not found for tenant ID:', tenantId);
+                    }
+                } catch (error) {
+                    console.error('Error updating rent status:', error.response ? error.response.data : error);
                 }
             }
         }
+    } else {
+        // Return 404 for non-WhatsApp events
+        res.sendStatus(404);
     }
 
+    // Respond to WhatsApp API with success
     res.sendStatus(200);
 });
 
+module.exports = router;

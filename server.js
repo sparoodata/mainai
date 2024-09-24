@@ -428,6 +428,9 @@ app.post('/logout', (req, res) => {
 const signupRoutes = require('./routes/signup');
 app.use('/signup', signupRoutes);
 
+const webhookRoutes = require('./routes/webhook');
+app.use('/webhook', webhookRoutes); // For webhook routes
+
 // Start the server
 app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
