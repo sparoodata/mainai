@@ -51,6 +51,11 @@ const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 
 // Rate Limiter for Signup
+const signupLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10,
+    message: 'Too many signup attempts from this IP, please try again later.'
+});
 
 // Signup Route
 
@@ -420,8 +425,8 @@ app.post('/logout', (req, res) => {
     });
 });
 
-const signup = require('./routes/signup');
-app.use('/signup', signup);
+const signupRoutes = require('./routes/signup');
+app.use('/signup', signupRoutes);
 
 // Start the server
 app.listen(port, () => {

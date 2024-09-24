@@ -1,23 +1,25 @@
 const express = require('express');
-const router = express.Router();
-const axios = require('axios');
-const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
-const User = require('./models/User'); 
-const Tenant = require('./models/Tenant');
+const axios = require('axios');
+const generateOTP = require('../utils/generateOTP');
+const User = require('../models/User');
+const rateLimit = require('express-rate-limit');
+
+// WhatsApp API Credentials
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
-const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
-const generateOTP = require('./utils/generateOTP'); // Utility to generate OTP
 
+const router = express.Router();
 
+// Rate Limiter for Signup
 const signupLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 10,
     message: 'Too many signup attempts from this IP, please try again later.'
 });
 
-router.post('/signup', signupLimiter, [
+// Signup Route
+router.post('/', signupLimiter, [
     body('phoneNumber').isMobilePhone().withMessage('Invalid phone number')
 ], async (req, res) => {
     const { phoneNumber } = req.body;
@@ -35,22 +37,22 @@ router.post('/signup', signupLimiter, [
 
         if (existingUser) {
             if (existingUser.verified) {
-                // User is already verified
+                // User already verified, send a message
                 try {
-                const response = await axios.post(WHATSAPP_API_URL, {
-                    messaging_product: 'whatsapp',
-                    to: phoneNumber,
-                    type: 'template',
-                    template: {
-                        name: 'userexists',
-                        language: { code: 'en' }
-                    }
-                }, {
-                    headers: {
-                        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
+                    const response = await axios.post(WHATSAPP_API_URL, {
+                        messaging_product: 'whatsapp',
+                        to: phoneNumber,
+                        type: 'template',
+                        template: {
+                            name: 'userexists',
+                            language: { code: 'en' }
+                        }
+                    }, {
+                        headers: {
+                            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
 
                     console.log('User already registered and verified, message sent:', response.data);
                     return res.json({ message: 'User already registered and verified', sessionId });
