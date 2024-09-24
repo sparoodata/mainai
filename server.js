@@ -57,6 +57,9 @@ const signupLimiter = rateLimit({
     message: 'Too many signup attempts from this IP, please try again later.'
 });
 
+
+
+
 // Signup Route
 
 // Serve static files
@@ -116,8 +119,15 @@ app.use('/verify-otp', verifyOtpRoutes);
 const sendAuthRoutes = require('./routes/send-auth');
 app.use('/send-auth', sendAuthRoutes); 
 
-const loginRoutes = require('./routes/login'); 
-app.use('/login', loginRoutes);  
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit to 5 requests per IP per windowMs
+  message: 'Too many login attempts, please try again later.'
+});
+
+app.use('/login', loginLimiter, require('./routes/login'));
+
 
 // Start the server
 app.listen(port, () => {

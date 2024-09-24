@@ -1,56 +1,81 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const form = document.getElementById('login-form');
-    const statusMessage = document.getElementById('status-message');
+const express = require('express');
+const axios = require('axios'); // Required for sending WhatsApp messages
+const User = require('../models/User'); // User model for checking database
+const router = express.Router();
 
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
+// WhatsApp API configurations
+const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL; 
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 
-        const phoneNumber = document.getElementById('phoneNumber').value;
-        statusMessage.innerHTML = 'Sending authentication request...';
+// Sessions to track OTP validation
+let sessions = {};
 
-        try {
-            const response = await fetch('/send-auth', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phoneNumber })
-            });
-            const data = await response.json();
+// POST route for user login
+router.post('/', async (req, res) => {
+    const { phoneNumber } = req.body;
+    const sessionId = Date.now().toString();
 
-            if (response.ok) {
-                statusMessage.innerHTML = 'Authentication request sent. Waiting for confirmation...';
-                const sessionId = data.sessionId;
-                await checkAuthStatus(sessionId);
-            } else {
-                statusMessage.innerHTML = 'Failed to send authentication request.';
-            }
-        } catch (error) {
-            statusMessage.innerHTML = 'Error: ' + error.message;
+    try {
+        // Check if the user exists and is verified
+        const user = await User.findOne({ phoneNumber });
+
+        if (!user) {
+            return res.status(404).json({ error: 'Phone number not registered. Please sign up.' });
         }
-    });
 
-    async function checkAuthStatus(sessionId) {
-        const timeout = 30000; // 30 seconds
-        const startTime = Date.now();
+        if (user && user.verified) {
+            // Store session data with a timestamp for expiration
+            sessions[sessionId] = { phoneNumber, status: 'pending', createdAt: Date.now() };
 
-        const checkInterval = setInterval(async () => {
-            try {
-                const response = await fetch(`/auth/status/${sessionId}`);
-                const data = await response.json();
-
-                if (data.status === 'authenticated') {
-                    clearInterval(checkInterval);
-                    window.location.href = '/dashboard';
-                } else if (data.status === 'denied') {
-                    clearInterval(checkInterval);
-                    statusMessage.innerHTML = 'Access denied.';
-                } else if (Date.now() - startTime > timeout) {
-                    clearInterval(checkInterval);
-                    statusMessage.innerHTML = 'Authentication request timed out. Please try again.';
+            // Send WhatsApp authentication message
+            const response = await axios.post(WHATSAPP_API_URL, {
+                messaging_product: 'whatsapp',
+                to: phoneNumber,
+                type: 'template',
+                template: {
+                    name: 'authorize',
+                    language: { code: 'en' }
                 }
-            } catch (error) {
-                statusMessage.innerHTML = 'Error checking status: ' + error.message;
-                clearInterval(checkInterval);
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`
+                }
+            });
+
+            // Check for WhatsApp API errors
+            if (response.data.errors) {
+                return res.status(500).json({ error: 'Failed to send WhatsApp message. Try again later.' });
             }
-        }, 5000); // Check every 5 seconds
+
+            res.json({ status: 'pending', message: 'WhatsApp message sent for authentication.' });
+        }
+    } catch (error) {
+        console.error('Error in WhatsApp authentication:', error);
+        res.status(500).json({ error: 'Server error. Please try again later.' });
     }
 });
+
+// Additional route for OTP validation (Optional)
+router.post('/validate-otp', (req, res) => {
+    const { sessionId, otp } = req.body;
+    const session = sessions[sessionId];
+
+    if (!session) {
+        return res.status(400).json({ error: 'Invalid session. Please try again.' });
+    }
+
+    // Check if the OTP is expired (10-minute validity)
+    if ((Date.now() - session.createdAt) > 10 * 60 * 1000) {
+        return res.status(400).json({ error: 'OTP expired. Please request a new one.' });
+    }
+
+    // Verify the OTP (Assuming you have a verifyOTP function)
+    if (verifyOTP(session.phoneNumber, otp)) {
+        session.status = 'verified';
+        return res.json({ message: 'OTP verified successfully.' });
+    } else {
+        return res.status(400).json({ error: 'Invalid OTP. Please try again.' });
+    }
+});
+
+module.exports = router;
