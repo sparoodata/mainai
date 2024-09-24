@@ -103,17 +103,6 @@ app.get('/wa/:phone_no', (req, res) => {
 });
 
 
-// Logout Route
-app.post('/logout', (req, res) => {
-    req.session.destroy((err) => {
-        if (err) {
-            console.error('Failed to destroy session:', err);
-            return res.status(500).json({ error: 'Failed to logout' });
-        }
-        res.clearCookie('connect.sid');
-        res.json({ message: 'Logged out successfully' });
-    });
-});
 
 const signupRoutes = require('./routes/signup');
 app.use('/signup', signupRoutes);
