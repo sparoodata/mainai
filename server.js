@@ -89,48 +89,7 @@ app.get('/auth/status/:sessionId', (req, res) => {
 });
 
 // Login Route
-app.post('/login', async (req, res) => {
-    const { phoneNumber } = req.body;
-    const sessionId = Date.now().toString();
 
-    // Check if the user exists and is verified
-    try {
-        const user = await User.findOne({ phoneNumber });
-
-        if (!user) {
-            // Phone number not registered
-            return res.status(404).json({ error: 'Phone number not registered. Please sign up.' });
-        }
-
-        if (user && user.verified) {
-            // User is verified, send WhatsApp authentication message
-            sessions[sessionId] = { phoneNumber, status: 'pending' };
-
-            const response = await axios.post(WHATSAPP_API_URL, {
-                messaging_product: 'whatsapp',
-                to: phoneNumber,
-                type: 'template',
-                template: {
-                    name: 'authorize',
-                    language: { code: 'en' }
-                }
-            }, {
-                headers: {
-                    'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            console.log('Authentication message sent successfully:', response.data);
-            res.json({ message: 'Authentication message sent', sessionId });
-        } else {
-            res.status(403).json({ error: 'User not verified. Please verify your account.' });
-        }
-    } catch (error) {
-        console.error('Login failed:', error.response ? error.response.data : error);
-        res.status(500).json({ error: 'Login failed' });
-    }
-});
 
 // Export the router
 
@@ -167,6 +126,9 @@ app.use('/verify-otp', verifyOtpRoutes);
 
 const sendAuthRoutes = require('./routes/send-auth');
 app.use('/send-auth', sendAuthRoutes); 
+
+const loginRoutes = require('./routes/login'); 
+app.use('/login', loginRoutes);  
 
 // Start the server
 app.listen(port, () => {
