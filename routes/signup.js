@@ -1,21 +1,23 @@
-require('dotenv').config();
 const express = require('express');
-const bodyParser = require('body-parser');
-const path = require('path');
+const router = express.Router();
 const axios = require('axios');
-const session = require('express-session');
-const MongoStore = require('connect-mongo');
-const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
-const generateOTP = require('./utils/generateOTP'); // Utility to generate OTP
 const User = require('./models/User'); 
 const Tenant = require('./models/Tenant');
+const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
+const generateOTP = require('./utils/generateOTP'); // Utility to generate OTP
 
-const app = express();
-const port = 3000;
 
-app.post('/signup', signupLimiter, [
+const signupLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10,
+    message: 'Too many signup attempts from this IP, please try again later.'
+});
+
+router.post('/signup', signupLimiter, [
     body('phoneNumber').isMobilePhone().withMessage('Invalid phone number')
 ], async (req, res) => {
     const { phoneNumber } = req.body;
@@ -133,3 +135,5 @@ app.post('/signup', signupLimiter, [
         res.status(500).json({ error: 'Signup failed' });
     }
 });
+
+module.exports = router;
