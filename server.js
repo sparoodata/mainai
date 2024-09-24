@@ -129,6 +129,15 @@ const loginLimiter = rateLimit({
 app.use('/login', loginLimiter, require('./routes/login'));
 
 
+
+app.get('/dashboard', (req, res) => {
+    if (!req.session.phoneNumber) {
+        return res.redirect('/login'); // Redirect to login if the session doesn't exist
+    }
+
+    res.render('dashboard', { phoneNumber: req.session.phoneNumber });
+});
+
 // Start the server
 app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
