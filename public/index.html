@@ -218,88 +218,89 @@
 
 <script>
     // Initialize intl-tel-input for login and signup forms
-    const loginInput = document.getElementById('loginPhone');
-    const signupInput = document.getElementById('signupPhone');
+   // Initialize intl-tel-input for login and signup forms
+const loginInput = document.getElementById('loginPhone');
+const signupInput = document.getElementById('signupPhone');
 
-    const loginIti = intlTelInput(loginInput, {
-        preferredCountries: ["in"],
-        separateDialCode: true,
-        utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js"
-    });
+const loginIti = intlTelInput(loginInput, {
+    preferredCountries: ["in"],
+    separateDialCode: true,
+    utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js"
+});
 
-    const signupIti = intlTelInput(signupInput, {
-        preferredCountries: ["in"],
-        separateDialCode: true,
-        utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js"
-    });
+const signupIti = intlTelInput(signupInput, {
+    preferredCountries: ["in"],
+    separateDialCode: true,
+    utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js"
+});
 
-    // Helper function to format phone number in E.164 format
-    function formatPhoneNumber(iti) {
-        return iti.getNumber(intlTelInputUtils.numberFormat.E164); // E.164 format includes country code
-    }
+// Helper function to format phone number in E.164 format
+function formatPhoneNumber(iti) {
+    return iti.getNumber(intlTelInputUtils.numberFormat.E164); // E.164 format includes country code
+}
 
-    // Polling function to check authentication status
-    async function pollAuthStatus(sessionId, type) {
-        const maxAttempts = 30; 
-        let attempts = 0;
-        const intervalId = setInterval(async () => {
-            if (attempts >= maxAttempts) {
-                clearInterval(intervalId);
-                document.getElementById(`${type}Status`).innerText = 'Authentication timed out.';
-                return;
-            }
-
-            try {
-                const response = await fetch(`/auth/status/${sessionId}`);
-                const data = await response.json();
-
-                if (data.status === 'verified') {
-                    clearInterval(intervalId);
-                    document.getElementById(`${type}Status`).innerText = 'Authentication successful!';
-                    // Redirect or handle successful authentication here
-                } else if (data.status === 'failed') {
-                    clearInterval(intervalId);
-                    document.getElementById(`${type}Status`).innerText = 'Authentication failed.';
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                document.getElementById(`${type}Status`).innerText = 'An error occurred while checking authentication status.';
-            }
-
-            attempts++;
-        }, 5000);
-    }
-
-  
-    // Handle login form submission
-    document.getElementById('loginForm').addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const phoneNumber = formatPhoneNumber(loginIti);
-        document.getElementById('loginStatus').innerText = 'Sending authorization...';
+// Polling function to check authentication status
+async function pollAuthStatus(sessionId, type) {
+    const maxAttempts = 30; 
+    let attempts = 0;
+    const intervalId = setInterval(async () => {
+        if (attempts >= maxAttempts) {
+            clearInterval(intervalId);
+            document.getElementById(`${type}Status`).innerText = 'Authentication timed out.';
+            return;
+        }
 
         try {
-            const response = await fetch('/send-auth', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ phoneNumber }),
-            });
-
+            const response = await fetch(`/auth/status/${sessionId}`);
             const data = await response.json();
-            if (data.sessionId) {
-                document.getElementById('loginStatus').innerText = 'Waiting for response...';
-                pollAuthStatus(data.sessionId, 'login');
-            } else {
-                document.getElementById('loginStatus').innerText = 'Failed to send WhatsApp message.';
+
+            if (data.status === 'authenticated') {
+                clearInterval(intervalId);
+                document.getElementById(`${type}Status`).innerText = 'Authentication successful!';
+                window.location.href = '/dashboard'; // Redirect to dashboard on success
+            } else if (data.status === 'denied') {
+                clearInterval(intervalId);
+                document.getElementById(`${type}Status`).innerText = 'Authentication denied.';
             }
         } catch (error) {
-            console.error('Error:', error);
-            document.getElementById('loginStatus').innerText = 'An error occurred.';
+            console.error('Error in polling authentication status:', error);
+            document.getElementById(`${type}Status`).innerText = 'An error occurred while checking authentication status.';
         }
-    });
 
-  document.getElementById('signupForm').addEventListener('submit', async (event) => {
+        attempts++;
+    }, 5000);
+}
+
+// Handle login form submission
+document.getElementById('loginForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const phoneNumber = formatPhoneNumber(loginIti);
+    document.getElementById('loginStatus').innerText = 'Sending authorization...';
+
+    try {
+        const response = await fetch('/send-auth', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ phoneNumber }),
+        });
+
+        const data = await response.json();
+        if (data.sessionId) {
+            document.getElementById('loginStatus').innerText = 'Waiting for response...';
+            pollAuthStatus(data.sessionId, 'login');
+        } else {
+            document.getElementById('loginStatus').innerText = 'Failed to send WhatsApp message.';
+        }
+    } catch (error) {
+        console.error('Error sending authorization:', error);
+        document.getElementById('loginStatus').innerText = 'An error occurred.';
+    }
+});
+
+// Handle signup form submission
+document.getElementById('signupForm').addEventListener('submit', async (event) => {
     event.preventDefault();
     const phoneNumber = formatPhoneNumber(signupIti);
     document.getElementById('signupStatus').innerText = 'Registering...';
@@ -319,21 +320,22 @@
             document.getElementById('signupForm').style.display = 'none';
             document.getElementById('otpForm').style.display = 'block';
             document.getElementById('otpForm').setAttribute('data-session-id', data.sessionId);
-            document.getElementById('otpPhoneNumber').value = phoneNumber;  // Populate phone number in OTP form
+            document.getElementById('otpPhoneNumber').value = phoneNumber; // Populate phone number in OTP form
         } else {
             document.getElementById('signupStatus').innerText = 'Failed to register.';
         }
     } catch (error) {
-        console.error('Error:', error);
+        console.error('Error registering:', error);
         document.getElementById('signupStatus').innerText = 'An error occurred.';
     }
 });
 
-   document.getElementById('otpForm').addEventListener('submit', async (event) => {
+// Handle OTP form submission
+document.getElementById('otpForm').addEventListener('submit', async (event) => {
     event.preventDefault();
     const otp = Array.from(document.querySelectorAll('.otp-input')).map(input => input.value).join('');
     const sessionId = document.getElementById('otpForm').getAttribute('data-session-id');
-    const phoneNumber = document.getElementById('otpPhoneNumber').value;  // Retrieve phone number from hidden input
+    const phoneNumber = document.getElementById('otpPhoneNumber').value;
 
     document.getElementById('otpStatus').innerText = 'Verifying OTP...';
 
@@ -343,7 +345,7 @@
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ otp, sessionId, phoneNumber }),  // Include phone number in request
+            body: JSON.stringify({ otp, sessionId, phoneNumber }),
         });
 
         const data = await response.json();
@@ -354,67 +356,66 @@
             document.getElementById('otpStatus').innerText = 'Failed to verify OTP.';
         }
     } catch (error) {
-        console.error('Error:', error);
+        console.error('Error verifying OTP:', error);
         document.getElementById('otpStatus').innerText = 'An error occurred.';
     }
 });
 
-
-    // Handle OTP input focusing and auto-tab
-    const otpInputs = document.querySelectorAll('.otp-input');
-    otpInputs.forEach((input, index) => {
-        input.addEventListener('input', () => {
-            if (input.value.length === 1 && index < otpInputs.length - 1) {
-                otpInputs[index + 1].focus();
-            } else if (input.value.length === 0 && index > 0) {
-                otpInputs[index - 1].focus();
-            }
-        });
-    });
-
-    // Handle resend OTP button
-    document.getElementById('resendOtp').addEventListener('click', async () => {
-        const phoneNumber = formatPhoneNumber(signupIti);
-        document.getElementById('otpStatus').innerText = 'Resending OTP...';
-
-        try {
-            const response = await fetch('/resend-otp', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ phoneNumber }),
-            });
-
-            const data = await response.json();
-            if (data.success) {
-                document.getElementById('otpStatus').innerText = 'OTP sent again!';
-            } else {
-                document.getElementById('otpStatus').innerText = 'Failed to resend OTP.';
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            document.getElementById('otpStatus').innerText = 'An error occurred.';
+// Handle OTP input focusing and auto-tab
+const otpInputs = document.querySelectorAll('.otp-input');
+otpInputs.forEach((input, index) => {
+    input.addEventListener('input', () => {
+        if (input.value.length === 1 && index < otpInputs.length - 1) {
+            otpInputs[index + 1].focus();
+        } else if (input.value.length === 0 && index > 0) {
+            otpInputs[index - 1].focus();
         }
     });
-  
+});
 
-    // Form slide logic
-    const loginToggle = document.getElementById('loginToggle');
-    const signupToggle = document.getElementById('signupToggle');
-    const formContainer = document.getElementById('formContainer');
+// Handle resend OTP button
+document.getElementById('resendOtp').addEventListener('click', async () => {
+    const phoneNumber = formatPhoneNumber(signupIti);
+    document.getElementById('otpStatus').innerText = 'Resending OTP...';
 
-    loginToggle.addEventListener('click', () => {
-        formContainer.style.transform = 'translateX(0)';
-        loginToggle.classList.add('active');
-        signupToggle.classList.remove('active');
-    });
+    try {
+        const response = await fetch('/resend-otp', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ phoneNumber }),
+        });
 
-    signupToggle.addEventListener('click', () => {
-        formContainer.style.transform = 'translateX(-33.33%)';
-        signupToggle.classList.add('active');
-        loginToggle.classList.remove('active');
-    });
+        const data = await response.json();
+        if (data.success) {
+            document.getElementById('otpStatus').innerText = 'OTP sent again!';
+        } else {
+            document.getElementById('otpStatus').innerText = 'Failed to resend OTP.';
+        }
+    } catch (error) {
+        console.error('Error resending OTP:', error);
+        document.getElementById('otpStatus').innerText = 'An error occurred.';
+    }
+});
+
+// Form slide logic for toggling between login and signup
+const loginToggle = document.getElementById('loginToggle');
+const signupToggle = document.getElementById('signupToggle');
+const formContainer = document.getElementById('formContainer');
+
+loginToggle.addEventListener('click', () => {
+    formContainer.style.transform = 'translateX(0)';
+    loginToggle.classList.add('active');
+    signupToggle.classList.remove('active');
+});
+
+signupToggle.addEventListener('click', () => {
+    formContainer.style.transform = 'translateX(-33.33%)';
+    signupToggle.classList.add('active');
+    loginToggle.classList.remove('active');
+});
+
 </script>
 
 </body>

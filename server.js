@@ -69,6 +69,22 @@ app.get('/dashboard', (req, res) => {
   res.send(`Welcome to the dashboard, ${req.session.phoneNumber}`);
 });
 
+app.get('/auth/status/:sessionId', (req, res) => {
+    const { sessionId } = req.params;
+    const session = sessions[sessionId];
+
+    if (session) {
+        if (session.status === 'authenticated') {
+            res.json({ status: 'authenticated' });
+        } else if (session.status === 'denied') {
+            res.json({ status: 'denied' });
+        } else {
+            res.json({ status: 'pending' });
+        }
+    } else {
+        res.status(404).json({ status: 'not_found' });
+    }
+});
 // Start the server
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);

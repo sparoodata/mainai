@@ -11,7 +11,7 @@ const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 // Webhook verification for WhatsApp API
 router.get('/', (req, res) => {
     const VERIFY_TOKEN = process.env.VERIFY_TOKEN; // Your WhatsApp verification token
-    
+
     // Parse query parameters
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
@@ -66,38 +66,46 @@ router.post('/', async (req, res) => {
                         console.log('User verified successfully:', phoneNumber);
 
                         // Send confirmation message
-                        await axios.post(WHATSAPP_API_URL, {
-                            messaging_product: 'whatsapp',
-                            to: phoneNumber,
-                            type: 'template',
-                            template: {
-                                name: 'otp_success', // Template for OTP success
-                                language: { code: 'en' }
-                            }
-                        }, {
-                            headers: {
-                                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                                'Content-Type': 'application/json'
-                            }
-                        });
+                        try {
+                            await axios.post(WHATSAPP_API_URL, {
+                                messaging_product: 'whatsapp',
+                                to: phoneNumber,
+                                type: 'template',
+                                template: {
+                                    name: 'otp_success', // Template for OTP success
+                                    language: { code: 'en' }
+                                }
+                            }, {
+                                headers: {
+                                    'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                                    'Content-Type': 'application/json'
+                                }
+                            });
+                        } catch (error) {
+                            console.error('Error sending OTP success message:', error.response ? error.response.data : error);
+                        }
                     } else {
                         console.log('Invalid or expired OTP for:', phoneNumber);
 
                         // Send OTP failure message
-                        await axios.post(WHATSAPP_API_URL, {
-                            messaging_product: 'whatsapp',
-                            to: phoneNumber,
-                            type: 'template',
-                            template: {
-                                name: 'otp_failure', // Template for OTP failure
-                                language: { code: 'en' }
-                            }
-                        }, {
-                            headers: {
-                                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                                'Content-Type': 'application/json'
-                            }
-                        });
+                        try {
+                            await axios.post(WHATSAPP_API_URL, {
+                                messaging_product: 'whatsapp',
+                                to: phoneNumber,
+                                type: 'template',
+                                template: {
+                                    name: 'otp_failure', // Template for OTP failure
+                                    language: { code: 'en' }
+                                }
+                            }, {
+                                headers: {
+                                    'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                                    'Content-Type': 'application/json'
+                                }
+                            });
+                        } catch (error) {
+                            console.error('Error sending OTP failure message:', error.response ? error.response.data : error);
+                        }
                     }
                 } catch (error) {
                     console.error('Error verifying OTP:', error.response ? error.response.data : error);
@@ -109,39 +117,54 @@ router.post('/', async (req, res) => {
                 if (payload === 'Yes') {
                     console.log('Authentication confirmed for:', phoneNumber);
 
-                    // Send success message
-                    await axios.post(WHATSAPP_API_URL, {
-                        messaging_product: 'whatsapp',
-                        to: phoneNumber,
-                        type: 'template',
-                        template: {
-                            name: 'auth_success', // Template for successful authentication
-                            language: { code: 'en' }
-                        }
-                    }, {
-                        headers: {
-                            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
+                    try {
+                        // Send success message
+                        await axios.post(WHATSAPP_API_URL, {
+                            messaging_product: 'whatsapp',
+                            to: phoneNumber,
+                            type: 'template',
+                            template: {
+                                name: 'auth_success', // Template for successful authentication
+                                language: { code: 'en' }
+                            }
+                        }, {
+                            headers: {
+                                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+
+                        // Update session status to authenticated (optional)
+                        // Example: if you are tracking sessions
+                        // sessions[sessionId].status = 'authenticated';
+                        console.log(`Authentication successful for ${phoneNumber}`);
+                    } catch (error) {
+                        console.error('Error sending auth success message:', error.response ? error.response.data : error);
+                    }
                 } else if (payload === 'No') {
                     console.log('Authentication denied for:', phoneNumber);
 
-                    // Send denial message
-                    await axios.post(WHATSAPP_API_URL, {
-                        messaging_product: 'whatsapp',
-                        to: phoneNumber,
-                        type: 'template',
-                        template: {
-                            name: 'auth_denied', // Template for denied authentication
-                            language: { code: 'en' }
-                        }
-                    }, {
-                        headers: {
-                            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
+                    try {
+                        // Send denial message
+                        await axios.post(WHATSAPP_API_URL, {
+                            messaging_product: 'whatsapp',
+                            to: phoneNumber,
+                            type: 'template',
+                            template: {
+                                name: 'auth_denied', // Template for denied authentication
+                                language: { code: 'en' }
+                            }
+                        }, {
+                            headers: {
+                                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+
+                        console.log(`Authentication denied for ${phoneNumber}`);
+                    } catch (error) {
+                        console.error('Error sending auth denied message:', error.response ? error.response.data : error);
+                    }
                 }
             }
 
