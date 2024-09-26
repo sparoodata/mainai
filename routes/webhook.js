@@ -50,10 +50,10 @@ router.post('/', async (req, res) => {
             const phoneNumber = message.from.replace(/^\+/, ''); // Phone number of the sender
             const text = message.text ? message.text.body.trim() : null; // Message body
             const interactive = message.interactive || null; // For interactive messages (list/button)
-            
+
             // Initialize session if not existing
             if (!sessions[phoneNumber]) {
-                sessions[phoneNumber] = { expectingMenuSelection: false };
+                sessions[phoneNumber] = { action: null };
             }
 
             // Log the received message
@@ -63,7 +63,7 @@ router.post('/', async (req, res) => {
             if (text && text.toLowerCase() === 'help') {
                 try {
                     // Set session state to expect menu selection
-                    sessions[phoneNumber].expectingMenuSelection = true;
+                    sessions[phoneNumber].action = null;
 
                     // Send WhatsApp interactive list menu
                     const interactiveMenu = {
@@ -117,6 +117,11 @@ router.post('/', async (req, res) => {
                                                 id: 'tenants_info',
                                                 title: 'Tenants Info',
                                                 description: 'View information about your tenants'
+                                            },
+                                            {
+                                                id: 'rent_paid', // Custom identifier for Rent Paid
+                                                title: 'Rent Paid',
+                                                description: 'Confirm rent payment for a tenant'
                                             }
                                         ]
                                     }
@@ -149,6 +154,11 @@ router.post('/', async (req, res) => {
                     selectedOption = interactive.list_reply.id; // The ID of the selected option
                 }
 
+                // Handle button reply
+                else if (interactiveType === 'button_reply') {
+                    selectedOption = interactive.button_reply.id; // This is the payload of the button response
+                }
+
                 // Process the selected option
                 if (selectedOption === 'account_info') {
                     // Fetch and send user account info
@@ -158,9 +168,9 @@ router.post('/', async (req, res) => {
 
                         if (user) {
                             const accountInfoMessage = `
-                                *Account Info*:
-                                - Phone Number: ${user.phoneNumber}
-                                - Verified: ${user.verified ? 'Yes' : 'No'}
+*Account Info*:
+- Phone Number: ${user.phoneNumber}
+- Verified: ${user.verified ? 'Yes' : 'No'}
                             `;
 
                             await axios.post(WHATSAPP_API_URL, {
@@ -200,6 +210,13 @@ router.post('/', async (req, res) => {
                     }
                 }
 
+                // Handle 'Rent Paid' option
+                else if (selectedOption === 'rent_paid') {
+                    // Ask for tenant ID
+                    sessions[phoneNumber].action = 'rent_paid';
+                    await sendMessage(phoneNumber, 'Please provide the Tenant ID to confirm rent payment.');
+                }
+
                 // Handle other menu options (e.g., 'manage', 'transactions', etc.)
                 else if (selectedOption === 'manage') {
                     // Handle "Manage" option here
@@ -217,6 +234,29 @@ router.post('/', async (req, res) => {
                     // Handle "Tenants Info" option here
                     // ...
                 }
+            }
+
+            // Handle text input when expecting tenant ID for rent payment
+            else if (sessions[phoneNumber].action === 'rent_paid' && text) {
+                const tenantId = text.trim();
+                try {
+                    const tenant = await Tenant.findOne({ tenant_id: tenantId });
+                    if (tenant) {
+                        tenant.status = 'PAID';
+                        await tenant.save();
+
+                        await sendMessage(phoneNumber, `Rent payment confirmed for Tenant ID: ${tenantId}.`);
+                        console.log(`Tenant rent status updated to PAID for Tenant ID: ${tenantId}`);
+
+                        // Reset action
+                        sessions[phoneNumber].action = null;
+                    } else {
+                        await sendMessage(phoneNumber, `Tenant with ID "${tenantId}" not found.`);
+                    }
+                } catch (error) {
+                    console.error('Error updating rent status:', error);
+                    await sendMessage(phoneNumber, 'Failed to confirm rent payment. Please try again.');
+                }
             } else {
                 console.log('Received non-interactive message or invalid interaction.');
             }
@@ -228,5 +268,22 @@ router.post('/', async (req, res) => {
     // Respond to WhatsApp API with success
     res.sendStatus(200);
 });
+
+// Helper function to send a WhatsApp message
+async function sendMessage(phoneNumber, message) {
+    await axios.post(WHATSAPP_API_URL, {
+        messaging_product: 'whatsapp',
+        to: phoneNumber,
+        type: 'text',
+        text: {
+            body: message
+        }
+    }, {
+        headers: {
+            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json'
+        }
+    });
+}
 
 module.exports = router;
