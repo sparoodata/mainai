@@ -33,6 +33,7 @@ router.get('/', (req, res) => {
 
 // Webhook event handling
 // Webhook event handling
+// Webhook event handling
 router.post('/', async (req, res) => {
     const body = req.body;
 
@@ -87,8 +88,60 @@ router.post('/', async (req, res) => {
                 }
             }
 
-            // Handle OTP Verification (existing logic)
-            if (text && /^\d{6}$/.test(text)) { 
+            // Handle Account Info (Option 1)
+            if (text === '1') {
+                try {
+                    // Fetch user registration details based on phoneNumber
+                    const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+
+                    if (user) {
+                        // Send the user registration details
+                        const accountInfoMessage = `
+                            *Account Info*:
+                            - Phone Number: ${user.phoneNumber}
+                            - Verified: ${user.verified ? 'Yes' : 'No'}
+                        `;
+
+                        await axios.post(WHATSAPP_API_URL, {
+                            messaging_product: 'whatsapp',
+                            to: phoneNumber,
+                            type: 'text',
+                            text: {
+                                body: accountInfoMessage
+                            }
+                        }, {
+                            headers: {
+                                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+
+                        console.log('Account info sent to:', phoneNumber);
+                    } else {
+                        // If user is not found, send an error message
+                        await axios.post(WHATSAPP_API_URL, {
+                            messaging_product: 'whatsapp',
+                            to: phoneNumber,
+                            type: 'text',
+                            text: {
+                                body: 'No account information found for this number.'
+                            }
+                        }, {
+                            headers: {
+                                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+
+                        console.log('No account information found for:', phoneNumber);
+                    }
+                } catch (error) {
+                    console.error('Error fetching account info:', error.response ? error.response.data : error);
+                }
+            }
+
+            // Existing OTP verification and other logic can remain unchanged
+            if (text && /^\d{6}$/.test(text)) {
                 try {
                     const user = await User.findOne({ phoneNumber });
 
