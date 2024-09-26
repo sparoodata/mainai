@@ -96,7 +96,7 @@ router.post('/', async (req, res) => {
                                             {
                                                 id: 'manage',
                                                 title: 'Manage',
-                                                description: 'Manage your rental account (Add/Update/Delete tenants)'
+                                                description: 'Manage your rental account'
                                             },
                                             {
                                                 id: 'transactions',
@@ -150,108 +150,72 @@ router.post('/', async (req, res) => {
                 }
 
                 // Process the selected option
-                if (selectedOption === 'manage') {
-                    // Send another interactive menu for managing tenants
+                if (selectedOption === 'account_info') {
+                    // Fetch and send user account info
                     try {
-                        const manageMenu = {
-                            messaging_product: 'whatsapp',
-                            to: phoneNumber,
-                            type: 'interactive',
-                            interactive: {
-                                type: 'button',
-                                body: {
-                                    text: 'Manage Tenants: Choose an action'
-                                },
-                                action: {
-                                    buttons: [
-                                        {
-                                            type: 'reply',
-                                            reply: {
-                                                id: 'add_tenant',
-                                                title: 'Add Tenant'
-                                            }
-                                        },
-                                        {
-                                            type: 'reply',
-                                            reply: {
-                                                id: 'update_tenant',
-                                                title: 'Update Tenant'
-                                            }
-                                        },
-                                        {
-                                            type: 'reply',
-                                            reply: {
-                                                id: 'delete_tenant',
-                                                title: 'Delete Tenant'
-                                            }
-                                        }
-                                    ]
+                        console.log(phoneNumber);
+                        const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+
+                        if (user) {
+                            const accountInfoMessage = `
+                                *Account Info*:
+                                - Phone Number: ${user.phoneNumber}
+                                - Verified: ${user.verified ? 'Yes' : 'No'}
+                            `;
+
+                            await axios.post(WHATSAPP_API_URL, {
+                                messaging_product: 'whatsapp',
+                                to: phoneNumber,
+                                type: 'text',
+                                text: {
+                                    body: accountInfoMessage
                                 }
-                            }
-                        };
+                            }, {
+                                headers: {
+                                    'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                                    'Content-Type': 'application/json'
+                                }
+                            });
 
-                        await axios.post(WHATSAPP_API_URL, manageMenu, {
-                            headers: {
-                                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                                'Content-Type': 'application/json'
-                            }
-                        });
+                            console.log('Account info sent to:', phoneNumber);
+                        } else {
+                            await axios.post(WHATSAPP_API_URL, {
+                                messaging_product: 'whatsapp',
+                                to: phoneNumber,
+                                type: 'text',
+                                text: {
+                                    body: 'No account information found for this number.'
+                                }
+                            }, {
+                                headers: {
+                                    'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                                    'Content-Type': 'application/json'
+                                }
+                            });
 
-                        console.log('Manage tenants menu sent to:', phoneNumber);
+                            console.log('No account information found for:', phoneNumber);
+                        }
                     } catch (error) {
-                        console.error('Error sending manage tenants menu:', error.response ? error.response.data : error);
+                        console.error('Error fetching account info:', error.response ? error.response.data : error);
                     }
                 }
 
-                // Handle tenant management actions (add, update, delete)
-                else if (selectedOption === 'add_tenant') {
-                    sessions[phoneNumber].action = 'add_tenant';
-                    await sendMessage(phoneNumber, 'Please provide the tenant name.');
-                } else if (selectedOption === 'update_tenant') {
-                    sessions[phoneNumber].action = 'update_tenant';
-                    await sendMessage(phoneNumber, 'Please provide the tenant ID and the updated name.');
-                } else if (selectedOption === 'delete_tenant') {
-                    sessions[phoneNumber].action = 'delete_tenant';
-                    await sendMessage(phoneNumber, 'Please provide the tenant ID to delete.');
-                }
-
-                // Handle text input based on action (add/update/delete)
-                else if (sessions[phoneNumber].action === 'add_tenant' && text) {
-                    try {
-                        const newTenant = new Tenant({ name: text });
-                        await newTenant.save();
-                        await sendMessage(phoneNumber, `Tenant "${text}" added successfully.`);
-                    } catch (error) {
-                        console.error('Error adding tenant:', error);
-                        await sendMessage(phoneNumber, 'Failed to add tenant. Please try again.');
-                    }
-                } else if (sessions[phoneNumber].action === 'update_tenant' && text) {
-                    const [tenantId, updatedName] = text.split(','); // Example input: "123,John Doe"
-                    try {
-                        const tenant = await Tenant.findById(tenantId);
-                        if (tenant) {
-                            tenant.name = updatedName;
-                            await tenant.save();
-                            await sendMessage(phoneNumber, `Tenant "${tenantId}" updated successfully.`);
-                        } else {
-                            await sendMessage(phoneNumber, `Tenant with ID "${tenantId}" not found.`);
-                        }
-                    } catch (error) {
-                        console.error('Error updating tenant:', error);
-                        await sendMessage(phoneNumber, 'Failed to update tenant. Please try again.');
-                    }
-                } else if (sessions[phoneNumber].action === 'delete_tenant' && text) {
-                    try {
-                        const tenant = await Tenant.findByIdAndDelete(text);
-                        if (tenant) {
-                            await sendMessage(phoneNumber, `Tenant with ID "${text}" deleted successfully.`);
-                        } else {
-                            await sendMessage(phoneNumber, `Tenant with ID "${text}" not found.`);
-                        }
-                    } catch (error) {
-                        console.error('Error deleting tenant:', error);
-                        await sendMessage(phoneNumber, 'Failed to delete tenant. Please try again.');
-                    }
+                // Handle other menu options (e.g., 'manage', 'transactions', etc.)
+                else if (selectedOption === 'manage') {
+                    // Handle "Manage" option here
+                    // ...
+                } else if (selectedOption === 'transactions') {
+                    // Handle "Transactions" option here
+                    // ...
+                } else if (selectedOption === 'apartment_info') {
+                    // Handle "Apartment Info" option here
+                    // ...
+                } else if (selectedOption === 'unit_info') {
+                    // Handle "Unit Info" option here
+                    // ...
+                } else if (selectedOption === 'tenants_info') {
+                    // Handle "Tenants Info" option here
+                    // ...
                 }
             } else {
                 console.log('Received non-interactive message or invalid interaction.');
@@ -264,22 +228,5 @@ router.post('/', async (req, res) => {
     // Respond to WhatsApp API with success
     res.sendStatus(200);
 });
-
-// Helper function to send a WhatsApp message
-async function sendMessage(phoneNumber, message) {
-    await axios.post(WHATSAPP_API_URL, {
-        messaging_product: 'whatsapp',
-        to: phoneNumber,
-        type: 'text',
-        text: {
-            body: message
-        }
-    }, {
-        headers: {
-            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json'
-        }
-    });
-}
 
 module.exports = router;
