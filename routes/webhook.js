@@ -34,6 +34,9 @@ router.get('/', (req, res) => {
 // Webhook event handling
 // Webhook event handling
 // Webhook event handling
+const sessions = {}; // This will track the state of each user's session
+
+// Webhook event handling
 router.post('/', async (req, res) => {
     const body = req.body;
 
@@ -51,12 +54,20 @@ router.post('/', async (req, res) => {
             const payload = message.button ? message.button.payload : null; // Button payload if it exists
             const text1 = message.button ? message.button.text : null; // Button text if exists
 
+            // Initialize session if not existing
+            if (!sessions[phoneNumber]) {
+                sessions[phoneNumber] = { expectingMenuSelection: false };
+            }
+
             // Log the received message
             console.log(`Received message from ${phoneNumber}: ${text || payload || text1}`);
 
             // Handle "help" message (case-insensitive)
             if (text && text.toLowerCase() === 'help') {
                 try {
+                    // Set session state to expect menu selection
+                    sessions[phoneNumber].expectingMenuSelection = true;
+
                     const menuMessage = `
                         *Menu Options*:
                         1. Account Info
@@ -88,8 +99,8 @@ router.post('/', async (req, res) => {
                 }
             }
 
-            // Handle Account Info (Option 1)
-            if (text === '1') {
+            // Handle user response to menu (e.g., Account Info, Option 1)
+            else if (text === '1' && sessions[phoneNumber].expectingMenuSelection) {
                 try {
                     // Fetch user registration details based on phoneNumber
                     const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
@@ -135,9 +146,52 @@ router.post('/', async (req, res) => {
 
                         console.log('No account information found for:', phoneNumber);
                     }
+
+                    // Reset session state after valid selection
+                    sessions[phoneNumber].expectingMenuSelection = false;
                 } catch (error) {
                     console.error('Error fetching account info:', error.response ? error.response.data : error);
                 }
+            } 
+            
+            // Handle incorrect option (not 1-6)
+            else if (text && sessions[phoneNumber].expectingMenuSelection) {
+                // If the user provides an invalid option
+                await axios.post(WHATSAPP_API_URL, {
+                    messaging_product: 'whatsapp',
+                    to: phoneNumber,
+                    type: 'text',
+                    text: {
+                        body: 'Incorrect option. Please enter a valid option from the menu.'
+                    }
+                }, {
+                    headers: {
+                        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                console.log('Incorrect option sent to:', phoneNumber);
+            }
+
+            // If the user enters "1" without seeing the menu or without asking for "help" first
+            else if (text === '1' && !sessions[phoneNumber].expectingMenuSelection) {
+                // Notify the user that they need to request the menu first
+                await axios.post(WHATSAPP_API_URL, {
+                    messaging_product: 'whatsapp',
+                    to: phoneNumber,
+                    type: 'text',
+                    text: {
+                        body: 'Please request the menu by typing "help" to access options.'
+                    }
+                }, {
+                    headers: {
+                        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                console.log('Prompted user to request the menu first:', phoneNumber);
             }
 
             // Existing OTP verification and other logic can remain unchanged
@@ -197,92 +251,6 @@ router.post('/', async (req, res) => {
                     }
                 } catch (error) {
                     console.error('Error verifying OTP:', error.response ? error.response.data : error);
-                }
-            }
-
-            // Handle authentication via button payloads (existing logic)
-            if (payload) {
-                if (payload === 'Yes') {
-                    console.log('Authentication confirmed for:', phoneNumber);
-
-                    try {
-                        await axios.post(WHATSAPP_API_URL, {
-                            messaging_product: 'whatsapp',
-                            to: phoneNumber,
-                            type: 'template',
-                            template: {
-                                name: 'auth_success',
-                                language: { code: 'en' }
-                            }
-                        }, {
-                            headers: {
-                                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                                'Content-Type': 'application/json'
-                            }
-                        });
-
-                        console.log(`Authentication successful for ${phoneNumber}`);
-                    } catch (error) {
-                        console.error('Error sending auth success message:', error.response ? error.response.data : error);
-                    }
-                } else if (payload === 'No') {
-                    console.log('Authentication denied for:', phoneNumber);
-
-                    try {
-                        await axios.post(WHATSAPP_API_URL, {
-                            messaging_product: 'whatsapp',
-                            to: phoneNumber,
-                            type: 'template',
-                            template: {
-                                name: 'auth_denied',
-                                language: { code: 'en' }
-                            }
-                        }, {
-                            headers: {
-                                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                                'Content-Type': 'application/json'
-                            }
-                        });
-
-                        console.log(`Authentication denied for ${phoneNumber}`);
-                    } catch (error) {
-                        console.error('Error sending auth denied message:', error.response ? error.response.data : error);
-                    }
-                }
-            }
-
-            // Handle rent payment confirmation (existing logic)
-            if (text1 === 'Rent paid') {
-                const tenantId = payload.split('-')[1].split(' ')[0];
-                console.log('Processing rent payment for tenant ID:', tenantId);
-
-                try {
-                    const tenant = await Tenant.findOne({ tenant_id: tenantId });
-
-                    if (tenant) {
-                        tenant.status = 'PAID';
-                        await tenant.save();
-
-                        console.log('Tenant rent status updated to PAID:', tenantId);
-
-                        await axios.post(WHATSAPP_API_URL, {
-                            messaging_product: 'whatsapp',
-                            to: phoneNumber,
-                            type: 'text',
-                            text: {
-                                body: `Tenant ID: *${tenantId}* has been marked as PAID. 👍`
-                            }
-                        }, {
-                            headers: {
-                                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                                'Content-Type': 'application/json'
-                            }
-                        });
-                    } else {
-                        console.log('Tenant not found for tenant ID:', tenantId);
-                    }
-                } catch (error) {
-                    console.error('Error updating rent status:', error.response ? error.response.data : error);
                 }
             }
         }
