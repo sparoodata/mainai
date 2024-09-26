@@ -37,6 +37,7 @@ router.get('/', (req, res) => {
 const sessions = {}; // This will track the state of each user's session
 
 // Webhook event handling
+// Webhook event handling
 router.post('/', async (req, res) => {
     const body = req.body;
 
@@ -68,154 +69,103 @@ router.post('/', async (req, res) => {
                     // Set session state to expect menu selection
                     sessions[phoneNumber].expectingMenuSelection = true;
 
-                    const menuMessage = `
-                        *Menu Options*:
-                        1. Account Info
-                        2. Manage
-                        3. Transactions
-                        4. Apartment Info
-                        5. Unit Info
-                        6. Tenants Info
-                    `;
-
-                    // Send the menu message
-                    await axios.post(WHATSAPP_API_URL, {
+                    // Send WhatsApp interactive list menu
+                    const interactiveMenu = {
                         messaging_product: 'whatsapp',
                         to: phoneNumber,
-                        type: 'text',
-                        text: {
-                            body: menuMessage
+                        type: 'interactive',
+                        interactive: {
+                            type: 'list',
+                            header: {
+                                type: 'text',
+                                text: 'Choose an Option'
+                            },
+                            body: {
+                                text: 'Please select an option from the list below:'
+                            },
+                            footer: {
+                                text: 'Powered by your rental app'
+                            },
+                            action: {
+                                button: 'Select Option',
+                                sections: [
+                                    {
+                                        title: 'Menu Options',
+                                        rows: [
+                                            {
+                                                id: 'account_info', // Custom identifier for option 1
+                                                title: 'Account Info',
+                                                description: 'View your account details'
+                                            },
+                                            {
+                                                id: 'manage',
+                                                title: 'Manage',
+                                                description: 'Manage your rental account'
+                                            },
+                                            {
+                                                id: 'transactions',
+                                                title: 'Transactions',
+                                                description: 'View your transaction history'
+                                            },
+                                            {
+                                                id: 'apartment_info',
+                                                title: 'Apartment Info',
+                                                description: 'View information about your apartment'
+                                            },
+                                            {
+                                                id: 'unit_info',
+                                                title: 'Unit Info',
+                                                description: 'View information about your unit'
+                                            },
+                                            {
+                                                id: 'tenants_info',
+                                                title: 'Tenants Info',
+                                                description: 'View information about your tenants'
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
                         }
-                    }, {
+                    };
+
+                    // Send the interactive menu message
+                    await axios.post(WHATSAPP_API_URL, interactiveMenu, {
                         headers: {
                             'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
                             'Content-Type': 'application/json'
                         }
                     });
 
-                    console.log('Menu sent to:', phoneNumber);
+                    console.log('Interactive menu sent to:', phoneNumber);
                 } catch (error) {
-                    console.error('Error sending menu:', error.response ? error.response.data : error);
+                    console.error('Error sending interactive menu:', error.response ? error.response.data : error);
                 }
             }
 
-            // Handle user response to menu (e.g., Account Info, Option 1)
-            else if (text === '1' && sessions[phoneNumber].expectingMenuSelection) {
-                try {
-                    // Fetch user registration details based on phoneNumber
-                    const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+            // Handle user selection from the menu
+            else if (payload) {
+                console.log(payload);
+               
+                if (payload === 'account_info') {
+                    // Fetch and send user account info
+                    try {
+                        console.log(phoneNumber);
+                        const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
 
-                    if (user) {
-                        // Send the user registration details
-                        const accountInfoMessage = `
-                            *Account Info*:
-                            - Phone Number: ${user.phoneNumber}
-                            - Verified: ${user.verified ? 'Yes' : 'No'}
-                        `;
+                        if (user) {
+                            const accountInfoMessage = `
+                                *Account Info*:
+                                - Phone Number: ${user.phoneNumber}
+                                - Verified: ${user.verified ? 'Yes' : 'No'}
+                            `;
 
-                        await axios.post(WHATSAPP_API_URL, {
-                            messaging_product: 'whatsapp',
-                            to: phoneNumber,
-                            type: 'text',
-                            text: {
-                                body: accountInfoMessage
-                            }
-                        }, {
-                            headers: {
-                                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                                'Content-Type': 'application/json'
-                            }
-                        });
-
-                        console.log('Account info sent to:', phoneNumber);
-                    } else {
-                        // If user is not found, send an error message
-                        await axios.post(WHATSAPP_API_URL, {
-                            messaging_product: 'whatsapp',
-                            to: phoneNumber,
-                            type: 'text',
-                            text: {
-                                body: 'No account information found for this number.'
-                            }
-                        }, {
-                            headers: {
-                                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                                'Content-Type': 'application/json'
-                            }
-                        });
-
-                        console.log('No account information found for:', phoneNumber);
-                    }
-
-                    // Reset session state after valid selection
-                    sessions[phoneNumber].expectingMenuSelection = false;
-                } catch (error) {
-                    console.error('Error fetching account info:', error.response ? error.response.data : error);
-                }
-            } 
-            
-            // Handle incorrect option (not 1-6)
-            else if (text && sessions[phoneNumber].expectingMenuSelection) {
-                // If the user provides an invalid option
-                await axios.post(WHATSAPP_API_URL, {
-                    messaging_product: 'whatsapp',
-                    to: phoneNumber,
-                    type: 'text',
-                    text: {
-                        body: 'Incorrect option. Please enter a valid option from the menu.'
-                    }
-                }, {
-                    headers: {
-                        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-
-                console.log('Incorrect option sent to:', phoneNumber);
-            }
-
-            // If the user enters "1" without seeing the menu or without asking for "help" first
-            else if (text === '1' && !sessions[phoneNumber].expectingMenuSelection) {
-                // Notify the user that they need to request the menu first
-                await axios.post(WHATSAPP_API_URL, {
-                    messaging_product: 'whatsapp',
-                    to: phoneNumber,
-                    type: 'text',
-                    text: {
-                        body: 'Please request the menu by typing "help" to access options.'
-                    }
-                }, {
-                    headers: {
-                        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-
-                console.log('Prompted user to request the menu first:', phoneNumber);
-            }
-
-            // Existing OTP verification and other logic can remain unchanged
-            if (text && /^\d{6}$/.test(text)) {
-                try {
-                    const user = await User.findOne({ phoneNumber });
-
-                    if (user && user.otp === text && user.otpExpiresAt > Date.now()) {
-                        user.verified = true;
-                        user.otp = undefined;
-                        user.otpExpiresAt = undefined;
-                        await user.save();
-
-                        console.log('User verified successfully:', phoneNumber);
-
-                        // Send confirmation message
-                        try {
                             await axios.post(WHATSAPP_API_URL, {
                                 messaging_product: 'whatsapp',
                                 to: phoneNumber,
-                                type: 'template',
-                                template: {
-                                    name: 'otp_success',
-                                    language: { code: 'en' }
+                                type: 'text',
+                                text: {
+                                    body: accountInfoMessage
                                 }
                             }, {
                                 headers: {
@@ -223,21 +173,15 @@ router.post('/', async (req, res) => {
                                     'Content-Type': 'application/json'
                                 }
                             });
-                        } catch (error) {
-                            console.error('Error sending OTP success message:', error.response ? error.response.data : error);
-                        }
-                    } else {
-                        console.log('Invalid or expired OTP for:', phoneNumber);
 
-                        // Send OTP failure message
-                        try {
+                            console.log('Account info sent to:', phoneNumber);
+                        } else {
                             await axios.post(WHATSAPP_API_URL, {
                                 messaging_product: 'whatsapp',
                                 to: phoneNumber,
-                                type: 'template',
-                                template: {
-                                    name: 'otp_failure',
-                                    language: { code: 'en' }
+                                type: 'text',
+                                text: {
+                                    body: 'No account information found for this number.'
                                 }
                             }, {
                                 headers: {
@@ -245,12 +189,30 @@ router.post('/', async (req, res) => {
                                     'Content-Type': 'application/json'
                                 }
                             });
-                        } catch (error) {
-                            console.error('Error sending OTP failure message:', error.response ? error.response.data : error);
+
+                            console.log('No account information found for:', phoneNumber);
                         }
+                    } catch (error) {
+                        console.error('Error fetching account info:', error.response ? error.response.data : error);
                     }
-                } catch (error) {
-                    console.error('Error verifying OTP:', error.response ? error.response.data : error);
+                }
+
+                // Handle other menu options (e.g., 'manage', 'transactions', etc.)
+                else if (payload === 'manage') {
+                    // Handle "Manage" option here
+                    // ...
+                } else if (payload === 'transactions') {
+                    // Handle "Transactions" option here
+                    // ...
+                } else if (payload === 'apartment_info') {
+                    // Handle "Apartment Info" option here
+                    // ...
+                } else if (payload === 'unit_info') {
+                    // Handle "Unit Info" option here
+                    // ...
+                } else if (payload === 'tenants_info') {
+                    // Handle "Tenants Info" option here
+                    // ...
                 }
             }
         }
