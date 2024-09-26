@@ -8,6 +8,9 @@ const router = express.Router();
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 
+// Session management to track user interactions
+const sessions = {}; // This will track the state of each user's session
+
 // Webhook verification for WhatsApp API
 router.get('/', (req, res) => {
     const VERIFY_TOKEN = process.env.VERIFY_TOKEN; // Your WhatsApp verification token
@@ -32,12 +35,6 @@ router.get('/', (req, res) => {
 });
 
 // Webhook event handling
-// Webhook event handling
-// Webhook event handling
-const sessions = {}; // This will track the state of each user's session
-
-// Webhook event handling
-// Webhook event handling
 router.post('/', async (req, res) => {
     const body = req.body;
 
@@ -52,16 +49,15 @@ router.post('/', async (req, res) => {
             const message = changes.value.messages[0];
             const phoneNumber = message.from.replace(/^\+/, ''); // Phone number of the sender
             const text = message.text ? message.text.body.trim() : null; // Message body
-            const payload = message.button ? message.button.payload : null; // Button payload if it exists
-            const text1 = message.button ? message.button.text : null; // Button text if exists
-
+            const interactive = message.interactive || null; // For interactive messages (list/button)
+            
             // Initialize session if not existing
             if (!sessions[phoneNumber]) {
                 sessions[phoneNumber] = { expectingMenuSelection: false };
             }
 
             // Log the received message
-            console.log(`Received message from ${phoneNumber}: ${text || payload || text1}`);
+            console.log(`Received message from ${phoneNumber}: ${text}`);
 
             // Handle "help" message (case-insensitive)
             if (text && text.toLowerCase() === 'help') {
@@ -143,11 +139,18 @@ router.post('/', async (req, res) => {
                 }
             }
 
-            // Handle user selection from the menu
-            else if (payload) {
-                console.log(payload);
-               
-                if (payload === 'account_info') {
+            // Handle interactive message responses
+            else if (interactive) {
+                const interactiveType = interactive.type;
+                let selectedOption = null;
+
+                // Handle list reply
+                if (interactiveType === 'list_reply') {
+                    selectedOption = interactive.list_reply.id; // The ID of the selected option
+                }
+
+                // Process the selected option
+                if (selectedOption === 'account_info') {
                     // Fetch and send user account info
                     try {
                         console.log(phoneNumber);
@@ -198,22 +201,24 @@ router.post('/', async (req, res) => {
                 }
 
                 // Handle other menu options (e.g., 'manage', 'transactions', etc.)
-                else if (payload === 'manage') {
+                else if (selectedOption === 'manage') {
                     // Handle "Manage" option here
                     // ...
-                } else if (payload === 'transactions') {
+                } else if (selectedOption === 'transactions') {
                     // Handle "Transactions" option here
                     // ...
-                } else if (payload === 'apartment_info') {
+                } else if (selectedOption === 'apartment_info') {
                     // Handle "Apartment Info" option here
                     // ...
-                } else if (payload === 'unit_info') {
+                } else if (selectedOption === 'unit_info') {
                     // Handle "Unit Info" option here
                     // ...
-                } else if (payload === 'tenants_info') {
+                } else if (selectedOption === 'tenants_info') {
                     // Handle "Tenants Info" option here
                     // ...
                 }
+            } else {
+                console.log('Received non-interactive message or invalid interaction.');
             }
         }
     } else {
