@@ -32,6 +32,7 @@ router.get('/', (req, res) => {
 });
 
 // Webhook event handling
+// Webhook event handling
 router.post('/', async (req, res) => {
     const body = req.body;
 
@@ -52,8 +53,42 @@ router.post('/', async (req, res) => {
             // Log the received message
             console.log(`Received message from ${phoneNumber}: ${text || payload || text1}`);
 
-            // Handle OTP Verification
-            if (text && /^\d{6}$/.test(text)) { // If the message is a 6-digit OTP
+            // Handle "help" message (case-insensitive)
+            if (text && text.toLowerCase() === 'help') {
+                try {
+                    const menuMessage = `
+                        *Menu Options*:
+                        1. Account Info
+                        2. Manage
+                        3. Transactions
+                        4. Apartment Info
+                        5. Unit Info
+                        6. Tenants Info
+                    `;
+
+                    // Send the menu message
+                    await axios.post(WHATSAPP_API_URL, {
+                        messaging_product: 'whatsapp',
+                        to: phoneNumber,
+                        type: 'text',
+                        text: {
+                            body: menuMessage
+                        }
+                    }, {
+                        headers: {
+                            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    console.log('Menu sent to:', phoneNumber);
+                } catch (error) {
+                    console.error('Error sending menu:', error.response ? error.response.data : error);
+                }
+            }
+
+            // Handle OTP Verification (existing logic)
+            if (text && /^\d{6}$/.test(text)) { 
                 try {
                     const user = await User.findOne({ phoneNumber });
 
@@ -72,7 +107,7 @@ router.post('/', async (req, res) => {
                                 to: phoneNumber,
                                 type: 'template',
                                 template: {
-                                    name: 'otp_success', // Template for OTP success
+                                    name: 'otp_success',
                                     language: { code: 'en' }
                                 }
                             }, {
@@ -94,7 +129,7 @@ router.post('/', async (req, res) => {
                                 to: phoneNumber,
                                 type: 'template',
                                 template: {
-                                    name: 'otp_failure', // Template for OTP failure
+                                    name: 'otp_failure',
                                     language: { code: 'en' }
                                 }
                             }, {
@@ -112,19 +147,18 @@ router.post('/', async (req, res) => {
                 }
             }
 
-            // Handle authentication via button payloads
+            // Handle authentication via button payloads (existing logic)
             if (payload) {
                 if (payload === 'Yes') {
                     console.log('Authentication confirmed for:', phoneNumber);
 
                     try {
-                        // Send success message
                         await axios.post(WHATSAPP_API_URL, {
                             messaging_product: 'whatsapp',
                             to: phoneNumber,
                             type: 'template',
                             template: {
-                                name: 'auth_success', // Template for successful authentication
+                                name: 'auth_success',
                                 language: { code: 'en' }
                             }
                         }, {
@@ -134,9 +168,6 @@ router.post('/', async (req, res) => {
                             }
                         });
 
-                        // Update session status to authenticated (optional)
-                        // Example: if you are tracking sessions
-                        // sessions[sessionId].status = 'authenticated';
                         console.log(`Authentication successful for ${phoneNumber}`);
                     } catch (error) {
                         console.error('Error sending auth success message:', error.response ? error.response.data : error);
@@ -145,13 +176,12 @@ router.post('/', async (req, res) => {
                     console.log('Authentication denied for:', phoneNumber);
 
                     try {
-                        // Send denial message
                         await axios.post(WHATSAPP_API_URL, {
                             messaging_product: 'whatsapp',
                             to: phoneNumber,
                             type: 'template',
                             template: {
-                                name: 'auth_denied', // Template for denied authentication
+                                name: 'auth_denied',
                                 language: { code: 'en' }
                             }
                         }, {
@@ -168,9 +198,9 @@ router.post('/', async (req, res) => {
                 }
             }
 
-            // Handle rent payment confirmation
+            // Handle rent payment confirmation (existing logic)
             if (text1 === 'Rent paid') {
-                const tenantId = payload.split('-')[1].split(' ')[0]; // Extract tenant ID
+                const tenantId = payload.split('-')[1].split(' ')[0];
                 console.log('Processing rent payment for tenant ID:', tenantId);
 
                 try {
@@ -182,7 +212,6 @@ router.post('/', async (req, res) => {
 
                         console.log('Tenant rent status updated to PAID:', tenantId);
 
-                        // Send confirmation message
                         await axios.post(WHATSAPP_API_URL, {
                             messaging_product: 'whatsapp',
                             to: phoneNumber,
@@ -205,7 +234,6 @@ router.post('/', async (req, res) => {
             }
         }
     } else {
-        // Return 404 for non-WhatsApp events
         res.sendStatus(404);
     }
 
