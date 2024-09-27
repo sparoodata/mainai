@@ -1,5 +1,5 @@
 const express = require('express');
-const User = require('../models/User'); // Assuming you have a User model
+const User = require('../models/User');
 const router = express.Router();
 
 // POST route for verifying OTP
@@ -14,8 +14,12 @@ router.post('/', async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
+        console.log('Stored OTP:', user.otp); // Debugging output
+        console.log('Stored OTP Expiry (timestamp):', new Date(user.otpExpiresAt).getTime()); // Debugging output
+        console.log('Current time (timestamp):', Date.now()); // Debugging output
+
         // Check if the OTP matches and if it's still valid (within expiration time)
-        if (user.otp === otp && user.otpExpiresAt > Date.now()) {
+        if (user.otp === otp && Date.now() < new Date(user.otpExpiresAt).getTime()) {
             // OTP is correct, verify the user
             user.verified = true;
             user.otp = undefined; // Clear OTP after verification

@@ -10,6 +10,9 @@ const path = require('path');
 const app = express();
 const port = process.env.PORT || 3000; // Glitch uses dynamic port
 
+
+// Trust the first proxy (or set this to a higher number if you're behind multiple proxies)
+app.set('trust proxy', 1);
 // Middleware
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));

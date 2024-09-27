@@ -13,7 +13,7 @@ const UserSchema = new mongoose.Schema({
   otp: {
     type: String
   },
-  otpExpiration: {
+  otpExpiresAt: { // Change to otpExpiresAt to match your route logic
     type: Date
   }
 });
