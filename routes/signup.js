@@ -101,7 +101,8 @@ router.post('/', signupLimiter, [
         const newUser = new User({
             phoneNumber,
             otp,
-            otpExpiresAt: Date.now() + 10 * 60 * 1000 // OTP valid for 10 minutes
+            otpExpiresAt: Date.now() + 10 * 60 * 1000, // OTP valid for 10 minutes
+            registrationDate: new Date() // Save registration date
         });
         await newUser.save(); // Save the new user to MongoDB
 
