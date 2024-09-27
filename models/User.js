@@ -13,7 +13,17 @@ const UserSchema = new mongoose.Schema({
   otp: {
     type: String
   },
-  otpExpiresAt: { // Change to otpExpiresAt to match your route logic
+  otpExpiresAt: {
+    type: Date
+  },
+  profileName: { // New field to store the user's profile name
+    type: String
+  },
+  registrationDate: { // Store the registration date
+    type: Date,
+    default: Date.now
+  },
+  verifiedDate: { // Store the date the user was verified
     type: Date
   }
 });

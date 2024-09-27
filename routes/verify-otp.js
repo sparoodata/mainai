@@ -24,6 +24,7 @@ router.post('/', async (req, res) => {
             user.verified = true;
             user.otp = undefined; // Clear OTP after verification
             user.otpExpiresAt = undefined; // Clear OTP expiration
+            user.verifiedDate = new Date(); // Save the verified date
             await user.save();
 
             return res.status(200).json({ message: 'OTP verified successfully', user });
