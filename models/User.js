@@ -1,4 +1,4 @@
-const mongoose = require('mongoose'); // Import mongoose
+const mongoose = require('mongoose');
 
 const UserSchema = new mongoose.Schema({
     phoneNumber: {
@@ -16,7 +16,7 @@ const UserSchema = new mongoose.Schema({
     otpExpiresAt: {
         type: Date
     },
-    profileName: { // Ensure this field exists
+    profileName: {  // Ensure this field is present
         type: String
     },
     registrationDate: {
@@ -28,4 +28,4 @@ const UserSchema = new mongoose.Schema({
     }
 });
 
-module.exports = mongoose.model('User', UserSchema); // Export the User model
+module.exports = mongoose.model('User', UserSchema);

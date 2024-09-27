@@ -46,33 +46,32 @@ router.post('/', async (req, res) => {
         const changes = entry.changes[0];
 
         // Handle contacts to capture profile name
-if (changes.value.contacts) {
-    const contact = changes.value.contacts[0];
-    const contactPhoneNumber = `+${contact.wa_id}`;
-    const profileName = contact.profile.name;
+        if (changes.value.contacts) {
+            const contact = changes.value.contacts[0];
+            const contactPhoneNumber = `+${contact.wa_id}`;
+            const profileName = contact.profile.name;
 
-    // Log received profile name
-    console.log(`Received profile name: ${profileName} for phone: ${contactPhoneNumber}`);
+            // Log the profileName for debugging purposes
+            console.log(`Profile name received: ${profileName} for phone number: ${contactPhoneNumber}`);
 
-    // Find the user by phone number
-    const user = await User.findOne({ phoneNumber: contactPhoneNumber });
+            // Find the user by phone number
+            const user = await User.findOne({ phoneNumber: contactPhoneNumber });
 
-    if (user) {
-        console.log(`User found: ${user.phoneNumber}`);
-        
-        // Only update if profileName exists
-        if (profileName) {
-            user.profileName = profileName;
-            await user.save();
-            console.log(`Profile name updated to ${profileName} for user ${contactPhoneNumber}`);
-        } else {
-            console.log(`No profile name available to update for user ${contactPhoneNumber}`);
+            if (user) {
+                console.log(`User found: ${user.phoneNumber}`);
+
+                // Update user's profile name if profileName exists
+                if (profileName) {
+                    user.profileName = profileName;
+                    await user.save();
+                    console.log(`Profile name updated to ${profileName} for user ${contactPhoneNumber}`);
+                } else {
+                    console.log(`No profile name available to update for user ${contactPhoneNumber}`);
+                }
+            } else {
+                console.log(`No user found for phone: ${contactPhoneNumber}`);
+            }
         }
-    } else {
-        console.log(`No user found for phone: ${contactPhoneNumber}`);
-    }
-}
-
 
         if (changes.value.messages) {
             const message = changes.value.messages[0];
@@ -123,7 +122,36 @@ if (changes.value.contacts) {
                                                 title: 'Account Info',
                                                 description: 'View your account details'
                                             },
-                                            // ... other options ...
+                                            {
+                                                id: 'manage',
+                                                title: 'Manage',
+                                                description: 'Manage your rental account'
+                                            },
+                                            {
+                                                id: 'transactions',
+                                                title: 'Transactions',
+                                                description: 'View your transaction history'
+                                            },
+                                            {
+                                                id: 'apartment_info',
+                                                title: 'Apartment Info',
+                                                description: 'View information about your apartment'
+                                            },
+                                            {
+                                                id: 'unit_info',
+                                                title: 'Unit Info',
+                                                description: 'View information about your unit'
+                                            },
+                                            {
+                                                id: 'tenants_info',
+                                                title: 'Tenants Info',
+                                                description: 'View information about your tenants'
+                                            },
+                                            {
+                                                id: 'rent_paid', // Custom identifier for Rent Paid
+                                                title: 'Rent Paid',
+                                                description: 'Confirm rent payment for a tenant'
+                                            }
                                         ]
                                     }
                                 ]
@@ -214,14 +242,53 @@ if (changes.value.contacts) {
                     }
                 }
 
-                // Handle other menu options as needed
-                // ...
+                // Handle 'Rent Paid' option
+                else if (selectedOption === 'rent_paid') {
+                    // Ask for tenant ID
+                    sessions[fromNumber].action = 'rent_paid';
+                    await sendMessage(fromNumber, 'Please provide the Tenant ID to confirm rent payment.');
+                }
 
+                // Handle other menu options (e.g., 'manage', 'transactions', etc.)
+                else if (selectedOption === 'manage') {
+                    // Handle "Manage" option here
+                    // ...
+                } else if (selectedOption === 'transactions') {
+                    // Handle "Transactions" option here
+                    // ...
+                } else if (selectedOption === 'apartment_info') {
+                    // Handle "Apartment Info" option here
+                    // ...
+                } else if (selectedOption === 'unit_info') {
+                    // Handle "Unit Info" option here
+                    // ...
+                } else if (selectedOption === 'tenants_info') {
+                    // Handle "Tenants Info" option here
+                    // ...
+                }
             }
 
             // Handle text input when expecting tenant ID for rent payment
             else if (sessions[fromNumber].action === 'rent_paid' && text) {
-                // ... existing logic ...
+                const tenantId = text.trim();
+                try {
+                    const tenant = await Tenant.findOne({ tenant_id: tenantId });
+                    if (tenant) {
+                        tenant.status = 'PAID';
+                        await tenant.save();
+
+                        await sendMessage(fromNumber, `Rent payment confirmed for Tenant ID: ${tenantId}.`);
+                        console.log(`Tenant rent status updated to PAID for Tenant ID: ${tenantId}`);
+
+                        // Reset action
+                        sessions[fromNumber].action = null;
+                    } else {
+                        await sendMessage(fromNumber, `Tenant with ID "${tenantId}" not found.`);
+                    }
+                } catch (error) {
+                    console.error('Error updating rent status:', error);
+                    await sendMessage(fromNumber, 'Failed to confirm rent payment. Please try again.');
+                }
             } else {
                 console.log('Received non-interactive message or invalid interaction.');
             }
