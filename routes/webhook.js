@@ -46,21 +46,33 @@ router.post('/', async (req, res) => {
         const changes = entry.changes[0];
 
         // Handle contacts to capture profile name
-        if (changes.value.contacts) {
-            const contact = changes.value.contacts[0];
-            const contactPhoneNumber = `+${contact.wa_id}`;
-            const profileName = contact.profile.name;
+if (changes.value.contacts) {
+    const contact = changes.value.contacts[0];
+    const contactPhoneNumber = `+${contact.wa_id}`;
+    const profileName = contact.profile.name;
 
-            // Find the user by phone number
-            const user = await User.findOne({ phoneNumber: contactPhoneNumber });
+    // Log received profile name
+    console.log(`Received profile name: ${profileName} for phone: ${contactPhoneNumber}`);
 
-            if (user) {
-                // Update user's profile name
-                user.profileName = profileName;
-                await user.save();
-                console.log(`Profile name updated to ${profileName} for user ${contactPhoneNumber}`);
-            }
+    // Find the user by phone number
+    const user = await User.findOne({ phoneNumber: contactPhoneNumber });
+
+    if (user) {
+        console.log(`User found: ${user.phoneNumber}`);
+        
+        // Only update if profileName exists
+        if (profileName) {
+            user.profileName = profileName;
+            await user.save();
+            console.log(`Profile name updated to ${profileName} for user ${contactPhoneNumber}`);
+        } else {
+            console.log(`No profile name available to update for user ${contactPhoneNumber}`);
         }
+    } else {
+        console.log(`No user found for phone: ${contactPhoneNumber}`);
+    }
+}
+
 
         if (changes.value.messages) {
             const message = changes.value.messages[0];
