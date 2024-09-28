@@ -102,9 +102,9 @@ if (text && text.toLowerCase() === 'help') {
             type: 'interactive',
             interactive: {
                 type: 'button',
-                header: {
-                    type: 'text',
-                    text: 'Choose an Option'
+
+                body: {
+                    text: 'Please select an option below:'
                 },
                 action: {
                     buttons: [
