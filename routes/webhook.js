@@ -380,10 +380,11 @@ router.post('/', async (req, res) => {
                 // Handle the authorization response
                 else if (sessions[fromNumber].action === 'await_authorization' && interactive) {
                     const authorizationResponse = interactive.button_reply.id; // Assuming a button reply
+
                     if (authorizationResponse === 'yes') {
                         // Redirect to the tenant onboard page
                         const onboardUrl = `https://defiant-stone-tail.glitch.me/addtenant/${fromNumber}`;
-                        
+
                         const linkButtonMessage = {
                             messaging_product: 'whatsapp',
                             to: fromNumber,
@@ -422,9 +423,7 @@ router.post('/', async (req, res) => {
                         sessions[fromNumber].action = null;
                     }
                 }
-
             }
-
         }
     } else {
         res.sendStatus(404);
@@ -450,5 +449,85 @@ async function sendMessage(phoneNumber, message) {
         }
     });
 }
+
+// Create the /addtenant/:phonenumber route
+router.get('/addtenant/:phonenumber', async (req, res) => {
+    const phoneNumber = req.params.phonenumber;
+
+    if (sessions[phoneNumber] && sessions[phoneNumber].action === 'await_authorization') {
+        const authorizationResponse = sessions[phoneNumber].authorizationResponse;
+
+        if (authorizationResponse === 'yes') {
+            res.send(`
+                <html>
+                    <head>
+                        <title>Onboard Tenant</title>
+                    </head>
+                    <body>
+                        <h1>Onboard Tenant for Phone: ${phoneNumber}</h1>
+                        <form action="/submittenant/${phoneNumber}" method="POST">
+                            <label for="name">Tenant Name:</label>
+                            <input type="text" id="name" name="name" required><br>
+                            
+                            <label for="email">Tenant Email:</label>
+                            <input type="email" id="email" name="email" required><br>
+
+                            <label for="unit">Tenant Unit:</label>
+                            <input type="text" id="unit" name="unit" required><br>
+
+                            <button type="submit">Submit</button>
+                        </form>
+                    </body>
+                </html>
+            `);
+        } else {
+            res.send(`
+                <html>
+                    <head>
+                        <title>Authorization Denied</title>
+                    </head>
+                    <body>
+                        <h1>Authorization Denied for ${phoneNumber}</h1>
+                        <p>You have not authorized onboarding for this tenant.</p>
+                    </body>
+                </html>
+            `);
+        }
+    } else {
+        res.status(403).send('Unauthorized access or session expired.');
+    }
+});
+
+// Route to handle tenant submission
+router.post('/submittenant/:phonenumber', async (req, res) => {
+    const phoneNumber = req.params.phonenumber;
+    const { name, email, unit } = req.body;
+
+    try {
+        const newTenant = new Tenant({
+            phoneNumber,
+            name,
+            email,
+            unit
+        });
+
+        await newTenant.save();
+
+        res.send(`
+            <html>
+                <head>
+                    <title>Onboard Tenant Success</title>
+                </head>
+                <body>
+                    <h1>Tenant Onboarding Successful</h1>
+                    <p>Tenant <strong>${name}</strong> has been onboarded successfully for phone number ${phoneNumber}.</p>
+                </body>
+            </html>
+        `);
+    } catch (error) {
+        console.error('Error onboarding tenant:', error);
+        res.status(500).send('Internal Server Error. Please try again later.');
+    }
+});
 
 module.exports = router;
