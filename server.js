@@ -84,9 +84,18 @@ app.get('/auth/status/:sessionId', (req, res) => {
 });
 
 
+app.use(
+  session({
+    secret: "mysecretkey", // Change this to a secure key
+    resave: false,
+    saveUninitialized: true,
+  })
+);
+
+// Route to trigger WhatsApp authorization
 app.get("/addtenant/:phone_no", async (req, res) => {
   const phoneNo = req.params.phone_no;
-  
+
   try {
     // Step 1: Trigger WhatsApp authorization message
     const whatsappResponse = await axios.post("https://api.whatsapp.com/send", {
@@ -110,21 +119,17 @@ app.get("/addtenant/:phone_no", async (req, res) => {
       }
     });
 
-    // Check if the request was successful (this may depend on WhatsApp API response)
-    if (whatsappResponse.status === 200) {
-      // Assuming the response can be tracked, wait for the user response
+    // Simulate waiting for the user's response
+    const userResponse = await waitForUserResponse(phoneNo);
 
-      // Step 2: Wait for the response ('Yes' or 'No') through a webhook or polling mechanism
-      const userResponse = await waitForUserResponse(phoneNo); // Implement logic to wait for WhatsApp response
+    if (userResponse === "Yes") {
+      // Step 2: Set authorized status in session
+      req.session.isAuthorized = true;
 
-      if (userResponse === "Yes") {
-        // Step 3: Render the HTML form to add tenant
-        res.sendFile(__dirname + "/public/addtenant.html");
-      } else {
-        res.status(401).send("Authorization failed. You cannot access this form.");
-      }
+      // Step 3: Redirect to the secured page
+      res.redirect("/secured/addtenant");
     } else {
-      res.status(500).send("Failed to send WhatsApp authorization.");
+      res.status(401).send("Authorization failed. You cannot access this form.");
     }
   } catch (error) {
     console.error("Error in sending WhatsApp message: ", error);
@@ -132,18 +137,29 @@ app.get("/addtenant/:phone_no", async (req, res) => {
   }
 });
 
+// Middleware to check if user is authorized
+function checkAuthorization(req, res, next) {
+  if (req.session.isAuthorized) {
+    return next();
+  } else {
+    return res.status(403).send("Access denied. Authorization required.");
+  }
+}
+
+// Secure route to serve the addtenant HTML page
+app.get("/secured/addtenant", checkAuthorization, (req, res) => {
+  res.sendFile(__dirname + "/views/addtenant.html"); // Send secured HTML only after authorization
+});
+
 // Function to handle response from WhatsApp (stubbed for illustration)
 async function waitForUserResponse(phoneNo) {
-  // This function should wait for the response from the WhatsApp webhook or any other mechanism you're using
-  // For now, let's assume the response is handled elsewhere and we get it as a 'Yes' or 'No' string.
-  // You can implement it with a proper webhook listener or through API callbacks.
+  // Simulated response handling; in a real scenario, capture actual WhatsApp webhook responses
   return new Promise((resolve) => {
     setTimeout(() => {
       resolve("Yes"); // Simulating a 'Yes' response
     }, 3000);
   });
 }
-
 
 // Dashboard route (protected)
 app.get('/dashboard', (req, res) => {
