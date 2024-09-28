@@ -1,33 +1,25 @@
 const express = require('express');
 const axios = require('axios');
-const User = require('../models/User'); // Assuming you have a User model
-const Tenant = require('../models/Tenant'); // Assuming you have a Tenant model
+const User = require('../models/User');
+const Tenant = require('../models/Tenant');
 const router = express.Router();
 
-// WhatsApp API credentials
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
-
-// Session management to track user interactions
-const sessions = {}; // This will track the state of each user's session
+const sessions = {};
 
 // Webhook verification for WhatsApp API
 router.get('/', (req, res) => {
-    const VERIFY_TOKEN = process.env.VERIFY_TOKEN; // Your WhatsApp verification token
-
-    // Parse query parameters
+    const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
 
-    // Check if mode and token are present
     if (mode && token) {
-        // Verify the token matches
         if (mode === 'subscribe' && token === VERIFY_TOKEN) {
             console.log('Webhook verified successfully');
             res.status(200).send(challenge);
         } else {
-            // Respond with '403 Forbidden' if token is invalid
             console.error('Webhook verification failed');
             res.sendStatus(403);
         }
@@ -40,33 +32,23 @@ router.post('/', async (req, res) => {
 
     console.log('Webhook received:', JSON.stringify(body, null, 2));
 
-    // Check if this is an event from WhatsApp Business API
     if (body.object === 'whatsapp_business_account') {
         const entry = body.entry[0];
         const changes = entry.changes[0];
 
-        // Handle contacts to capture profile name
         if (changes.value.contacts) {
             const contact = changes.value.contacts[0];
             const contactPhoneNumber = `+${contact.wa_id}`;
             const profileName = contact.profile.name;
 
-            // Log the profileName for debugging purposes
             console.log(`Profile name received: ${profileName} for phone number: ${contactPhoneNumber}`);
 
-            // Find the user by phone number
             const user = await User.findOne({ phoneNumber: contactPhoneNumber });
-
             if (user) {
-                console.log(`User found: ${user.phoneNumber}`);
-
-                // Update user's profile name if profileName exists
                 if (profileName) {
                     user.profileName = profileName;
                     await user.save();
                     console.log(`Profile name updated to ${profileName} for user ${contactPhoneNumber}`);
-                } else {
-                    console.log(`No profile name available to update for user ${contactPhoneNumber}`);
                 }
             } else {
                 console.log(`No user found for phone: ${contactPhoneNumber}`);
@@ -75,121 +57,66 @@ router.post('/', async (req, res) => {
 
         if (changes.value.messages) {
             const message = changes.value.messages[0];
-            const fromNumber = message.from; // e.g., '918885305097'
-            const phoneNumber = `+${fromNumber}`; // '+918885305097'
-            const text = message.text ? message.text.body.trim() : null; // Message body
-            const interactive = message.interactive || null; // For interactive messages (list/button)
+            const fromNumber = message.from;
+            const phoneNumber = `+${fromNumber}`;
+            const text = message.text ? message.text.body.trim() : null;
+            const interactive = message.interactive || null;
 
-            // Initialize session if not existing
             if (!sessions[fromNumber]) {
                 sessions[fromNumber] = { action: null };
             }
 
-            // Log the received message
-            console.log(`Received message from ${phoneNumber}: ${text}`);
-
-            // Handle "help" message (case-insensitive)
             if (text && text.toLowerCase() === 'help') {
                 try {
-                    // Set session state to expect menu selection
                     sessions[fromNumber].action = null;
 
-                    // Send WhatsApp interactive list menu
                     const interactiveMenu = {
                         messaging_product: 'whatsapp',
                         to: fromNumber,
                         type: 'interactive',
                         interactive: {
                             type: 'list',
-                            header: {
-                                type: 'text',
-                                text: 'Choose an Option'
-                            },
-                            body: {
-                                text: 'Please select an option from the list below:'
-                            },
-                            footer: {
-                                text: 'Powered by your rental app'
-                            },
+                            header: { type: 'text', text: 'Choose an Option' },
+                            body: { text: 'Please select an option from the list below:' },
+                            footer: { text: 'Powered by your rental app' },
                             action: {
                                 button: 'Select Option',
-                                sections: [
-                                    {
-                                        title: 'Menu Options',
-                                        rows: [
-                                            {
-                                                id: 'account_info', // Custom identifier for option 1
-                                                title: 'Account Info',
-                                                description: 'View your account details'
-                                            },
-                                            {
-                                                id: 'manage',
-                                                title: 'Manage',
-                                                description: 'Manage your rental account'
-                                            },
-                                            {
-                                                id: 'transactions',
-                                                title: 'Transactions',
-                                                description: 'View your transaction history'
-                                            },
-                                            {
-                                                id: 'apartment_info',
-                                                title: 'Apartment Info',
-                                                description: 'View information about your apartment'
-                                            },
-                                            {
-                                                id: 'unit_info',
-                                                title: 'Unit Info',
-                                                description: 'View information about your unit'
-                                            },
-                                            {
-                                                id: 'tenants_info',
-                                                title: 'Tenants Info',
-                                                description: 'View information about your tenants'
-                                            }
-                                        ]
-                                    }
-                                ]
+                                sections: [{
+                                    title: 'Menu Options',
+                                    rows: [
+                                        { id: 'account_info', title: 'Account Info', description: 'View your account details' },
+                                        { id: 'manage', title: 'Manage', description: 'Manage your rental account' },
+                                        { id: 'transactions', title: 'Transactions', description: 'View your transaction history' },
+                                        { id: 'apartment_info', title: 'Apartment Info', description: 'View information about your apartment' },
+                                        { id: 'unit_info', title: 'Unit Info', description: 'View information about your unit' },
+                                        { id: 'tenants_info', title: 'Tenants Info', description: 'View information about your tenants' }
+                                    ]
+                                }]
                             }
                         }
                     };
 
-                    // Send the interactive menu message
                     await axios.post(WHATSAPP_API_URL, interactiveMenu, {
-                        headers: {
-                            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                            'Content-Type': 'application/json'
-                        }
+                        headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
                     });
-
-                    console.log('Interactive menu sent to:', fromNumber);
                 } catch (error) {
                     console.error('Error sending interactive menu:', error.response ? error.response.data : error);
                 }
             }
 
-            // Handle interactive message responses
             else if (interactive) {
                 const interactiveType = interactive.type;
                 let selectedOption = null;
 
-                // Handle list reply
                 if (interactiveType === 'list_reply') {
-                    selectedOption = interactive.list_reply.id; // The ID of the selected option
+                    selectedOption = interactive.list_reply.id;
+                } else if (interactiveType === 'button_reply') {
+                    selectedOption = interactive.button_reply.id;
                 }
 
-                // Handle button reply
-                else if (interactiveType === 'button_reply') {
-                    selectedOption = interactive.button_reply.id; // This is the payload of the button response
-                }
-
-                // Process the selected option
                 if (selectedOption === 'account_info') {
-                    // Fetch and send user account info
                     try {
-                        console.log(phoneNumber);
                         const user = await User.findOne({ phoneNumber });
-
                         if (user) {
                             const accountInfoMessage = `
 *Account Info*:
@@ -204,329 +131,142 @@ router.post('/', async (req, res) => {
                                 messaging_product: 'whatsapp',
                                 to: fromNumber,
                                 type: 'text',
-                                text: {
-                                    body: accountInfoMessage
-                                }
+                                text: { body: accountInfoMessage }
                             }, {
-                                headers: {
-                                    'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                                    'Content-Type': 'application/json'
-                                }
+                                headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
                             });
-
-                            console.log('Account info sent to:', phoneNumber);
                         } else {
                             await axios.post(WHATSAPP_API_URL, {
                                 messaging_product: 'whatsapp',
                                 to: fromNumber,
                                 type: 'text',
-                                text: {
-                                    body: 'No account information found for this number.'
-                                }
+                                text: { body: 'No account information found for this number.' }
                             }, {
-                                headers: {
-                                    'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                                    'Content-Type': 'application/json'
-                                }
+                                headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
                             });
-
-                            console.log('No account information found for:', phoneNumber);
                         }
                     } catch (error) {
                         console.error('Error fetching account info:', error.response ? error.response.data : error);
                     }
                 }
 
-                // Handle 'Manage' option
                 else if (selectedOption === 'manage') {
                     try {
-                        // Show buttons for Manage options
-                        const manageButtons = {
+                        const manageMenu = {
                             messaging_product: 'whatsapp',
                             to: fromNumber,
                             type: 'interactive',
                             interactive: {
                                 type: 'button',
-                                body: {
-                                    text: 'Select what you want to manage:'
-                                },
+                                body: { text: 'What would you like to manage?' },
                                 action: {
                                     buttons: [
-                                        {
-                                            type: 'reply',
-                                            reply: {
-                                                id: 'manage_properties',
-                                                title: 'Manage Properties'
-                                            }
-                                        },
-                                        {
-                                            type: 'reply',
-                                            reply: {
-                                                id: 'manage_units',
-                                                title: 'Manage Units'
-                                            }
-                                        },
-                                        {
-                                            type: 'reply',
-                                            reply: {
-                                                id: 'manage_tenants',
-                                                title: 'Manage Tenants'
-                                            }
-                                        }
+                                        { type: 'reply', reply: { id: 'manage_properties', title: 'Manage Properties' } },
+                                        { type: 'reply', reply: { id: 'manage_units', title: 'Manage Units' } },
+                                        { type: 'reply', reply: { id: 'manage_tenants', title: 'Manage Tenants' } }
                                     ]
                                 }
                             }
                         };
 
-                        await axios.post(WHATSAPP_API_URL, manageButtons, {
-                            headers: {
-                                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                                'Content-Type': 'application/json'
-                            }
+                        await axios.post(WHATSAPP_API_URL, manageMenu, {
+                            headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
                         });
-
-                        console.log('Manage options sent to:', fromNumber);
                     } catch (error) {
-                        console.error('Error sending manage options:', error.response ? error.response.data : error);
+                        console.error('Error sending manage options:', error);
                     }
                 }
 
-                // Handle 'Manage Tenants' option
                 else if (selectedOption === 'manage_tenants') {
                     try {
-                        // Show tenant management buttons
-                        const tenantButtons = {
+                        const tenantMenu = {
                             messaging_product: 'whatsapp',
                             to: fromNumber,
                             type: 'interactive',
                             interactive: {
                                 type: 'button',
-                                body: {
-                                    text: 'Select an option for managing tenants:'
-                                },
+                                body: { text: 'Manage Tenants Options:' },
                                 action: {
                                     buttons: [
-                                        {
-                                            type: 'reply',
-                                            reply: {
-                                                id: 'onboard_tenant',
-                                                title: 'Onboard Tenant'
-                                            }
-                                        },
-                                        {
-                                            type: 'reply',
-                                            reply: {
-                                                id: 'edit_tenant',
-                                                title: 'Edit Tenant'
-                                            }
-                                        },
-                                        {
-                                            type: 'reply',
-                                            reply: {
-                                                id: 'offboard_tenant',
-                                                title: 'Offboard Tenant'
-                                            }
-                                        }
+                                        { type: 'reply', reply: { id: 'onboard_tenant', title: 'Onboard Tenant' } },
+                                        { type: 'reply', reply: { id: 'edit_tenant', title: 'Edit Tenant' } },
+                                        { type: 'reply', reply: { id: 'offboard_tenant', title: 'Offboard Tenant' } }
                                     ]
                                 }
                             }
                         };
 
-                        await axios.post(WHATSAPP_API_URL, tenantButtons, {
-                            headers: {
-                                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                                'Content-Type': 'application/json'
-                            }
+                        await axios.post(WHATSAPP_API_URL, tenantMenu, {
+                            headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
                         });
-
-                        console.log('Tenant management options sent to:', fromNumber);
                     } catch (error) {
-                        console.error('Error sending tenant management options:', error.response ? error.response.data : error);
+                        console.error('Error sending tenant options:', error);
                     }
                 }
 
-                // Handle 'Onboard Tenant' option
                 else if (selectedOption === 'onboard_tenant') {
                     try {
-                        // Send WhatsApp template message for authorization
-                        const authorizeTemplate = {
-                            messaging_product: 'whatsapp',
-                            to: fromNumber,
-                            type: 'template',
-                            template: {
-                                name: 'authorize',
-                                language: {
-                                    code: 'en'
-                                }
-                            }
-                        };
-
-                        await axios.post(WHATSAPP_API_URL, authorizeTemplate, {
-                            headers: {
-                                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                                'Content-Type': 'application/json'
-                            }
-                        });
-
-                        console.log('Authorization template sent to:', fromNumber);
-
-                        // Track that we are waiting for authorization response
-                        sessions[fromNumber].action = 'await_authorization';
-                    } catch (error) {
-                        console.error('Error sending authorization template:', error.response ? error.response.data : error);
-                    }
-                }
-
-                // Handle the authorization response
-                else if (sessions[fromNumber].action === 'await_authorization' && interactive) {
-                    const authorizationResponse = interactive.button_reply.id; // Assuming a button reply
-
-                    if (authorizationResponse === 'yes') {
-                        // Redirect to the tenant onboard page
-                        const onboardUrl = `https://defiant-stone-tail.glitch.me/addtenant/${fromNumber}`;
-
-                        const linkButtonMessage = {
+                        const linkButton = {
                             messaging_product: 'whatsapp',
                             to: fromNumber,
                             type: 'interactive',
                             interactive: {
                                 type: 'button',
-                                body: {
-                                    text: 'Click the button to onboard a tenant:'
-                                },
+                                body: { text: 'Click below to onboard a tenant' },
                                 action: {
                                     buttons: [
-                                        {
-                                            type: 'link',
-                                            link: {
-                                                url: onboardUrl,
-                                                title: 'Onboard Tenant'
-                                            }
-                                        }
+                                        { type: 'url', url: `https://defiant-stone-tail.glitch.me/addtenant/${fromNumber}`, title: 'Onboard Tenant' }
                                     ]
                                 }
                             }
                         };
 
-                        await axios.post(WHATSAPP_API_URL, linkButtonMessage, {
-                            headers: {
-                                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                                'Content-Type': 'application/json'
-                            }
+                        await axios.post(WHATSAPP_API_URL, linkButton, {
+                            headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
                         });
-
-                        console.log('Onboard Tenant link sent to:', fromNumber);
-                        sessions[fromNumber].action = null;
-                    } else {
-                        // Handle no authorization response
-                        await sendMessage(fromNumber, 'Authorization denied. Cannot onboard tenant.');
-                        sessions[fromNumber].action = null;
+                    } catch (error) {
+                        console.error('Error sending onboard link:', error);
                     }
                 }
             }
         }
-    } else {
-        res.sendStatus(404);
     }
-
-    // Respond to WhatsApp API with success
     res.sendStatus(200);
 });
 
-// Helper function to send a WhatsApp message
-async function sendMessage(phoneNumber, message) {
-    await axios.post(WHATSAPP_API_URL, {
-        messaging_product: 'whatsapp',
-        to: phoneNumber,
-        type: 'text',
-        text: {
-            body: message
-        }
-    }, {
-        headers: {
-            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json'
-        }
-    });
-}
+// Onboarding tenant via link and authorization message
+router.get('/addtenant/:phoneNumber', async (req, res) => {
+    const phoneNumber = req.params.phoneNumber;
+    try {
+        await axios.post(WHATSAPP_API_URL, {
+            messaging_product: 'whatsapp',
+            to: phoneNumber,
+            type: 'template',
+            template: {
+                name: 'authorize',
+                language: { code: 'en' }
+            }
+        }, {
+            headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+        });
 
-// Create the /addtenant/:phonenumber route
-router.get('/addtenant/:phonenumber', async (req, res) => {
-    const phoneNumber = req.params.phonenumber;
-
-    if (sessions[phoneNumber] && sessions[phoneNumber].action === 'await_authorization') {
-        const authorizationResponse = sessions[phoneNumber].authorizationResponse;
-
-        if (authorizationResponse === 'yes') {
+        // Handle 'Yes' response from user for authorization
+        if (/* user responds with 'Yes' */) {
             res.send(`
                 <html>
-                    <head>
-                        <title>Onboard Tenant</title>
-                    </head>
-                    <body>
-                        <h1>Onboard Tenant for Phone: ${phoneNumber}</h1>
-                        <form action="/submittenant/${phoneNumber}" method="POST">
-                            <label for="name">Tenant Name:</label>
-                            <input type="text" id="name" name="name" required><br>
-                            
-                            <label for="email">Tenant Email:</label>
-                            <input type="email" id="email" name="email" required><br>
-
-                            <label for="unit">Tenant Unit:</label>
-                            <input type="text" id="unit" name="unit" required><br>
-
-                            <button type="submit">Submit</button>
-                        </form>
-                    </body>
+                <body>
+                    <h1>Onboard Tenant</h1>
+                    <form>
+                        <!-- Form HTML for tenant onboarding -->
+                    </form>
+                </body>
                 </html>
             `);
         } else {
-            res.send(`
-                <html>
-                    <head>
-                        <title>Authorization Denied</title>
-                    </head>
-                    <body>
-                        <h1>Authorization Denied for ${phoneNumber}</h1>
-                        <p>You have not authorized onboarding for this tenant.</p>
-                    </body>
-                </html>
-            `);
+            res.send('Authorization failed or not provided.');
         }
-    } else {
-        res.status(403).send('Unauthorized access or session expired.');
-    }
-});
-
-// Route to handle tenant submission
-router.post('/submittenant/:phonenumber', async (req, res) => {
-    const phoneNumber = req.params.phonenumber;
-    const { name, email, unit } = req.body;
-
-    try {
-        const newTenant = new Tenant({
-            phoneNumber,
-            name,
-            email,
-            unit
-        });
-
-        await newTenant.save();
-
-        res.send(`
-            <html>
-                <head>
-                    <title>Onboard Tenant Success</title>
-                </head>
-                <body>
-                    <h1>Tenant Onboarding Successful</h1>
-                    <p>Tenant <strong>${name}</strong> has been onboarded successfully for phone number ${phoneNumber}.</p>
-                </body>
-            </html>
-        `);
     } catch (error) {
-        console.error('Error onboarding tenant:', error);
-        res.status(500).send('Internal Server Error. Please try again later.');
+        console.error('Error sending authorization template:', error);
     }
 });
 
