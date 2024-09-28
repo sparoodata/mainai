@@ -356,7 +356,7 @@ router.post('/', async (req, res) => {
                             template: {
                                 name: 'authorize',
                                 language: {
-                                    code: 'en_US'
+                                    code: 'en'
                                 }
                             }
                         };
