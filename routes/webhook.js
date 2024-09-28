@@ -146,11 +146,6 @@ router.post('/', async (req, res) => {
                                                 id: 'tenants_info',
                                                 title: 'Tenants Info',
                                                 description: 'View information about your tenants'
-                                            },
-                                            {
-                                                id: 'rent_paid', // Custom identifier for Rent Paid
-                                                title: 'Rent Paid',
-                                                description: 'Confirm rent payment for a tenant'
                                             }
                                         ]
                                     }
@@ -242,55 +237,115 @@ router.post('/', async (req, res) => {
                     }
                 }
 
-                // Handle 'Rent Paid' option
-                else if (selectedOption === 'rent_paid') {
-                    // Ask for tenant ID
-                    sessions[fromNumber].action = 'rent_paid';
-                    await sendMessage(fromNumber, 'Please provide the Tenant ID to confirm rent payment.');
+                // Handle 'Manage' option
+                else if (selectedOption === 'manage') {
+                    const manageMenu = {
+                        messaging_product: 'whatsapp',
+                        to: fromNumber,
+                        type: 'interactive',
+                        interactive: {
+                            type: 'list',
+                            header: { type: 'text', text: 'Manage Options' },
+                            body: { text: 'Please select an option to manage:' },
+                            action: {
+                                button: 'Manage',
+                                sections: [{
+                                    title: 'Manage Options',
+                                    rows: [
+                                        { id: 'manage_properties', title: 'Manage Properties', description: 'Manage property details' },
+                                        { id: 'manage_units', title: 'Manage Units', description: 'Manage unit details' },
+                                        { id: 'manage_tenants', title: 'Manage Tenants', description: 'Manage tenant details' }
+                                    ]
+                                }]
+                            }
+                        }
+                    };
+
+                    await axios.post(WHATSAPP_API_URL, manageMenu, {
+                        headers: {
+                            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    sessions[fromNumber].action = 'manage';
                 }
 
-                // Handle other menu options (e.g., 'manage', 'transactions', etc.)
-                else if (selectedOption === 'manage') {
-                    // Handle "Manage" option here
-                    // ...
-                } else if (selectedOption === 'transactions') {
-                    // Handle "Transactions" option here
-                    // ...
-                } else if (selectedOption === 'apartment_info') {
-                    // Handle "Apartment Info" option here
-                    // ...
-                } else if (selectedOption === 'unit_info') {
-                    // Handle "Unit Info" option here
-                    // ...
-                } else if (selectedOption === 'tenants_info') {
-                    // Handle "Tenants Info" option here
-                    // ...
+                else if (selectedOption === 'manage_tenants') {
+                    // Handle Manage Tenants option and show sub-menu
+                    const tenantManageMenu = {
+                        messaging_product: 'whatsapp',
+                        to: fromNumber,
+                        type: 'interactive',
+                        interactive: {
+                            type: 'list',
+                            header: { type: 'text', text: 'Tenant Management' },
+                            body: { text: 'Please select an option to manage tenants:' },
+                            action: {
+                                button: 'Manage Tenants',
+                                sections: [{
+                                    title: 'Tenant Actions',
+                                    rows: [
+                                        { id: 'onboard_tenant', title: 'Onboard Tenant', description: 'Add new tenant' },
+                                        { id: 'edit_tenant', title: 'Edit Tenant', description: 'Edit tenant details' },
+                                        { id: 'offboard_tenant', title: 'Offboard Tenant', description: 'Remove tenant' }
+                                    ]
+                                }]
+                            }
+                        }
+                    };
+
+                    await axios.post(WHATSAPP_API_URL, tenantManageMenu, {
+                        headers: {
+                            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    sessions[fromNumber].action = 'manage_tenants';
+                }
+
+                else if (selectedOption === 'onboard_tenant') {
+                    sessions[fromNumber].action = 'onboard_tenant';
+                    await sendMessage(fromNumber, 'Please provide the tenant name:');
                 }
             }
 
-            // Handle text input when expecting tenant ID for rent payment
-            else if (sessions[fromNumber].action === 'rent_paid' && text) {
-                const tenantId = text.trim();
-                try {
-                    const tenant = await Tenant.findOne({ tenant_id: tenantId });
-                    if (tenant) {
-                        tenant.status = 'PAID';
-                        await tenant.save();
+            else if (sessions[fromNumber].action === 'onboard_tenant' && text) {
+                // Collect tenant information in sequence
+                if (!sessions[fromNumber].tenantInfo) {
+                    sessions[fromNumber].tenantInfo = { name: text };
+                    await sendMessage(fromNumber, 'Please provide the tenant phone number:');
+                } else if (!sessions[fromNumber].tenantInfo.phoneNumber) {
+                    sessions[fromNumber].tenantInfo.phoneNumber = text;
+                    await sendMessage(fromNumber, 'Please upload a photo of the tenant:');
+                } else if (!sessions[fromNumber].tenantInfo.photo) {
+                    // Assuming the user sends a media message, you can handle media attachments here
+                    sessions[fromNumber].tenantInfo.photo = text; // Placeholder for media handling
+                    await sendMessage(fromNumber, 'Please upload the ID proof photo:');
+                } else if (!sessions[fromNumber].tenantInfo.idProof) {
+                    sessions[fromNumber].tenantInfo.idProof = text; // Placeholder for media handling
 
-                        await sendMessage(fromNumber, `Rent payment confirmed for Tenant ID: ${tenantId}.`);
-                        console.log(`Tenant rent status updated to PAID for Tenant ID: ${tenantId}`);
+                    // Save tenant to the database
+                    try {
+                        const newTenant = new Tenant({
+                            name: sessions[fromNumber].tenantInfo.name,
+                            phoneNumber: sessions[fromNumber].tenantInfo.phoneNumber,
+                            photo: sessions[fromNumber].tenantInfo.photo,
+                            idProof: sessions[fromNumber].tenantInfo.idProof
+                        });
 
-                        // Reset action
+                        await newTenant.save();
+                        await sendMessage(fromNumber, 'Tenant successfully onboarded.');
+
+                        console.log('New tenant onboarded:', newTenant);
                         sessions[fromNumber].action = null;
-                    } else {
-                        await sendMessage(fromNumber, `Tenant with ID "${tenantId}" not found.`);
+                        sessions[fromNumber].tenantInfo = null; // Reset the info
+                    } catch (error) {
+                        console.error('Error onboarding tenant:', error);
+                        await sendMessage(fromNumber, 'Failed to onboard tenant. Please try again.');
                     }
-                } catch (error) {
-                    console.error('Error updating rent status:', error);
-                    await sendMessage(fromNumber, 'Failed to confirm rent payment. Please try again.');
                 }
-            } else {
-                console.log('Received non-interactive message or invalid interaction.');
             }
         }
     } else {
