@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Waiting for Authentication</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script>
+    // Function to poll server for authentication status
+    async function checkAuthStatus() {
+      const phoneNumber = window.location.pathname.split('/').pop();
+      try {
+        const response = await fetch(`/authstatus/${phoneNumber}`);
+        const data = await response.json();
+        if (data.authenticated) {
+          // Redirect to the form once authenticated
+          window.location.href = `/getpropertyform/${phoneNumber}`;
+        } else {
+          setTimeout(checkAuthStatus, 5000);
+        }
+      } catch (err) {
+        console.error('Error checking authentication status:', err);
+      }
+    }
+
+    window.onload = checkAuthStatus;
+  </script>
+</head>
+<body>
+  <div class="container">
+    <h1>Waiting for WhatsApp Authentication</h1>
+    <p>Please respond to the WhatsApp message we sent to proceed.</p>
+  </div>
+</body>
+</html>
