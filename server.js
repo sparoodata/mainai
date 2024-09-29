@@ -95,27 +95,8 @@ const upload = multer({ dest: 'uploads/' });
 
 
 
-// Define the Property schema and model
-const propertySchema = new mongoose.Schema({
-  propertyName: String,
-  address: String,
-  image: String, // Store the file path or URL
-  units: Number
-});
-
-const Property = mongoose.model('Property', propertySchema);
 
 // Route to show "Waiting for Authentication" page
-app.get('/addproperty/:phoneNumber', (req, res) => {
-  const phoneNumber = req.params.phoneNumber;
-
-  console.log(`Authentication initiated for ${phoneNumber}`);
-
-  // Send WhatsApp message for authentication
-  sendWhatsAppAuthMessage(phoneNumber);
-
-  res.sendFile(__dirname + '/public/waiting.html'); // Display waiting page
-});
 
 // Webhook to receive WhatsApp response
 app.post('/webhook', (req, res) => {
@@ -135,107 +116,7 @@ app.post('/webhook', (req, res) => {
   res.sendStatus(200); // Acknowledge the webhook event
 });
 
-// Route to check if the user is authenticated
-app.get('/authstatus/:phoneNumber', (req, res) => {
-  const phoneNumber = req.params.phoneNumber;
 
-  // Log the authentication check
-  console.log(`Checking authentication status for ${phoneNumber}`);
-
-  const isAuthenticated = !!authenticatedUsers[phoneNumber];
-  res.json({ authenticated: isAuthenticated });
-
-  if (isAuthenticated) {
-    console.log(`User ${phoneNumber} is authenticated.`);
-  } else {
-    console.log(`User ${phoneNumber} is not yet authenticated.`);
-  }
-});
-
-// Route to serve the property form after authentication
-app.get('/getpropertyform/:phoneNumber', (req, res) => {
-  const phoneNumber = req.params.phoneNumber;
-
-  // Check if the user is authenticated
-  if (authenticatedUsers[phoneNumber]) {
-    console.log(`Serving form to ${phoneNumber}`);
-    res.send(`
-      <!DOCTYPE html>
-      <html lang="en">
-        <head>
-          <meta charset="UTF-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <title>Add Property</title>
-          <link rel="stylesheet" href="/styles.css">
-        </head>
-        <body>
-          <div class="container">
-            <h1>Add Your Property</h1>
-            <form action="/submitproperty" method="POST" enctype="multipart/form-data">
-              <label for="propertyname">Property Name:</label>
-              <input type="text" id="propertyname" name="propertyname" required />
-              <label for="address">Address:</label>
-              <input type="text" id="address" name="address" required />
-              <label for="image">Upload Apartment Image:</label>
-              <input type="file" id="image" name="image" accept="image/*" required />
-              <label for="units">Number of Units:</label>
-              <input type="number" id="units" name="units" required />
-              <button type="submit">Submit</button>
-            </form>
-          </div>
-        </body>
-      </html>
-    `);
-  } else {
-    // Deny access if the user is not authenticated
-    res.status(403).send('Access Denied: You must authenticate first');
-  }
-});
-
-// Route to handle property form submission
-app.post('/submitproperty', upload.single('image'), async (req, res) => {
-  const { propertyname, address, units } = req.body;
-  const image = req.file?.path; // Path to uploaded file
-
-  const newProperty = new Property({
-    propertyName: propertyname,
-    address: address,
-    image: image,
-    units: parseInt(units),
-  });
-
-  try {
-    await newProperty.save();
-    res.send('Property added successfully');
-  } catch (error) {
-    console.error('Error saving property:', error);
-    res.status(500).send('Error saving property');
-  }
-});
-
-// Function to send WhatsApp message using the provided API structure
-async function sendWhatsAppAuthMessage(phoneNumber) {
-  try {
-    await axios.post(process.env.WHATSAPP_API_URL, {
-      messaging_product: 'whatsapp',
-      to: phoneNumber,
-      type: 'template',
-      template: {
-        name: 'authorize', // Ensure this template exists in your WhatsApp Business Account
-        language: { code: 'en' },
-      },
-    }, {
-      headers: {
-        'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    console.log(`WhatsApp message sent to ${phoneNumber}`);
-  } catch (error) {
-    console.error('Error sending WhatsApp message:', error);
-  }
-}
 // Start the server
 app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
