@@ -229,11 +229,11 @@ router.post('/', async (req, res) => {
                 } else if (selectedOption === 'manage_tenants') {
                     await sendTenantOptions(fromNumber);
                 } else if (selectedOption === 'add_property') {
-                    await sendPropertyLink(fromNumber, 'addproperty');
+                    await sendPropertyLinkButton(fromNumber, 'addproperty');
                 } else if (selectedOption === 'edit_property') {
-                    await sendPropertyLink(fromNumber, 'editproperty');
+                    await sendPropertyLinkButton(fromNumber, 'editproperty');
                 } else if (selectedOption === 'remove_property') {
-                    await sendPropertyLink(fromNumber, 'removeproperty');
+                    await sendPropertyLinkButton(fromNumber, 'removeproperty');
                 }
             }
 
@@ -491,10 +491,40 @@ async function sendTenantOptions(phoneNumber) {
     });
 }
 
-// Send the property/unit/tenant link
-async function sendPropertyLink(phoneNumber, action) {
+// Send the property/unit/tenant link as a button
+async function sendPropertyLinkButton(phoneNumber, action) {
     const url = `${GLITCH_HOST}/${action}/${phoneNumber}`;
-    await sendMessage(phoneNumber, `Click the following link to proceed: ${url}`);
+    const buttonMenu = {
+        messaging_product: 'whatsapp',
+        to: phoneNumber,
+        type: 'interactive',
+        interactive: {
+            type: 'button',
+            header: {
+                type: 'text',
+                text: 'Proceed with the Action'
+            },
+            body: {
+                text: `Click the button below to proceed with the ${action.replace(/_/g, ' ')}.`
+            },
+            action: {
+                buttons: [
+                    {
+                        type: 'url',
+                        url: url,
+                        title: `Proceed with ${action.replace(/_/g, ' ')}`
+                    }
+                ]
+            }
+        }
+    };
+
+    await axios.post(WHATSAPP_API_URL, buttonMenu, {
+        headers: {
+            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json'
+        }
+    });
 }
 
 module.exports = router;
