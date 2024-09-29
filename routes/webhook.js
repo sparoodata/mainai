@@ -12,6 +12,16 @@ const GLITCH_HOST = process.env.GLITCH_HOST; // Your Glitch project URL
 // Session management to track user interactions
 const sessions = {}; // This will track the state of each user's session
 
+async function shortenUrl(longUrl) {
+    try {
+        const response = await axios.post('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(longUrl));
+        return response.data;
+    } catch (error) {
+        console.error('Error shortening URL:', error.response ? error.response.data : error);
+        return longUrl; // Fallback to long URL if shortener fails
+    }
+}
+
 // Webhook verification for WhatsApp API
 router.get('/', (req, res) => {
     const VERIFY_TOKEN = process.env.VERIFY_TOKEN; // Your WhatsApp verification token
@@ -505,8 +515,8 @@ async function sendTenantOptions(phoneNumber) {
 
 // Send the property/unit/tenant link
 async function sendPropertyLink(phoneNumber, action) {
-    const url = `${GLITCH_HOST}/${action}/${phoneNumber}`;
-    await sendMessage(phoneNumber, `Click the following link to proceed: ${url}`);
+    const longUrl = `${GLITCH_HOST}/${action}/${phoneNumber}`;
+    const shortUrl = await shortenUrl(longUrl); // Get the shortened URL
+    await sendMessage(phoneNumber, `Click the following link to proceed: ${shortUrl}`);
 }
-
 module.exports = router;
