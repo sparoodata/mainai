@@ -229,11 +229,23 @@ router.post('/', async (req, res) => {
                 } else if (selectedOption === 'manage_tenants') {
                     await sendTenantOptions(fromNumber);
                 } else if (selectedOption === 'add_property') {
-                    await sendPropertyLinkButton(fromNumber, 'addproperty');
+                    await sendPropertyLink(fromNumber, 'addproperty');
                 } else if (selectedOption === 'edit_property') {
-                    await sendPropertyLinkButton(fromNumber, 'editproperty');
+                    await sendPropertyLink(fromNumber, 'editproperty');
                 } else if (selectedOption === 'remove_property') {
-                    await sendPropertyLinkButton(fromNumber, 'removeproperty');
+                    await sendPropertyLink(fromNumber, 'removeproperty');
+                } else if (selectedOption === 'add_unit') {
+                    await sendPropertyLink(fromNumber, 'addunit');
+                } else if (selectedOption === 'edit_unit') {
+                    await sendPropertyLink(fromNumber, 'editunit');
+                } else if (selectedOption === 'remove_unit') {
+                    await sendPropertyLink(fromNumber, 'removeunit');
+                } else if (selectedOption === 'add_tenant') {
+                    await sendPropertyLink(fromNumber, 'addtenant');
+                } else if (selectedOption === 'edit_tenant') {
+                    await sendPropertyLink(fromNumber, 'edittenant');
+                } else if (selectedOption === 'remove_tenant') {
+                    await sendPropertyLink(fromNumber, 'removetenant');
                 }
             }
 
@@ -491,40 +503,10 @@ async function sendTenantOptions(phoneNumber) {
     });
 }
 
-// Send the property/unit/tenant link as a button
-async function sendPropertyLinkButton(phoneNumber, action) {
+// Send the property/unit/tenant link
+async function sendPropertyLink(phoneNumber, action) {
     const url = `${GLITCH_HOST}/${action}/${phoneNumber}`;
-    const buttonMenu = {
-        messaging_product: 'whatsapp',
-        to: phoneNumber,
-        type: 'interactive',
-        interactive: {
-            type: 'button',
-            header: {
-                type: 'text',
-                text: 'Proceed with the Action'
-            },
-            body: {
-                text: `Click the button below to proceed with the ${action.replace(/_/g, ' ')}.`
-            },
-            action: {
-                buttons: [
-                    {
-                        type: 'url',
-                        url: url,
-                        title: `Proceed with ${action.replace(/_/g, ' ')}`
-                    }
-                ]
-            }
-        }
-    };
-
-    await axios.post(WHATSAPP_API_URL, buttonMenu, {
-        headers: {
-            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json'
-        }
-    });
+    await sendMessage(phoneNumber, `Click the following link to proceed: ${url}`);
 }
 
 module.exports = router;
