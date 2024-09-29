@@ -7,6 +7,7 @@ const router = express.Router();
 // WhatsApp API credentials
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+const GLITCH_HOST = process.env.GLITCH_HOST; // Your Glitch project URL
 
 // Session management to track user interactions
 const sessions = {}; // This will track the state of each user's session
@@ -27,7 +28,6 @@ router.get('/', (req, res) => {
             console.log('Webhook verified successfully');
             res.status(200).send(challenge);
         } else {
-            // Respond with '403 Forbidden' if token is invalid
             console.error('Webhook verification failed');
             res.sendStatus(403);
         }
@@ -155,13 +155,7 @@ router.post('/', async (req, res) => {
 
             // Handle interactive message responses
             else if (interactive) {
-                const interactiveType = interactive.type;
-                let selectedOption = null;
-
-                // Handle button reply
-                if (interactiveType === 'button_reply') {
-                    selectedOption = interactive.button_reply.id; // This is the payload of the button response
-                }
+                const selectedOption = interactive.button_reply.id; // This is the payload of the button response
 
                 // Process the selected option
                 if (selectedOption === 'account_info') {
@@ -223,13 +217,23 @@ router.post('/', async (req, res) => {
                     await sendMessage(fromNumber, 'Please provide the Tenant ID to confirm rent payment.');
                 }
 
-                // Handle other menu options (e.g., 'manage', 'transactions', etc.)
+                // Handle other menu options (Manage, Transactions)
                 else if (selectedOption === 'manage') {
-                    // Handle "Manage" option here
-                    // ...
+                    await sendManageSubmenu(fromNumber);
                 } else if (selectedOption === 'transactions') {
                     // Handle "Transactions" option here
-                    // ...
+                } else if (selectedOption === 'manage_properties') {
+                    await sendPropertyOptions(fromNumber);
+                } else if (selectedOption === 'manage_units') {
+                    await sendUnitOptions(fromNumber);
+                } else if (selectedOption === 'manage_tenants') {
+                    await sendTenantOptions(fromNumber);
+                } else if (selectedOption === 'add_property') {
+                    await sendPropertyLink(fromNumber, 'addproperty');
+                } else if (selectedOption === 'edit_property') {
+                    await sendPropertyLink(fromNumber, 'editproperty');
+                } else if (selectedOption === 'remove_property') {
+                    await sendPropertyLink(fromNumber, 'removeproperty');
                 }
             }
 
@@ -281,6 +285,216 @@ async function sendMessage(phoneNumber, message) {
             'Content-Type': 'application/json'
         }
     });
+}
+
+// Helper function to send the manage submenu
+async function sendManageSubmenu(phoneNumber) {
+    const buttonMenu = {
+        messaging_product: 'whatsapp',
+        to: phoneNumber,
+        type: 'interactive',
+        interactive: {
+            type: 'button',
+            header: {
+                type: 'text',
+                text: 'Manage Options'
+            },
+            body: {
+                text: 'Please select an option below:'
+            },
+            action: {
+                buttons: [
+                    {
+                        type: 'reply',
+                        reply: {
+                            id: 'manage_properties',
+                            title: 'Manage Properties'
+                        }
+                    },
+                    {
+                        type: 'reply',
+                        reply: {
+                            id: 'manage_units',
+                            title: 'Manage Units'
+                        }
+                    },
+                    {
+                        type: 'reply',
+                        reply: {
+                            id: 'manage_tenants',
+                            title: 'Manage Tenants'
+                        }
+                    }
+                ]
+            }
+        }
+    };
+
+    await axios.post(WHATSAPP_API_URL, buttonMenu, {
+        headers: {
+            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json'
+        }
+    });
+}
+
+// Property Options (Add, Edit, Remove)
+async function sendPropertyOptions(phoneNumber) {
+    const buttonMenu = {
+        messaging_product: 'whatsapp',
+        to: phoneNumber,
+        type: 'interactive',
+        interactive: {
+            type: 'button',
+            header: {
+                type: 'text',
+                text: 'Property Options'
+            },
+            body: {
+                text: 'Please select an option:'
+            },
+            action: {
+                buttons: [
+                    {
+                        type: 'reply',
+                        reply: {
+                            id: 'add_property',
+                            title: 'Add Property'
+                        }
+                    },
+                    {
+                        type: 'reply',
+                        reply: {
+                            id: 'edit_property',
+                            title: 'Edit Property'
+                        }
+                    },
+                    {
+                        type: 'reply',
+                        reply: {
+                            id: 'remove_property',
+                            title: 'Remove Property'
+                        }
+                    }
+                ]
+            }
+        }
+    };
+
+    await axios.post(WHATSAPP_API_URL, buttonMenu, {
+        headers: {
+            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json'
+        }
+    });
+}
+
+// Units Options (Add, Edit, Remove)
+async function sendUnitOptions(phoneNumber) {
+    const buttonMenu = {
+        messaging_product: 'whatsapp',
+        to: phoneNumber,
+        type: 'interactive',
+        interactive: {
+            type: 'button',
+            header: {
+                type: 'text',
+                text: 'Unit Options'
+            },
+            body: {
+                text: 'Please select an option:'
+            },
+            action: {
+                buttons: [
+                    {
+                        type: 'reply',
+                        reply: {
+                            id: 'add_unit',
+                            title: 'Add Unit'
+                        }
+                    },
+                    {
+                        type: 'reply',
+                        reply: {
+                            id: 'edit_unit',
+                            title: 'Edit Unit'
+                        }
+                    },
+                    {
+                        type: 'reply',
+                        reply: {
+                            id: 'remove_unit',
+                            title: 'Remove Unit'
+                        }
+                    }
+                ]
+            }
+        }
+    };
+
+    await axios.post(WHATSAPP_API_URL, buttonMenu, {
+        headers: {
+            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json'
+        }
+    });
+}
+
+// Tenants Options (Add, Edit, Remove)
+async function sendTenantOptions(phoneNumber) {
+    const buttonMenu = {
+        messaging_product: 'whatsapp',
+        to: phoneNumber,
+        type: 'interactive',
+        interactive: {
+            type: 'button',
+            header: {
+                type: 'text',
+                text: 'Tenant Options'
+            },
+            body: {
+                text: 'Please select an option:'
+            },
+            action: {
+                buttons: [
+                    {
+                        type: 'reply',
+                        reply: {
+                            id: 'add_tenant',
+                            title: 'Add Tenant'
+                        }
+                    },
+                    {
+                        type: 'reply',
+                        reply: {
+                            id: 'edit_tenant',
+                            title: 'Edit Tenant'
+                        }
+                    },
+                    {
+                        type: 'reply',
+                        reply: {
+                            id: 'remove_tenant',
+                            title: 'Remove Tenant'
+                        }
+                    }
+                ]
+            }
+        }
+    };
+
+    await axios.post(WHATSAPP_API_URL, buttonMenu, {
+        headers: {
+            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json'
+        }
+    });
+}
+
+// Send the property/unit/tenant link
+async function sendPropertyLink(phoneNumber, action) {
+    const url = `${GLITCH_HOST}/${action}/${phoneNumber}`;
+    await sendMessage(phoneNumber, `Click the following link to proceed: ${url}`);
 }
 
 module.exports = router;
