@@ -85,37 +85,186 @@ app.get('/auth/status/:sessionId', (req, res) => {
     }
 });
 
-// In-memory store for authenticated users (use a DB in production)
-
-// In-memory store for authenticated users (use a DB in production)
-const authenticatedUsers = {};
-
-// Multer for file uploads
-const upload = multer({ dest: 'uploads/' });
-
-
-
-
-// Route to show "Waiting for Authentication" page
-
-// Webhook to receive WhatsApp response
-app.post('/webhook', (req, res) => {
-  const message = req.body;
-
-  console.log('Received webhook payload:', JSON.stringify(message)); // Log incoming webhook payload
-
-  const phoneNumber = message.from; // Update this based on actual webhook structure
-  const userMessage = message.button?.text || '';
-  console.log(userMessage);
-  // Check if the user replied "Yes"
-  if (userMessage.trim().toLowerCase() === 'yes') {
-    console.log(`User ${phoneNumber} authorized via WhatsApp.`);
-    authenticatedUsers[phoneNumber] = true; // Mark user as authenticated
-  }
-
-  res.sendStatus(200); // Acknowledge the webhook event
+// Property schema and model for MongoDB
+const propertySchema = new mongoose.Schema({
+  propertyName: String,
+  address: String,
+  image: String, // Store image URL or base64 string for simplicity
+  units: Number
 });
 
+const Property = mongoose.model('Property', propertySchema);
+
+app.get('/addproperty/:phoneNumber', async (req, res) => {
+  const phoneNumber = req.params.phoneNumber;
+
+  // Display waiting for authentication message
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Waiting for Authentication</title>
+        <style>
+          body, html {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+          }
+          .container {
+            text-align: center;
+            background-color: white;
+            padding: 50px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>Waiting for WhatsApp Authentication</h1>
+          <p>Please respond to the WhatsApp message we sent to proceed.</p>
+        </div>
+      </body>
+    </html>
+  `);
+
+  try {
+    const response = await sendWhatsAppAuthMessage(phoneNumber);
+
+    // Simulate waiting for user response
+    const userResponse = await waitForUserResponse(phoneNumber);
+
+    if (userResponse === 'Yes') {
+      // If authorized, load form
+      res.send(`
+        <!DOCTYPE html>
+        <html lang="en">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Add Property</title>
+            <style>
+              body, html {
+                height: 100%;
+                margin: 0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                font-family: Arial, sans-serif;
+                background-color: #f0f0f0;
+              }
+              .container {
+                text-align: center;
+                background-color: white;
+                padding: 50px;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+                border-radius: 8px;
+              }
+              form {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+              }
+              label {
+                font-weight: bold;
+                margin-top: 10px;
+                display: block;
+              }
+              input, button {
+                margin-top: 10px;
+                padding: 8px;
+                width: 100%;
+                max-width: 300px;
+                box-sizing: border-box;
+              }
+              button {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                cursor: pointer;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>Add Your Property</h1>
+              <form action="/submitproperty" method="POST" enctype="multipart/form-data">
+                <label for="propertyname">Property Name:</label>
+                <input type="text" id="propertyname" name="propertyname" required />
+                <label for="address">Address:</label>
+                <input type="text" id="address" name="address" required />
+                <label for="image">Upload Apartment Image:</label>
+                <input type="file" id="image" name="image" accept="image/*" required />
+                <label for="units">Number of Units:</label>
+                <input type="number" id="units" name="units" required />
+                <button type="submit">Submit</button>
+              </form>
+            </div>
+          </body>
+        </html>
+      `);
+    } else {
+      res.status(401).send('Unauthorized');
+    }
+  } catch (error) {
+    console.error('Error sending WhatsApp message:', error);
+    res.status(500).send('Something went wrong');
+  }
+});
+
+app.post('/submitproperty', async (req, res) => {
+  const { propertyname, address, units } = req.body;
+  const image = req.files?.image?.path; // Assuming the file is uploaded
+
+  const newProperty = new Property({
+    propertyName: propertyname,
+    address: address,
+    image: image, // Save image path or base64 string here
+    units: parseInt(units),
+  });
+
+  try {
+    await newProperty.save();
+    res.send('Property added successfully');
+  } catch (error) {
+    console.error('Error saving property:', error);
+    res.status(500).send('Error saving property');
+  }
+});
+
+// Function to send WhatsApp message using the provided API structure
+async function sendWhatsAppAuthMessage(phoneNumber) {
+  return axios.post(process.env.WHATSAPP_API_URL, {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'template',
+    template: {
+      name: 'authorize', // Ensure this template exists in your WhatsApp Business Account
+      language: { code: 'en' },
+    },
+  }, {
+    headers: {
+      'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+  });
+}
+
+// Simulate user response handling (In reality, this should be a webhook listening for WhatsApp replies)
+async function waitForUserResponse(phoneNumber) {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      // Simulated user response, should be handled through WhatsApp Webhook
+      resolve('Yes'); // Simulating an authorized user response
+    }, 5000); // Simulating 5 seconds for response
+  });
+}
 
 // Start the server
 app.listen(port, () => {
