@@ -89,78 +89,77 @@ router.post('/', async (req, res) => {
             console.log(`Received message from ${phoneNumber}: ${text}`);
 
             // Handle "help" message (case-insensitive)
-// Handle "help" message (case-insensitive)
-if (text && text.toLowerCase() === 'help') {
-    try {
-        // Set session state to expect menu selection
-        sessions[fromNumber].action = null;
+            if (text && text.toLowerCase() === 'help') {
+                try {
+                    // Set session state to expect menu selection
+                    sessions[fromNumber].action = null;
 
-        // Send WhatsApp button menu
-        const buttonMenu = {
-            messaging_product: 'whatsapp',
-            to: fromNumber,
-            type: 'interactive',
-            interactive: {
-                type: 'button',
-
-                body: {
-                    text: 'Please select an option below:'
-                },
-                action: {
-                    buttons: [
-                        {
-                            type: 'reply',
-                            reply: {
-                                id: 'account_info', // Custom identifier for option 1
-                                title: 'Account Info'
-                            }
-                        },
-                        {
-                            type: 'reply',
-                            reply: {
-                                id: 'manage',
-                                title: 'Manage'
-                            }
-                        },
-                        {
-                            type: 'reply',
-                            reply: {
-                                id: 'transactions',
-                                title: 'Transactions'
+                    // Send WhatsApp button menu
+                    const buttonMenu = {
+                        messaging_product: 'whatsapp',
+                        to: fromNumber,
+                        type: 'interactive',
+                        interactive: {
+                            type: 'button',
+                            header: {
+                                type: 'text',
+                                text: 'Choose an Option'
+                            },
+                            body: {
+                                text: 'Please select an option below:'
+                            },
+                            footer: {
+                                text: 'Powered by your rental app'
+                            },
+                            action: {
+                                buttons: [
+                                    {
+                                        type: 'reply',
+                                        reply: {
+                                            id: 'account_info', // Custom identifier for option 1
+                                            title: 'Account Info'
+                                        }
+                                    },
+                                    {
+                                        type: 'reply',
+                                        reply: {
+                                            id: 'manage',
+                                            title: 'Manage'
+                                        }
+                                    },
+                                    {
+                                        type: 'reply',
+                                        reply: {
+                                            id: 'transactions',
+                                            title: 'Transactions'
+                                        }
+                                    }
+                                ]
                             }
                         }
-                    ]
+                    };
+
+                    // Send the button menu message
+                    await axios.post(WHATSAPP_API_URL, buttonMenu, {
+                        headers: {
+                            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    console.log('Button menu sent to:', fromNumber);
+                } catch (error) {
+                    console.error('Error sending button menu:', error.response ? error.response.data : error);
                 }
             }
-        };
-
-        // Send the button menu message
-        await axios.post(WHATSAPP_API_URL, buttonMenu, {
-            headers: {
-                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        console.log('Button menu sent to:', fromNumber);
-    } catch (error) {
-        console.error('Error sending button menu:', error.response ? error.response.data : error);
-    }
-}
-
 
             // Handle interactive message responses
             else if (interactive) {
                 const interactiveType = interactive.type;
                 let selectedOption = null;
 
-                // Handle list reply
-                if (interactiveType === 'list_reply') {
-                    selectedOption = interactive.list_reply.id; // The ID of the selected option
-                }
-
                 // Handle button reply
-                else if (interactiveType === 'button_reply') {
+                if (interactiveType === 'button_reply') {
                     selectedOption = interactive.button_reply.id; // This is the payload of the button response
                 }
 
@@ -168,7 +167,6 @@ if (text && text.toLowerCase() === 'help') {
                 if (selectedOption === 'account_info') {
                     // Fetch and send user account info
                     try {
-                        console.log(phoneNumber);
                         const user = await User.findOne({ phoneNumber });
 
                         if (user) {
@@ -231,15 +229,6 @@ if (text && text.toLowerCase() === 'help') {
                     // ...
                 } else if (selectedOption === 'transactions') {
                     // Handle "Transactions" option here
-                    // ...
-                } else if (selectedOption === 'apartment_info') {
-                    // Handle "Apartment Info" option here
-                    // ...
-                } else if (selectedOption === 'unit_info') {
-                    // Handle "Unit Info" option here
-                    // ...
-                } else if (selectedOption === 'tenants_info') {
-                    // Handle "Tenants Info" option here
                     // ...
                 }
             }
