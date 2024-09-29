@@ -517,6 +517,6 @@ async function sendTenantOptions(phoneNumber) {
 async function sendPropertyLink(phoneNumber, action) {
     const longUrl = `${GLITCH_HOST}/${action}/${phoneNumber}`;
     const shortUrl = await shortenUrl(longUrl); // Get the shortened URL
-    await sendMessage(phoneNumber, `Click the following link to proceed: ${shortUrl}`);
+    await sendMessage(phoneNumber, `Proceed: ${shortUrl}`);
 }
 module.exports = router;
