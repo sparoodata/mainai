@@ -125,7 +125,7 @@ app.post('/webhook', (req, res) => {
 
   const phoneNumber = message.from; // Update this based on actual webhook structure
   const userMessage = message.button?.text || '';
-
+  console.log(userMessage);
   // Check if the user replied "Yes"
   if (userMessage.trim().toLowerCase() === 'yes') {
     console.log(`User ${phoneNumber} authorized via WhatsApp.`);
@@ -144,6 +144,7 @@ app.get('/authstatus/:phoneNumber', (req, res) => {
 
   const isAuthenticated = !!authenticatedUsers[phoneNumber];
   res.json({ authenticated: isAuthenticated });
+  console.log(isAuthenticated);
 
   if (isAuthenticated) {
     console.log(`User ${phoneNumber} is authenticated.`);
