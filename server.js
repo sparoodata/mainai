@@ -83,6 +83,58 @@ app.get('/auth/status/:sessionId', (req, res) => {
     }
 });
 
+app.use('/secure', express.static('public'));
+
+app.get('/addproperty/:phoneNumber', async (req, res) => {
+  const phoneNumber = req.params.phoneNumber;
+
+  // Send WhatsApp message for authentication
+  try {
+    const response = await sendWhatsAppAuthMessage(phoneNumber);
+
+    // Simulate waiting for user response (this should actually be handled asynchronously)
+    const userResponse = await waitForUserResponse(phoneNumber); // Placeholder
+
+    if (userResponse === 'Yes') {
+      // If authorized, load secured HTML
+      res.redirect('/secure/propertyform.html');
+    } else {
+      res.status(401).send('Unauthorized');
+    }
+  } catch (error) {
+    console.error('Error sending WhatsApp message:', error);
+    res.status(500).send('Something went wrong');
+  }
+});
+
+// Function to send WhatsApp message using the provided API structure
+async function sendWhatsAppAuthMessage(phoneNumber) {
+  return axios.post(process.env.WHATSAPP_API_URL, {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'template',
+    template: {
+      name: 'authorize', // Ensure this template exists in your WhatsApp Business Account
+      language: { code: 'en' },
+    },
+  }, {
+    headers: {
+      'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+  });
+}
+
+// Simulate user response handling (In reality, this should be a webhook listening for WhatsApp replies)
+async function waitForUserResponse(phoneNumber) {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      // Simulated user response, should be handled through WhatsApp Webhook
+      resolve('Yes'); // Simulating an authorized user response
+    }, 5000); // Simulating 5 seconds for response
+  });
+}
+
 
 // Dashboard route (protected)
 app.get('/dashboard', (req, res) => {
