@@ -86,10 +86,13 @@ app.get('/auth/status/:sessionId', (req, res) => {
 });
 
 // In-memory store for authenticated users (use a DB in production)
+
+// In-memory store for authenticated users (use a DB in production)
 const authenticatedUsers = {};
 
 // Multer for file uploads
 const upload = multer({ dest: 'uploads/' });
+
 
 
 // Define the Property schema and model
@@ -106,6 +109,8 @@ const Property = mongoose.model('Property', propertySchema);
 app.get('/addproperty/:phoneNumber', (req, res) => {
   const phoneNumber = req.params.phoneNumber;
 
+  console.log(`Authentication initiated for ${phoneNumber}`);
+
   // Send WhatsApp message for authentication
   sendWhatsAppAuthMessage(phoneNumber);
 
@@ -115,10 +120,15 @@ app.get('/addproperty/:phoneNumber', (req, res) => {
 // Webhook to receive WhatsApp response
 app.post('/webhook', (req, res) => {
   const message = req.body;
-  const phoneNumber = message.from;
-  const userMessage = message.text?.body || '';
 
+  console.log('Received webhook payload:', JSON.stringify(message)); // Log incoming webhook payload
+
+  const phoneNumber = message.from; // Update this based on actual webhook structure
+  const userMessage = message.button?.text || '';
+
+  // Check if the user replied "Yes"
   if (userMessage.trim().toLowerCase() === 'yes') {
+    console.log(`User ${phoneNumber} authorized via WhatsApp.`);
     authenticatedUsers[phoneNumber] = true; // Mark user as authenticated
   }
 
@@ -128,8 +138,18 @@ app.post('/webhook', (req, res) => {
 // Route to check if the user is authenticated
 app.get('/authstatus/:phoneNumber', (req, res) => {
   const phoneNumber = req.params.phoneNumber;
+
+  // Log the authentication check
+  console.log(`Checking authentication status for ${phoneNumber}`);
+
   const isAuthenticated = !!authenticatedUsers[phoneNumber];
   res.json({ authenticated: isAuthenticated });
+
+  if (isAuthenticated) {
+    console.log(`User ${phoneNumber} is authenticated.`);
+  } else {
+    console.log(`User ${phoneNumber} is not yet authenticated.`);
+  }
 });
 
 // Route to serve the property form after authentication
@@ -138,7 +158,7 @@ app.get('/getpropertyform/:phoneNumber', (req, res) => {
 
   // Check if the user is authenticated
   if (authenticatedUsers[phoneNumber]) {
-    // Serve the form only if the user is authenticated
+    console.log(`Serving form to ${phoneNumber}`);
     res.send(`
       <!DOCTYPE html>
       <html lang="en">
@@ -210,12 +230,12 @@ async function sendWhatsAppAuthMessage(phoneNumber) {
         'Content-Type': 'application/json',
       },
     });
+
+    console.log(`WhatsApp message sent to ${phoneNumber}`);
   } catch (error) {
     console.error('Error sending WhatsApp message:', error);
   }
 }
-
-
 // Start the server
 app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);

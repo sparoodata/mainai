@@ -10,12 +10,15 @@
     async function checkAuthStatus() {
       const phoneNumber = window.location.pathname.split('/').pop();
       try {
+        console.log(`Polling for ${phoneNumber}...`);
         const response = await fetch(`/authstatus/${phoneNumber}`);
         const data = await response.json();
         if (data.authenticated) {
           // Redirect to the form once authenticated
+          console.log(`User ${phoneNumber} authenticated. Redirecting to form...`);
           window.location.href = `/getpropertyform/${phoneNumber}`;
         } else {
+          console.log(`User ${phoneNumber} not authenticated yet. Retrying...`);
           setTimeout(checkAuthStatus, 5000);
         }
       } catch (err) {
