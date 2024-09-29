@@ -144,7 +144,6 @@ app.get('/authstatus/:phoneNumber', (req, res) => {
 
   const isAuthenticated = !!authenticatedUsers[phoneNumber];
   res.json({ authenticated: isAuthenticated });
-  console.log(isAuthenticated);
 
   if (isAuthenticated) {
     console.log(`User ${phoneNumber} is authenticated.`);
