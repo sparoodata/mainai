@@ -6,23 +6,18 @@
   <title>Waiting for Authentication</title>
   <link rel="stylesheet" href="/styles.css">
   <script>
-    // Function to poll server for authentication status
     async function checkAuthStatus() {
       const phoneNumber = window.location.pathname.split('/').pop();
       try {
-        console.log(`Polling for ${phoneNumber}...`);
         const response = await fetch(`/authstatus/${phoneNumber}`);
         const data = await response.json();
-        if (data.authenticated) {
-          // Redirect to the form once authenticated
-          console.log(`User ${phoneNumber} authenticated. Redirecting to form...`);
+        if (data.authorized) {
           window.location.href = `/getpropertyform/${phoneNumber}`;
         } else {
-          console.log(`User ${phoneNumber} not authenticated yet. Retrying...`);
-          setTimeout(checkAuthStatus, 5000);
+          setTimeout(checkAuthStatus, 5000); // Poll every 5 seconds
         }
       } catch (err) {
-        console.error('Error checking authentication status:', err);
+        console.error('Error checking authorization status:', err);
       }
     }
 
