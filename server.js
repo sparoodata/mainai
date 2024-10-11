@@ -80,23 +80,34 @@ let sessions = {};
 app.use('/webhook', webhookRoutes); // Ensure this is correctly linked to your `webhook.js` file
 
 
-app.get('/addproperty/:phoneNumber', async (req, res) => {
-    const phoneNumber = req.params.phoneNumber;
+const Authorize = require('./models/Authorize'); // Import the Authorize model
 
-    // Send authorization request to WhatsApp
+app.get('/addproperty/:id', async (req, res) => {
+    const id = req.params.id;
+
     try {
+        // Find the authorization record by _id
+        const authorizeRecord = await Authorize.findById(id);
+        
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        const phoneNumber = authorizeRecord.phoneNumber; // Get the phone number from the record
+
+        // Send authorization request to WhatsApp
         await sendWhatsAppAuthMessage(phoneNumber);
         
-        // Wait for the user's response (should be handled via a webhook in a real implementation)
+        // Wait for the user's response (this would be handled via a webhook)
         const userResponse = await waitForUserResponse(phoneNumber);
-        
+
         // If the user says "Yes", show the form
         if (userResponse.toLowerCase() === 'yes') {
             res.send(`
                 <html>
                 <body>
                     <h2>Add Property Details</h2>
-                    <form action="/addproperty/${phoneNumber}" method="POST" enctype="multipart/form-data">
+                    <form action="/addproperty/${id}" method="POST" enctype="multipart/form-data">
                         <label>Property Name:</label>
                         <input type="text" name="name" required /><br/>
                         <label>Number of Units:</label>
@@ -113,35 +124,32 @@ app.get('/addproperty/:phoneNumber', async (req, res) => {
                 </html>
             `);
         } else {
-            // If user denies authorization
+            // If the user denies authorization
             res.send('<h1>Access Denied</h1>');
         }
     } catch (error) {
-        console.error('Error sending WhatsApp authorization or waiting for response:', error);
+        console.error('Error during authorization or fetching phone number:', error);
         res.status(500).send('An error occurred during authorization.');
     }
 });
 
-
-
 // Function to send WhatsApp message using the provided API structure
 async function sendWhatsAppAuthMessage(phoneNumber) {
-  return axios.post(process.env.WHATSAPP_API_URL, {
-    messaging_product: 'whatsapp',
-    to: phoneNumber,
-    type: 'template',
-    template: {
-      name: 'authorize', // Ensure this template exists in your WhatsApp Business Account
-      language: { code: 'en' },
-    },
-  }, {
-    headers: {
-      'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-  });
+    return axios.post(process.env.WHATSAPP_API_URL, {
+        messaging_product: 'whatsapp',
+        to: phoneNumber,
+        type: 'template',
+        template: {
+            name: 'authorize', // Ensure this template exists in your WhatsApp Business Account
+            language: { code: 'en' },
+        },
+    }, {
+        headers: {
+            'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+        },
+    });
 }
-
 
 
 
