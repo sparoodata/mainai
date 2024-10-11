@@ -55,162 +55,18 @@ const signupLimiter = rateLimit({
 let sessions = {};
 
 // Routes for sending auth and handling status checks
-const signupRoutes = require('./routes/signup');
-const verifyOtpRoutes = require('./routes/verify-otp');
-const sendAuthRoutes = require('./routes/send-auth');
-const loginRoutes = require('./routes/login');
-const webhookRoutes = require('./routes/webhook');  // No need to duplicate this in server.js
+// const signupRoutes = require('./routes/signup');
+// const verifyOtpRoutes = require('./routes/verify-otp');
+// const sendAuthRoutes = require('./routes/send-auth');
+// const loginRoutes = require('./routes/login');
+ const webhookRoutes = require('./routes/webhook');  // No need to duplicate this in server.js
 
-app.use('/signup', signupRoutes);
-app.use('/verify-otp', verifyOtpRoutes);
-app.use('/send-auth', sendAuthRoutes);
-app.use('/login', loginRoutes);
+//app.use('/signup', signupRoutes);
+//app.use('/verify-otp', verifyOtpRoutes);
+//app.use('/send-auth', sendAuthRoutes);
+//app.use('/login', loginRoutes);
 app.use('/webhook', webhookRoutes); // Ensure this is correctly linked to your `webhook.js` file
 
-// Authentication Status Check Route
-app.get('/auth/status/:sessionId', (req, res) => {
-    const { sessionId } = req.params;
-    const session = sessions[sessionId];
-
-    if (session) {
-        if (session.status === 'authenticated') {
-            res.json({ status: 'authenticated' });
-        } else if (session.status === 'denied') {
-            res.json({ status: 'denied' });
-        } else {
-            res.json({ status: 'pending' });
-        }
-    } else {
-        res.status(404).json({ status: 'not_found' });
-    }
-});
-
-// Property schema and model for MongoDB
-const propertySchema = new mongoose.Schema({
-  propertyName: String,
-  address: String,
-  image: String, // Store image URL or base64 string for simplicity
-  units: Number
-});
-
-const Property = mongoose.model('Property', propertySchema);
-
-// Add a route to check authentication status
-app.get('/authstatus/:phoneNumber', (req, res) => {
-    const phoneNumber = req.params.phoneNumber;
-    const session = sessions[phoneNumber];
-
-    if (session && session.status === 'authenticated') {
-        res.json({ authorized: true });
-    } else {
-        res.json({ authorized: false });
-    }
-});
-
-// Simulate user response handling (In reality, this should be a webhook listening for WhatsApp replies)
-async function waitForUserResponse(phoneNumber) {
-    return new Promise((resolve) => {
-        setTimeout(() => {
-            // Simulated user response, should be handled through WhatsApp Webhook
-            sessions[phoneNumber] = { status: 'authenticated' }; // Set status to 'authenticated'
-            resolve('Yes'); // Simulating an authorized user response
-        }, 5000); // Simulating 5 seconds for response
-    });
-}
-
-// Route to display the form if the user is authorized
-app.get('/getpropertyform/:phoneNumber', (req, res) => {
-    const phoneNumber = req.params.phoneNumber;
-
-    res.send(`
-      <!DOCTYPE html>
-      <html lang="en">
-        <head>
-          <meta charset="UTF-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <title>Add Property</title>
-          <style>
-            body, html {
-              height: 100%;
-              margin: 0;
-              display: flex;
-              justify-content: center;
-              align-items: center;
-              font-family: Arial, sans-serif;
-              background-color: #f0f0f0;
-            }
-            .container {
-              text-align: center;
-              background-color: white;
-              padding: 50px;
-              box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-              border-radius: 8px;
-            }
-            form {
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-            }
-            label {
-              font-weight: bold;
-              margin-top: 10px;
-              display: block;
-            }
-            input, button {
-              margin-top: 10px;
-              padding: 8px;
-              width: 100%;
-              max-width: 300px;
-              box-sizing: border-box;
-            }
-            button {
-              background-color: #4CAF50;
-              color: white;
-              border: none;
-              cursor: pointer;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>Add Your Property</h1>
-            <form action="/submitproperty" method="POST" enctype="multipart/form-data">
-              <label for="propertyname">Property Name:</label>
-              <input type="text" id="propertyname" name="propertyname" required />
-              <label for="address">Address:</label>
-              <input type="text" id="address" name="address" required />
-              <label for="image">Upload Apartment Image:</label>
-              <input type="file" id="image" name="image" accept="image/*" required />
-              <label for="units">Number of Units:</label>
-              <input type="number" id="units" name="units" required />
-              <button type="submit">Submit</button>
-            </form>
-          </div>
-        </body>
-      </html>
-    `);
-});
-
-
-app.post('/submitproperty', async (req, res) => {
-  const { propertyname, address, units } = req.body;
-  const image = req.files?.image?.path; // Assuming the file is uploaded
-
-  const newProperty = new Property({
-    propertyName: propertyname,
-    address: address,
-    image: image, // Save image path or base64 string here
-    units: parseInt(units),
-  });
-
-  try {
-    await newProperty.save();
-    res.send('Property added successfully');
-  } catch (error) {
-    console.error('Error saving property:', error);
-    res.status(500).send('Error saving property');
-  }
-});
 
 // Function to send WhatsApp message using the provided API structure
 async function sendWhatsAppAuthMessage(phoneNumber) {
@@ -230,7 +86,15 @@ async function sendWhatsAppAuthMessage(phoneNumber) {
   });
 }
 
-
+// Simulate user response handling (In reality, this should be a webhook listening for WhatsApp replies)
+async function waitForUserResponse(phoneNumber) {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      // Simulated user response, should be handled through WhatsApp Webhook
+      resolve('Yes'); // Simulating an authorized user response
+    }, 5000); // Simulating 5 seconds for response
+  });
+}
 
 // Start the server
 app.listen(port, () => {
