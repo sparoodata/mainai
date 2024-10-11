@@ -3,9 +3,6 @@ const axios = require('axios');
 const User = require('../models/User'); // Assuming you have a User model
 const Tenant = require('../models/Tenant'); // Assuming you have a Tenant model
 const router = express.Router();
-const multer = require('multer');
-const upload = multer({ dest: 'uploads/' }); // Configure multer for file upload
-
 
 // WhatsApp API credentials
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
@@ -515,67 +512,6 @@ async function sendTenantOptions(phoneNumber) {
         }
     });
 }
-
-
-
-router.get('/addproperty/:phoneNumber', async (req, res) => {
-    const phoneNumber = req.params.phoneNumber;
-    
-    // Render an HTML form to add property details
-    res.send(`
-        <html>
-        <body>
-            <h2>Add Property Details</h2>
-            <form action="/addproperty/${phoneNumber}" method="POST" enctype="multipart/form-data">
-                <label>Property Name:</label>
-                <input type="text" name="name" required /><br/>
-                <label>Number of Units:</label>
-                <input type="number" name="units" required /><br/>
-                <label>Address:</label>
-                <input type="text" name="address" required /><br/>
-                <label>Total Amount:</label>
-                <input type="number" name="totalAmount" required /><br/>
-                <label>Upload Image:</label>
-                <input type="file" name="image" accept="image/*" required /><br/>
-                <button type="submit">Add Property</button>
-            </form>
-        </body>
-        </html>
-    `);
-});
-
-// Multer setup for file uploads
-const multer = require('multer');
-const upload = multer({ dest: 'uploads/' }); // Configure multer for file upload
-
-// Handle the form POST request to save the property details
-router.post('/addproperty/:phoneNumber', upload.single('image'), async (req, res) => {
-    const { name, units, address, totalAmount } = req.body;
-    const phoneNumber = req.params.phoneNumber;
-
-    try {
-        // Save the property to MongoDB
-        const newProperty = new Property({
-            name,
-            units,
-            address,
-            totalAmount,
-            image: req.file.path // Save the image path
-        });
-        
-        await newProperty.save();
-        
-        // Notify the user via WhatsApp
-        await sendMessage(phoneNumber, 'Your property has been added successfully.');
-        
-        res.send('Property added successfully!');
-    } catch (error) {
-        console.error('Error adding property:', error);
-        res.status(500).send('Failed to add property.');
-    }
-});
-
-
 
 // Send the property/unit/tenant link
 async function sendPropertyLink(phoneNumber, action) {

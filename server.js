@@ -10,6 +10,7 @@ const axios = require("axios");
 const multer = require('multer');
 
 
+
 const app = express();
 const port = process.env.PORT || 3000; // Glitch uses dynamic port
 
@@ -19,6 +20,16 @@ app.set('trust proxy', 1);
 // Middleware
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+
+async function waitForUserResponse(phoneNumber) {
+    // In reality, this should be handled via a webhook for WhatsApp responses
+    return new Promise((resolve) => {
+        setTimeout(() => {
+            // Simulated user response, should be handled through WhatsApp Webhook
+            resolve('Yes'); // Simulating an authorized user response
+        }, 5000); // Simulating 5 seconds for response
+    });
+}
 
 // MongoDB connection
 mongoose.connect(process.env.MONGODB_URI, {
@@ -61,11 +72,55 @@ let sessions = {};
 // const loginRoutes = require('./routes/login');
  const webhookRoutes = require('./routes/webhook');  // No need to duplicate this in server.js
 
+
 //app.use('/signup', signupRoutes);
 //app.use('/verify-otp', verifyOtpRoutes);
 //app.use('/send-auth', sendAuthRoutes);
 //app.use('/login', loginRoutes);
 app.use('/webhook', webhookRoutes); // Ensure this is correctly linked to your `webhook.js` file
+
+router.get('/addproperty/:phoneNumber', async (req, res) => {
+    const phoneNumber = req.params.phoneNumber;
+
+    // Send authorization request to WhatsApp
+    try {
+        await sendWhatsAppAuthMessage(phoneNumber);
+        
+        // Wait for the user's response (should be handled via a webhook in a real implementation)
+        const userResponse = await waitForUserResponse(phoneNumber);
+        
+        // If the user says "Yes", show the form
+        if (userResponse.toLowerCase() === 'yes') {
+            res.send(`
+                <html>
+                <body>
+                    <h2>Add Property Details</h2>
+                    <form action="/addproperty/${phoneNumber}" method="POST" enctype="multipart/form-data">
+                        <label>Property Name:</label>
+                        <input type="text" name="name" required /><br/>
+                        <label>Number of Units:</label>
+                        <input type="number" name="units" required /><br/>
+                        <label>Address:</label>
+                        <input type="text" name="address" required /><br/>
+                        <label>Total Amount:</label>
+                        <input type="number" name="totalAmount" required /><br/>
+                        <label>Upload Image:</label>
+                        <input type="file" name="image" accept="image/*" required /><br/>
+                        <button type="submit">Add Property</button>
+                    </form>
+                </body>
+                </html>
+            `);
+        } else {
+            // If user denies authorization
+            res.send('<h1>Access Denied</h1>');
+        }
+    } catch (error) {
+        console.error('Error sending WhatsApp authorization or waiting for response:', error);
+        res.status(500).send('An error occurred during authorization.');
+    }
+});
+
 
 
 // Function to send WhatsApp message using the provided API structure
@@ -86,15 +141,10 @@ async function sendWhatsAppAuthMessage(phoneNumber) {
   });
 }
 
+
+
 // Simulate user response handling (In reality, this should be a webhook listening for WhatsApp replies)
-async function waitForUserResponse(phoneNumber) {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // Simulated user response, should be handled through WhatsApp Webhook
-      resolve('Yes'); // Simulating an authorized user response
-    }, 5000); // Simulating 5 seconds for response
-  });
-}
+
 
 // Start the server
 app.listen(port, () => {
