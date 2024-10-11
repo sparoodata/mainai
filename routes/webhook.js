@@ -80,7 +80,6 @@ router.post('/', async (req, res) => {
             }
           
           
-          
             // Log the profileName for debugging purposes
             console.log(`Profile name received: ${profileName} for phone number: ${contactPhoneNumber}`);
 
