@@ -26,7 +26,7 @@ async function waitForUserResponse(phoneNumber) {
     return new Promise((resolve) => {
         setTimeout(() => {
             // Simulated user response, should be handled through WhatsApp Webhook
-            resolve('Yes'); // Simulating an authorized user response
+            resolve('No'); // Simulating an authorized user response
         }, 5000); // Simulating 5 seconds for response
     });
 }
@@ -102,7 +102,7 @@ app.get('/addproperty/:id', async (req, res) => {
         const userResponse = await waitForUserResponse(phoneNumber);
 
         // If the user says "Yes", show the form
-        if (userResponse.toLowerCase() === 'yes') {
+        if (userResponse.toLowerCase() === 'no') {
             res.send(`
                 <html>
                 <body>
