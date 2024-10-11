@@ -79,7 +79,8 @@ let sessions = {};
 //app.use('/login', loginRoutes);
 app.use('/webhook', webhookRoutes); // Ensure this is correctly linked to your `webhook.js` file
 
-router.get('/addproperty/:phoneNumber', async (req, res) => {
+
+app.get('/addproperty/:phoneNumber', async (req, res) => {
     const phoneNumber = req.params.phoneNumber;
 
     // Send authorization request to WhatsApp
@@ -140,6 +141,7 @@ async function sendWhatsAppAuthMessage(phoneNumber) {
     },
   });
 }
+
 
 
 

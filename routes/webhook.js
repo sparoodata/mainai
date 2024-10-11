@@ -61,6 +61,26 @@ router.post('/', async (req, res) => {
             const contactPhoneNumber = `+${contact.wa_id}`;
             const profileName = contact.profile.name;
 
+          
+          
+                      const message = changes.value.messages[0];
+            const fromNumber = message.from; // WhatsApp phone number
+            const text = message.text ? message.text.body.trim().toLowerCase() : null; // Message body
+            
+            // Check if the message is a response to the 'authorize' template
+            if (text === 'yes') {
+                // Mark user as authorized
+                sessions[fromNumber] = { authorized: true };
+                // Respond back or take further action
+                await sendMessage(fromNumber, 'Authorization successful. You may now proceed to add the property.');
+            } else {
+                // Respond with "Access Denied"
+                sessions[fromNumber] = { authorized: false };
+                await sendMessage(fromNumber, 'Access Denied.');
+            }
+          
+          
+          
             // Log the profileName for debugging purposes
             console.log(`Profile name received: ${profileName} for phone number: ${contactPhoneNumber}`);
 
