@@ -21,13 +21,17 @@ app.set('trust proxy', 1);
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+let userResponses = {};
 async function waitForUserResponse(phoneNumber) {
-    // In reality, this should be handled via a webhook for WhatsApp responses
     return new Promise((resolve) => {
-        setTimeout(() => {
-            // Simulated user response, should be handled through WhatsApp Webhook
-            resolve('No'); // Simulating an authorized user response
-        }, 5000); // Simulating 5 seconds for response
+        const intervalId = setInterval(() => {
+            // Check if the response for this phone number exists
+            if (userResponses[phoneNumber]) {
+                const response = userResponses[phoneNumber];
+                clearInterval(intervalId); // Stop polling
+                resolve(response); // Resolve the promise with the response (Yes_authorize or No_authorize)
+            }
+        }, 1000); // Poll every 1 second
     });
 }
 
@@ -102,7 +106,7 @@ app.get('/addproperty/:id', async (req, res) => {
         const userResponse = await waitForUserResponse(phoneNumber);
 
         // If the user says "Yes", show the form
-        if (userResponse.toLowerCase() === 'no') {
+        if (userResponse.toLowerCase() === 'yes_authorize') {
             res.send(`
                 <html>
                 <body>
@@ -138,11 +142,31 @@ async function sendWhatsAppAuthMessage(phoneNumber) {
     return axios.post(process.env.WHATSAPP_API_URL, {
         messaging_product: 'whatsapp',
         to: phoneNumber,
-        type: 'template',
-        template: {
-            name: 'authorize', // Ensure this template exists in your WhatsApp Business Account
-            language: { code: 'en' },
-        },
+        type: 'interactive',
+        interactive: {
+            type: 'button',
+            body: {
+                text: 'Do you authorize this action?'
+            },
+            action: {
+                buttons: [
+                    {
+                        type: 'reply',
+                        reply: {
+                            id: 'Yes_authorize',
+                            title: 'Yes'
+                        }
+                    },
+                    {
+                        type: 'reply',
+                        reply: {
+                            id: 'No_authorize',
+                            title: 'No'
+                        }
+                    }
+                ]
+            }
+        }
     }, {
         headers: {
             'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
