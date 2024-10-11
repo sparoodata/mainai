@@ -95,128 +95,102 @@ const propertySchema = new mongoose.Schema({
 
 const Property = mongoose.model('Property', propertySchema);
 
-app.get('/addproperty/:phoneNumber', async (req, res) => {
-  const phoneNumber = req.params.phoneNumber;
+// Add a route to check authentication status
+app.get('/authstatus/:phoneNumber', (req, res) => {
+    const phoneNumber = req.params.phoneNumber;
+    const session = sessions[phoneNumber];
 
-  // Display waiting for authentication message
-  res.send(`
-    <!DOCTYPE html>
-    <html lang="en">
-      <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Waiting for Authentication</title>
-        <style>
-          body, html {
-            height: 100%;
-            margin: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-family: Arial, sans-serif;
-            background-color: #f0f0f0;
-          }
-          .container {
-            text-align: center;
-            background-color: white;
-            padding: 50px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            border-radius: 8px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <h1>Waiting for WhatsApp Authentication</h1>
-          <p>Please respond to the WhatsApp message we sent to proceed.</p>
-        </div>
-      </body>
-    </html>
-  `);
-
-  try {
-    const response = await sendWhatsAppAuthMessage(phoneNumber);
-
-    // Simulate waiting for user response
-    const userResponse = await waitForUserResponse(phoneNumber);
-
-    if (userResponse === 'Yes') {
-      // If authorized, load form
-      res.send(`
-        <!DOCTYPE html>
-        <html lang="en">
-          <head>
-            <meta charset="UTF-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-            <title>Add Property</title>
-            <style>
-              body, html {
-                height: 100%;
-                margin: 0;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                font-family: Arial, sans-serif;
-                background-color: #f0f0f0;
-              }
-              .container {
-                text-align: center;
-                background-color: white;
-                padding: 50px;
-                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-                border-radius: 8px;
-              }
-              form {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-              }
-              label {
-                font-weight: bold;
-                margin-top: 10px;
-                display: block;
-              }
-              input, button {
-                margin-top: 10px;
-                padding: 8px;
-                width: 100%;
-                max-width: 300px;
-                box-sizing: border-box;
-              }
-              button {
-                background-color: #4CAF50;
-                color: white;
-                border: none;
-                cursor: pointer;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <h1>Add Your Property</h1>
-              <form action="/submitproperty" method="POST" enctype="multipart/form-data">
-                <label for="propertyname">Property Name:</label>
-                <input type="text" id="propertyname" name="propertyname" required />
-                <label for="address">Address:</label>
-                <input type="text" id="address" name="address" required />
-                <label for="image">Upload Apartment Image:</label>
-                <input type="file" id="image" name="image" accept="image/*" required />
-                <label for="units">Number of Units:</label>
-                <input type="number" id="units" name="units" required />
-                <button type="submit">Submit</button>
-              </form>
-            </div>
-          </body>
-        </html>
-      `);
+    if (session && session.status === 'authenticated') {
+        res.json({ authorized: true });
     } else {
-      res.status(401).send('Unauthorized');
+        res.json({ authorized: false });
     }
-  } catch (error) {
-    console.error('Error sending WhatsApp message:', error);
-    res.status(500).send('Something went wrong');
-  }
 });
+
+// Simulate user response handling (In reality, this should be a webhook listening for WhatsApp replies)
+async function waitForUserResponse(phoneNumber) {
+    return new Promise((resolve) => {
+        setTimeout(() => {
+            // Simulated user response, should be handled through WhatsApp Webhook
+            sessions[phoneNumber] = { status: 'authenticated' }; // Set status to 'authenticated'
+            resolve('Yes'); // Simulating an authorized user response
+        }, 5000); // Simulating 5 seconds for response
+    });
+}
+
+// Route to display the form if the user is authorized
+app.get('/getpropertyform/:phoneNumber', (req, res) => {
+    const phoneNumber = req.params.phoneNumber;
+
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>Add Property</title>
+          <style>
+            body, html {
+              height: 100%;
+              margin: 0;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              font-family: Arial, sans-serif;
+              background-color: #f0f0f0;
+            }
+            .container {
+              text-align: center;
+              background-color: white;
+              padding: 50px;
+              box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+              border-radius: 8px;
+            }
+            form {
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+            }
+            label {
+              font-weight: bold;
+              margin-top: 10px;
+              display: block;
+            }
+            input, button {
+              margin-top: 10px;
+              padding: 8px;
+              width: 100%;
+              max-width: 300px;
+              box-sizing: border-box;
+            }
+            button {
+              background-color: #4CAF50;
+              color: white;
+              border: none;
+              cursor: pointer;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Add Your Property</h1>
+            <form action="/submitproperty" method="POST" enctype="multipart/form-data">
+              <label for="propertyname">Property Name:</label>
+              <input type="text" id="propertyname" name="propertyname" required />
+              <label for="address">Address:</label>
+              <input type="text" id="address" name="address" required />
+              <label for="image">Upload Apartment Image:</label>
+              <input type="file" id="image" name="image" accept="image/*" required />
+              <label for="units">Number of Units:</label>
+              <input type="number" id="units" name="units" required />
+              <button type="submit">Submit</button>
+            </form>
+          </div>
+        </body>
+      </html>
+    `);
+});
+
 
 app.post('/submitproperty', async (req, res) => {
   const { propertyname, address, units } = req.body;
@@ -256,15 +230,7 @@ async function sendWhatsAppAuthMessage(phoneNumber) {
   });
 }
 
-// Simulate user response handling (In reality, this should be a webhook listening for WhatsApp replies)
-async function waitForUserResponse(phoneNumber) {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // Simulated user response, should be handled through WhatsApp Webhook
-      resolve('Yes'); // Simulating an authorized user response
-    }, 5000); // Simulating 5 seconds for response
-  });
-}
+
 
 // Start the server
 app.listen(port, () => {

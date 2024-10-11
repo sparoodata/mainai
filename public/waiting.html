@@ -12,7 +12,7 @@
         const response = await fetch(`/authstatus/${phoneNumber}`);
         const data = await response.json();
         if (data.authorized) {
-          window.location.href = `/getpropertyform/${phoneNumber}`;
+          window.location.href = `/getpropertyform/${phoneNumber}`; // Redirect to form if authorized
         } else {
           setTimeout(checkAuthStatus, 5000); // Poll every 5 seconds
         }
