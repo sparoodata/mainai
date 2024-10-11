@@ -532,10 +532,105 @@ async function sendTenantOptions(phoneNumber) {
     });
 }
 
-// Send the property/unit/tenant link
-async function sendPropertyLink(phoneNumber, action) {
-    const longUrl = `${GLITCH_HOST}/${action}/${phoneNumber}`;
-    const shortUrl = await shortenUrl(longUrl); // Get the shortened URL
-    await sendMessage(phoneNumber, `Proceed: ${shortUrl}`);
+
+
+const Authorize = require('../models/Authorize'); // Assuming the Authorize model
+
+// Helper function to send WhatsApp message with template
+async function sendAuthorizationTemplate(phoneNumber, authorizeId) {
+    const templateMessage = {
+        messaging_product: 'whatsapp',
+        to: phoneNumber,
+        type: 'template',
+        template: {
+            name: 'authorize', // Assuming you have a template named 'authorize'
+            language: { code: 'en' }, // Adjust language code as per template
+            components: [
+                {
+                    type: 'body',
+                    parameters: [
+                        { type: 'text', text: 'Yes' },
+                        { type: 'text', text: 'No' }
+                    ]
+                }
+            ]
+        }
+    };
+
+    // Send the WhatsApp message with template
+    await axios.post(WHATSAPP_API_URL, templateMessage, {
+        headers: {
+            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json'
+        }
+    });
+
+    console.log(`Authorization template sent to ${phoneNumber}`);
 }
+
+// Handler for WhatsApp Webhook event
+router.post('/', async (req, res) => {
+    const body = req.body;
+
+    if (body.object === 'whatsapp_business_account') {
+        const entry = body.entry[0];
+        const changes = entry.changes[0];
+
+        if (changes.value.contacts) {
+            const contact = changes.value.contacts[0];
+            const phoneNumber = `+${contact.wa_id}`;
+
+            // Create or update authorization entry
+            let authorizeEntry = await Authorize.findOne({ phoneNumber });
+            if (!authorizeEntry) {
+                authorizeEntry = new Authorize({ phoneNumber });
+                await authorizeEntry.save();
+            }
+
+            // Send the authorization template with buttons (Yes/No)
+            await sendAuthorizationTemplate(phoneNumber, authorizeEntry._id);
+        }
+
+        // Handling response from WhatsApp after user clicks Yes/No
+        if (changes.value.messages) {
+            const message = changes.value.messages[0];
+            const fromNumber = `+${message.from}`;
+            const interactive = message.interactive || null;
+
+            if (interactive) {
+                const selectedOption = interactive.button_reply.title.toLowerCase();
+                const authorizeEntry = await Authorize.findOne({ phoneNumber: fromNumber });
+
+                if (authorizeEntry) {
+                    if (selectedOption === 'yes') {
+                        authorizeEntry.status = 'Yes';
+                        await authorizeEntry.save();
+
+                        // Send property creation form link
+                        const longUrl = `${GLITCH_HOST}/addproperty/${authorizeEntry._id}`;
+                        const shortUrl = await shortenUrl(longUrl);
+                        await sendMessage(fromNumber, `Please proceed with adding the property: ${shortUrl}`);
+
+                        console.log(`Authorization approved for ${fromNumber}. Link sent.`);
+                    } else if (selectedOption === 'no') {
+                        authorizeEntry.status = 'No';
+                        await authorizeEntry.save();
+                        await sendMessage(fromNumber, 'Authorization denied.');
+                    }
+                }
+            }
+        }
+    }
+
+    res.sendStatus(200);
+});
+
+
+
+// Send the property/unit/tenant link
+// async function sendPropertyLink(phoneNumber, action) {
+//    const longUrl = `${GLITCH_HOST}/${action}/${phoneNumber}`;
+//    const shortUrl = await shortenUrl(longUrl); // Get the shortened URL
+//    await sendMessage(phoneNumber, `Proceed: ${shortUrl}`);
+// }
 module.exports = router;
