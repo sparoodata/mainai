@@ -73,26 +73,23 @@ app.use('/webhook', webhookRoutes); // Ensure this is correctly linked to your `
 
 const Authorize = require('./models/Authorize'); // Import the Authorize model
 
+const { waitForUserResponse } = require('./routes/webhook'); // Import the function
+console.log(waitForUserResponse);
 app.get('/addproperty/:id', async (req, res) => {
     const id = req.params.id;
 
     try {
-        // Find the authorization record by _id
         const authorizeRecord = await Authorize.findById(id);
-        
         if (!authorizeRecord) {
             return res.status(404).send('Authorization record not found.');
         }
 
         const phoneNumber = authorizeRecord.phoneNumber; // Get the phone number from the record
 
-        // Send authorization request to WhatsApp
         await sendWhatsAppAuthMessage(phoneNumber);
         
-        // Wait for the user's response (this would be handled via a webhook)
-        const userResponse = await waitForUserResponse(phoneNumber);
+        const userResponse = await waitForUserResponse(phoneNumber); // This should now work
 
-        // If the user says "Yes_authorize", show the form
         if (userResponse.toLowerCase() === 'yes_authorize') {
             res.send(`
                 <html>
@@ -122,6 +119,7 @@ app.get('/addproperty/:id', async (req, res) => {
         res.status(500).send('An error occurred during authorization.');
     }
 });
+
 // Simulate user response handling (In reality, this should be a webhook listening for WhatsApp replies)
 async function sendWhatsAppAuthMessage(phoneNumber) {
     return axios.post(process.env.WHATSAPP_API_URL, {
