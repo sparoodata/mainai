@@ -588,6 +588,7 @@ async function sendPropertyLink(phoneNumber, action) {
 // Function to send WhatsApp message using the provided API structure
 
 
-
-module.exports = { waitForUserResponse };
-module.exports = router;
+module.exports = {
+    router,
+    waitForUserResponse,
+};
