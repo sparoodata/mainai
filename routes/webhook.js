@@ -589,7 +589,5 @@ async function sendPropertyLink(phoneNumber, action) {
 
 
 
-module.exports = {
-    router,
-    waitForUserResponse,
-};
+module.exports = { waitForUserResponse };
+module.exports = router;
