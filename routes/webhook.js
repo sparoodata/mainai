@@ -49,7 +49,7 @@ router.get('/', (req, res) => {
 router.post('/', async (req, res) => {
     const body = req.body;
 
-    console.log('Webhook received:', JSON.stringify(body, null, 2));
+  //console.log('Webhook received:', JSON.stringify(body, null, 2));
 
     // Check if this is an event from WhatsApp Business API
     if (body.object === 'whatsapp_business_account') {
@@ -589,5 +589,7 @@ async function sendPropertyLink(phoneNumber, action) {
 
 
 
-module.exports = { waitForUserResponse };
-module.exports = router;
+module.exports = {
+    router,
+    waitForUserResponse,
+};

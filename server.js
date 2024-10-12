@@ -61,8 +61,7 @@ let sessions = {};
 // const verifyOtpRoutes = require('./routes/verify-otp');
 // const sendAuthRoutes = require('./routes/send-auth');
 // const loginRoutes = require('./routes/login');
- const webhookRoutes = require('./routes/webhook');  // No need to duplicate this in server.js
-
+const { webhookRoutes, waitForUserResponse } = require('./routes/webhook');
 
 //app.use('/signup', signupRoutes);
 //app.use('/verify-otp', verifyOtpRoutes);
@@ -73,7 +72,6 @@ app.use('/webhook', webhookRoutes); // Ensure this is correctly linked to your `
 
 const Authorize = require('./models/Authorize'); // Import the Authorize model
 
-const { waitForUserResponse } = require('./routes/webhook'); // Import the function
 console.log(waitForUserResponse);
 app.get('/addproperty/:id', async (req, res) => {
     const id = req.params.id;
