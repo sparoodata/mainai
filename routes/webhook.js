@@ -109,6 +109,14 @@ router.post('/', async (req, res) => {
             const text = message.text ? message.text.body.trim() : null; // Message body
             const interactive = message.interactive || null; // For interactive messages (list/button)
 
+          
+          if (interactive && interactive.type === 'button_reply') {
+         //   let userResponses = {}; 
+                const buttonReplyId = interactive.button_reply.id; // e.g., 'Yes_authorize' or 'No_authorize'
+                 console.log(buttonReplyId);
+                // Store the response in the in-memory object
+                userResponses[fromNumber] = buttonReplyId;
+          }
             // Initialize session if not existing
             if (!sessions[fromNumber]) {
                 sessions[fromNumber] = { action: null };
@@ -328,6 +336,21 @@ async function sendMessage(phoneNumber, message) {
     });
 }
 
+
+let userResponses = {};
+async function waitForUserResponse(phoneNumber) {
+  
+    return new Promise((resolve) => {
+        const intervalId = setInterval(() => {
+            // Check if the response for this phone number exists
+            if (userResponses[phoneNumber]) {
+                const response = userResponses[phoneNumber];
+                clearInterval(intervalId); // Stop polling
+                resolve(response); // Resolve the promise with the response (Yes_authorize or No_authorize)
+            }
+        }, 1000); // Poll every 1 second
+    });
+}
 // Helper function to send the manage submenu
 async function sendManageSubmenu(phoneNumber) {
     const buttonMenu = {

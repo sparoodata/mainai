@@ -21,7 +21,6 @@ app.set('trust proxy', 1);
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-let userResponses = {};
 async function waitForUserResponse(phoneNumber) {
     return new Promise((resolve) => {
         const intervalId = setInterval(() => {
