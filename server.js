@@ -61,13 +61,13 @@ let sessions = {};
 // const verifyOtpRoutes = require('./routes/verify-otp');
 // const sendAuthRoutes = require('./routes/send-auth');
 // const loginRoutes = require('./routes/login');
-const { webhookRoutes, waitForUserResponse } = require('./routes/webhook');
+const { router, waitForUserResponse } = require('./routes/webhook');
 
 //app.use('/signup', signupRoutes);
 //app.use('/verify-otp', verifyOtpRoutes);
 //app.use('/send-auth', sendAuthRoutes);
 //app.use('/login', loginRoutes);
-app.use('/webhook', webhookRoutes); // Ensure this is correctly linked to your `webhook.js` file
+app.use('/webhook', router); // Ensure this is correctly linked to your `webhook.js` file
 
 
 const Authorize = require('./models/Authorize'); // Import the Authorize model
