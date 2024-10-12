@@ -11,6 +11,7 @@ const GLITCH_HOST = process.env.GLITCH_HOST; // Your Glitch project URL
 
 // Session management to track user interactions
 const sessions = {}; // This will track the state of each user's session
+let userResponses = {}; 
 
 async function shortenUrl(longUrl) {
     try {
@@ -337,7 +338,6 @@ async function sendMessage(phoneNumber, message) {
 }
 
 
-let userResponses = {};
 async function waitForUserResponse(phoneNumber) {
   
     return new Promise((resolve) => {
@@ -582,6 +582,12 @@ async function sendPropertyLink(phoneNumber, action) {
         await sendMessage(phoneNumber, 'Failed to retrieve authorization record. Please try again.');
     }
 }
+
+
+
+// Function to send WhatsApp message using the provided API structure
+
+
 
 
 module.exports = router;

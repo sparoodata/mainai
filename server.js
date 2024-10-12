@@ -21,18 +21,6 @@ app.set('trust proxy', 1);
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-async function waitForUserResponse(phoneNumber) {
-    return new Promise((resolve) => {
-        const intervalId = setInterval(() => {
-            // Check if the response for this phone number exists
-            if (userResponses[phoneNumber]) {
-                const response = userResponses[phoneNumber];
-                clearInterval(intervalId); // Stop polling
-                resolve(response); // Resolve the promise with the response (Yes_authorize or No_authorize)
-            }
-        }, 1000); // Poll every 1 second
-    });
-}
 
 // MongoDB connection
 mongoose.connect(process.env.MONGODB_URI, {
@@ -104,7 +92,7 @@ app.get('/addproperty/:id', async (req, res) => {
         // Wait for the user's response (this would be handled via a webhook)
         const userResponse = await waitForUserResponse(phoneNumber);
 
-        // If the user says "Yes", show the form
+        // If the user says "Yes_authorize", show the form
         if (userResponse.toLowerCase() === 'yes_authorize') {
             res.send(`
                 <html>
@@ -127,7 +115,6 @@ app.get('/addproperty/:id', async (req, res) => {
                 </html>
             `);
         } else {
-            // If the user denies authorization
             res.send('<h1>Access Denied</h1>');
         }
     } catch (error) {
@@ -135,8 +122,7 @@ app.get('/addproperty/:id', async (req, res) => {
         res.status(500).send('An error occurred during authorization.');
     }
 });
-
-// Function to send WhatsApp message using the provided API structure
+// Simulate user response handling (In reality, this should be a webhook listening for WhatsApp replies)
 async function sendWhatsAppAuthMessage(phoneNumber) {
     return axios.post(process.env.WHATSAPP_API_URL, {
         messaging_product: 'whatsapp',
@@ -173,10 +159,6 @@ async function sendWhatsAppAuthMessage(phoneNumber) {
         },
     });
 }
-
-
-
-// Simulate user response handling (In reality, this should be a webhook listening for WhatsApp replies)
 
 
 // Start the server
