@@ -81,16 +81,27 @@ app.get('/addproperty/:id', async (req, res) => {
     const pollAuthorizationStatus = async () => {
         try {
             console.log("Polling started...");
-            const response = await fetch('/checkAuthorization/${id}');
-            const result = await response.json();
-            console.log("Polling result:", result);
-            console.log(result.status);
+            const response = await fetch('/checkAuthorization/${id}', {
+                headers: { 'Accept': 'application/json' } // Request JSON response
+            });
 
-            if (result.status === 'authorized') {
-                console.log("Authorization successful, reloading page...");
-                window.location.reload();
-            } else if (result.status === 'waiting') {
-                console.log("Still waiting for authorization...");
+            // Check if the response is JSON (status checking)
+            const contentType = response.headers.get("content-type");
+
+            if (contentType && contentType.indexOf("application/json") !== -1) {
+                const result = await response.json();
+                console.log("Polling result:", result);
+
+                if (result.status === 'authorized') {
+                    console.log("Authorization successful, reloading page...");
+                    window.location.reload();  // Page reload to show form when authorized
+                } else if (result.status === 'waiting') {
+                    console.log("Still waiting for authorization...");
+                }
+            } else {
+                // If the response is not JSON (it's likely the HTML form), stop polling
+                console.log("Received HTML form, stopping polling...");
+                document.documentElement.innerHTML = await response.text(); // Replace the current page with the HTML form
             }
         } catch (error) {
             console.error('Error checking authorization status:', error);
@@ -119,16 +130,18 @@ app.get('/checkAuthorization/:id', async (req, res) => {
         // Find the authorization record
         const authorizeRecord = await Authorize.findById(id);
         if (!authorizeRecord) {
-            return res.status(404).json({ status: 'not_found' });
+            return res.status(404).send('Authorization record not found.');
         }
 
         const phoneNumber = authorizeRecord.phoneNumber;
 
         // Check if the user response was 'Yes_authorize'
         const userResponse = await waitForUserResponse(phoneNumber);
+        console.log(`User response for ${phoneNumber}:`, userResponse);
 
         if (userResponse && userResponse.toLowerCase() === 'yes_authorize') {
-            // Clear the response after successful authorization to prevent repeated checks
+            console.log("User authorized the action.");
+            // Clear the response after successful authorization
             delete userResponses[phoneNumber];
 
             // Render the HTML form for adding the property
@@ -139,29 +152,26 @@ app.get('/checkAuthorization/:id', async (req, res) => {
                     <form action="/addproperty/${id}" method="POST">
                         <label for="property_name">Property Name:</label>
                         <input type="text" id="property_name" name="property_name" required><br><br>
+
                         <label for="units">Number of Units:</label>
                         <input type="number" id="units" name="units" required><br><br>
+
                         <label for="image">Property Image URL:</label>
-                        <input type="url" id="image" name="image"><br><br>
+                        <input type="url" id="image" name="image" required><br><br>
+
                         <button type="submit">Submit</button>
                     </form>
                 </body>
                 </html>
             `);
         } else {
-            res.json({ status: 'waiting' });
+            console.log("Still waiting for authorization.");
+            return res.json({ status: 'waiting' });
         }
     } catch (error) {
         console.error('Error checking authorization status:', error);
-        res.status(500).json({ status: 'error' });
+        res.status(500).send('An error occurred while checking authorization.');
     }
-});
-
-// POST route to handle the form submission after authorization
-app.post('/addproperty/:id', async (req, res) => {
-    // Your form submission logic here
-    // You can access form data via req.body (e.g., req.body.name, req.body.units, etc.)
-    res.send('Property added successfully!');
 });
 
 // Function to send WhatsApp message for authorization
