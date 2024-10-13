@@ -11,8 +11,9 @@ const GLITCH_HOST = process.env.GLITCH_HOST; // Your Glitch project URL
 
 // Session management to track user interactions
 const sessions = {}; // This will track the state of each user's session
-let userResponses = {}; 
+let userResponses = {}; // Store user responses for buttons like 'Yes_authorize'
 
+// Helper function to shorten URLs
 async function shortenUrl(longUrl) {
     try {
         const response = await axios.post('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(longUrl));
@@ -25,16 +26,12 @@ async function shortenUrl(longUrl) {
 
 // Webhook verification for WhatsApp API
 router.get('/', (req, res) => {
-    const VERIFY_TOKEN = process.env.VERIFY_TOKEN; // Your WhatsApp verification token
-
-    // Parse query parameters
+    const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
 
-    // Check if mode and token are present
     if (mode && token) {
-        // Verify the token matches
         if (mode === 'subscribe' && token === VERIFY_TOKEN) {
             console.log('Webhook verified successfully');
             res.status(200).send(challenge);
@@ -49,8 +46,6 @@ router.get('/', (req, res) => {
 router.post('/', async (req, res) => {
     const body = req.body;
 
-  //console.log('Webhook received:', JSON.stringify(body, null, 2));
-
     // Check if this is an event from WhatsApp Business API
     if (body.object === 'whatsapp_business_account') {
         const entry = body.entry[0];
@@ -62,25 +57,6 @@ router.post('/', async (req, res) => {
             const contactPhoneNumber = `+${contact.wa_id}`;
             const profileName = contact.profile.name;
 
-          
-          
-                      const message = changes.value.messages[0];
-            const fromNumber = message.from; // WhatsApp phone number
-            const text = message.text ? message.text.body.trim().toLowerCase() : null; // Message body
-            
-            // Check if the message is a response to the 'authorize' template
-            if (text === 'yes') {
-                // Mark user as authorized
-                sessions[fromNumber] = { authorized: true };
-                // Respond back or take further action
-                await sendMessage(fromNumber, 'Authorization successful. You may now proceed to add the property.');
-            } else {
-                // Respond with "Access Denied"
-                sessions[fromNumber] = { authorized: false };
-                await sendMessage(fromNumber, 'Access Denied.');
-            }
-          
-          
             // Log the profileName for debugging purposes
             console.log(`Profile name received: ${profileName} for phone number: ${contactPhoneNumber}`);
 
@@ -110,14 +86,15 @@ router.post('/', async (req, res) => {
             const text = message.text ? message.text.body.trim() : null; // Message body
             const interactive = message.interactive || null; // For interactive messages (list/button)
 
-          
-          if (interactive && interactive.type === 'button_reply') {
-         //   let userResponses = {}; 
+            // Handle interactive button reply
+            if (interactive && interactive.type === 'button_reply') {
                 const buttonReplyId = interactive.button_reply.id; // e.g., 'Yes_authorize' or 'No_authorize'
-                 console.log(buttonReplyId);
+                console.log(`Button reply received: ${buttonReplyId} from ${fromNumber}`);
+
                 // Store the response in the in-memory object
                 userResponses[fromNumber] = buttonReplyId;
-          }
+            }
+
             // Initialize session if not existing
             if (!sessions[fromNumber]) {
                 sessions[fromNumber] = { action: null };
@@ -337,20 +314,19 @@ async function sendMessage(phoneNumber, message) {
     });
 }
 
-
+// Helper function to wait for the user response
 async function waitForUserResponse(phoneNumber) {
-  
     return new Promise((resolve) => {
         const intervalId = setInterval(() => {
-            // Check if the response for this phone number exists
             if (userResponses[phoneNumber]) {
                 const response = userResponses[phoneNumber];
-                clearInterval(intervalId); // Stop polling
-                resolve(response); // Resolve the promise with the response (Yes_authorize or No_authorize)
+                clearInterval(intervalId);
+                resolve(response);
             }
-        }, 1000); // Poll every 1 second
+        }, 1000); // Poll every second
     });
 }
+
 // Helper function to send the manage submenu
 async function sendManageSubmenu(phoneNumber) {
     const buttonMenu = {
@@ -555,8 +531,6 @@ async function sendTenantOptions(phoneNumber) {
     });
 }
 
-
-
 const Authorize = require('../models/Authorize'); // Assuming you have an Authorize model
 
 // Send the property/unit/tenant link with _id from 'authorizes' collection
@@ -582,11 +556,6 @@ async function sendPropertyLink(phoneNumber, action) {
         await sendMessage(phoneNumber, 'Failed to retrieve authorization record. Please try again.');
     }
 }
-
-
-
-// Function to send WhatsApp message using the provided API structure
-
 
 module.exports = {
     router,
