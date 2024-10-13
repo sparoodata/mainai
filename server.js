@@ -110,9 +110,9 @@ app.get('/checkAuthorization/:id', async (req, res) => {
         const phoneNumber = authorizeRecord.phoneNumber;
 
         // Check if the user response was 'Yes_authorize'
-        const userResponse = await waitForUserResponse(phoneNumber);
+        const userResponses = await waitForUserResponse(phoneNumber);
 
-        if (userResponse && userResponse.toLowerCase() === 'yes_authorize') {
+        if (userResponses && userResponses.toLowerCase() === 'yes_authorize') {
             // Clear the response after successful authorization to prevent repeated checks
             delete userResponses[phoneNumber];
 
