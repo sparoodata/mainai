@@ -71,22 +71,35 @@ app.get('/addproperty/:id', async (req, res) => {
         // Send the WhatsApp authorization message
         await sendWhatsAppAuthMessage(phoneNumber);
 
-        // Initially respond with a "waiting" message
+        // Respond with an HTML page that includes the client-side polling script
         res.send(`
             <html>
             <body>
                 <h2>Waiting for authorization from WhatsApp...</h2>
                 <p>Please authorize the action in WhatsApp to proceed with adding the property.</p>
-                <script>
-                    // Poll the server every 5 seconds to check for authorization status
-                    setInterval(async () => {
-                        const response = await fetch('/checkAuthorization/${id}');
-                        const result = await response.json();
-                        if (result.status === 'authorized') {
-                            window.location.reload(); // Reload the page to show the form
-                        }
-                    }, 5000);
-                </script>
+       <script>
+    const pollAuthorizationStatus = async () => {
+        try {
+            console.log("Polling started...");
+            const response = await fetch('/checkAuthorization/${id}');
+            const result = await response.json();
+            console.log("Polling result:", result);
+
+            if (result.status === 'authorized') {
+                console.log("Authorization successful, reloading page...");
+                window.location.reload();
+            } else if (result.status === 'waiting') {
+                console.log("Still waiting for authorization...");
+            }
+        } catch (error) {
+            console.error('Error checking authorization status:', error);
+        }
+    };
+
+    // Set the polling interval to run every 5 seconds
+    setInterval(pollAuthorizationStatus, 5000);
+</script>
+
             </body>
             </html>
         `);
