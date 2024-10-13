@@ -84,6 +84,7 @@ app.get('/addproperty/:id', async (req, res) => {
             const response = await fetch('/checkAuthorization/${id}');
             const result = await response.json();
             console.log("Polling result:", result);
+            console.log(result.status);
 
             if (result.status === 'authorized') {
                 console.log("Authorization successful, reloading page...");
