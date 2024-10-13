@@ -145,25 +145,33 @@ app.get('/checkAuthorization/:id', async (req, res) => {
             delete userResponses[phoneNumber];
 
             // Render the HTML form for adding the property
-            res.send(`
-                <html>
-                <body>
-                    <h2>Authorization successful! Add your property below:</h2>
-                    <form action="/addproperty/${id}" method="POST">
-                        <label for="property_name">Property Name:</label>
-                        <input type="text" id="property_name" name="property_name" required><br><br>
+// Add enctype for file upload in the form
+res.send(`
+    <html>
+    <body>
+        <h2>Authorization successful! Add your property below:</h2>
+        <form action="/addproperty/${id}" method="POST" enctype="multipart/form-data">
+            <label for="property_name">Property Name:</label>
+            <input type="text" id="property_name" name="property_name" required><br><br>
 
-                        <label for="units">Number of Units:</label>
-                        <input type="number" id="units" name="units" required><br><br>
+            <label for="units">Number of Units:</label>
+            <input type="number" id="units" name="units" required><br><br>
 
-                        <label for="image">Property Image URL:</label>
-                        <input type="url" id="image" name="image" required><br><br>
+            <label for="address">Address:</label>
+            <input type="text" id="address" name="address" required><br><br>
 
-                        <button type="submit">Submit</button>
-                    </form>
-                </body>
-                </html>
-            `);
+            <label for="totalAmount">Total Amount:</label>
+            <input type="number" id="totalAmount" name="totalAmount" required><br><br>
+
+            <label for="image">Property Image:</label>
+            <input type="file" id="image" name="image" required><br><br>
+
+            <button type="submit">Submit</button>
+        </form>
+    </body>
+    </html>
+`);
+
         } else {
             console.log("Still waiting for authorization.");
             return res.json({ status: 'waiting' });
@@ -173,6 +181,62 @@ app.get('/checkAuthorization/:id', async (req, res) => {
         res.status(500).send('An error occurred while checking authorization.');
     }
 });
+
+
+const multer = require('multer');
+const Image = require('./models/Image'); // Import Image model
+const Property = require('./models/Property'); // Import Property model
+
+// Configure multer for image uploads
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/'); // Folder where images will be saved
+    },
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + '-' + file.originalname); // Unique file names
+    }
+});
+
+const upload = multer({ storage: storage });
+
+// Handle form submission and image upload
+app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
+    const { property_name, units, address, totalAmount } = req.body;
+
+    try {
+        // Save the property data to MongoDB
+        const property = new Property({
+            name: property_name,
+            units,
+            address,
+            totalAmount,
+        });
+
+        await property.save();
+
+        // Save the image data to the 'images' collection
+        if (req.file) {
+            const image = new Image({
+                propertyId: property._id,
+                imageUrl: '/uploads/' + req.file.filename,
+                imageName: req.file.originalname,
+            });
+
+            await image.save();
+
+            // Link the image to the property
+            property.images.push(image._id);
+            await property.save();
+        }
+
+        res.send('Property and image added successfully!');
+    } catch (error) {
+        console.error('Error adding property and image:', error);
+        res.status(500).send('An error occurred while adding the property and image.');
+    }
+});
+
+
 
 // Function to send WhatsApp message for authorization
 async function sendWhatsAppAuthMessage(phoneNumber) {
