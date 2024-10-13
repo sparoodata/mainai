@@ -1,150 +1,73 @@
- body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            font-family: 'Roboto', sans-serif;
-            background: linear-gradient(135deg, #1E5799 0%, #2989D8 50%, #207CCA 100%);
-            overflow: hidden;
-        }
+/* General Styles */
+body, html {
+  height: 100%;
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: Arial, sans-serif;
+  background-color: #f0f0f0;
+}
 
-        .container {
-            width: 400px;
-            background: transparent;
-            border-radius: 12px;
-            padding: 0;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-        }
+.container {
+  text-align: center;
+  background-color: white;
+  padding: 50px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  max-width: 500px;
+  width: 100%;
+}
 
-        .toggle-container {
-            display: flex;
-            justify-content: space-between;
-            position: relative;
-            background-color: #f0f0f0;
-            border-radius: 25px;
-            margin: 20px;
-        }
+input, button {
+  margin-top: 10px;
+  padding: 10px;
+  width: 100%;
+  max-width: 300px;
+}
 
-        .toggle-button {
-            width: 50%;
-            text-align: center;
-            padding: 10px;
-            font-size: 1.1rem;
-            font-weight: 500;
-            cursor: pointer;
-            border-radius: 25px;
-            transition: color 0.3s ease;
-            position: relative;
-        }
+button {
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
 
-        .toggle-button.active {
-            background-color: #1E5799;
-            color: white;
-            border-radius: 25px;
-        }
+button:hover {
+  background-color: #45a049;
+}
 
-        .form-container {
-            display: flex;
-            width: 300%;
-            height: calc(100% - 50px);
-            transform: translateX(0);
-            transition: transform 0.6s ease-in-out;
-        }
+/* Mobile Styles */
+@media (max-width: 600px) {
+  .container {
+    padding: 20px;
+    width: 100%;
+    box-shadow: none; /* Remove shadow for mobile to make it cleaner */
+    border-radius: 0; /* Remove border radius for mobile */
+  }
 
-        form {
-            width: 33.33%;
-            padding: 30px 25px;
-            box-sizing: border-box;
-          
-             height: 260px;
+  input, button {
+    max-width: 100%; /* Make inputs/buttons take full width on mobile */
+    padding: 12px;
+    font-size: 1em;
+  }
 
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
+  h2 {
+    font-size: 1.5em; /* Adjust heading size for mobile */
+  }
+}
 
-        input {
-            width: 100%;
-            padding: 12px;
-            margin: 10px 0;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: 1rem;
-            outline: none;
-            box-sizing: border-box;
-            font-weight: 600;
-        }
+/* Extra small devices (phones, less than 400px) */
+@media (max-width: 400px) {
+  h2 {
+    font-size: 1.3em; /* Further adjust heading size for smaller phones */
+  }
 
-        .btn {
-            width: 100%;
-            padding: 12px;
-            margin-top: 15px;
-            background: #1E5799;
-            border: none;
-            color: white;
-            font-size: 1.1rem;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: background 0.3s ease;
-        }
+  input, button {
+    font-size: 0.9em; /* Adjust font size for smaller devices */
+  }
 
-        .btn:hover {
-            background: #1b4a8b;
-        }
-
-        .intl-tel-input {
-            width: 100%;
-            margin: 10px 0;
-            box-sizing: border-box;
-            position: relative;
-            z-index: 1;
-        }
-
-        .intl-tel-input input {
-            width: 100%;
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid #ddd;
-            outline: none;
-            font-size: 1rem;
-            box-sizing: border-box;
-        }
-
-        .intl-tel-input .country-list {
-            z-index: 1000;
-            position: absolute;
-            overflow: visible;
-        }
-
-        .otp-inputs {
-            display: flex;
-            justify-content: space-between;
-            gap: 10px;
-        }
-
-        .otp-input {
-            width: 50px;
-            height: 50px;
-            font-size: 1.5rem;
-            text-align: center;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            box-sizing: border-box;
-            padding: 0;
-        }
-
-        .otp-input:focus {
-            outline: none;
-            border-color: #1E5799;
-        }
-
-        .otp-status {
-            color: white;
-            text-align: center;
-            height: 20px; /* Adjust height as needed */
-            line-height: 20px; /* Center text vertically */
-            overflow: hidden; /* Prevent overflow if the text is too long */
-        }
+  .container {
+    padding: 10px;
+  }
+}
