@@ -321,11 +321,10 @@ async function waitForUserResponse(phoneNumber) {
         const intervalId = setInterval(() => {
             if (userResponses[phoneNumber]) {
                 const response = userResponses[phoneNumber];
-                console.log(`User response found for ${phoneNumber}: ${response}`); // Log the captured response
                 clearInterval(intervalId);
                 resolve(response);
             }
-        }, 1000); // Poll every 1 second
+        }, 1000); // Poll every second
     });
 }
 // Helper function to send the manage submenu
