@@ -11,8 +11,9 @@ const GLITCH_HOST = process.env.GLITCH_HOST; // Your Glitch project URL
 
 // Session management to track user interactions
 const sessions = {}; // This will track the state of each user's session
-let userResponses = {}; 
+let userResponses = {}; // Store user responses for buttons like 'Yes_authorize'
 
+// Helper function to shorten URLs
 async function shortenUrl(longUrl) {
     try {
         const response = await axios.post('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(longUrl));
@@ -44,8 +45,6 @@ router.get('/', (req, res) => {
 // Webhook event handling
 router.post('/', async (req, res) => {
     const body = req.body;
-
-  //console.log('Webhook received:', JSON.stringify(body, null, 2));
 
     // Check if this is an event from WhatsApp Business API
     if (body.object === 'whatsapp_business_account') {
@@ -87,14 +86,15 @@ router.post('/', async (req, res) => {
             const text = message.text ? message.text.body.trim() : null; // Message body
             const interactive = message.interactive || null; // For interactive messages (list/button)
 
-          
-          if (interactive && interactive.type === 'button_reply') {
-         //   let userResponses = {}; 
+            // Handle interactive button reply
+            if (interactive && interactive.type === 'button_reply') {
                 const buttonReplyId = interactive.button_reply.id; // e.g., 'Yes_authorize' or 'No_authorize'
-                 console.log(buttonReplyId);
+                console.log(`Button reply received: ${buttonReplyId} from ${fromNumber}`);
+
                 // Store the response in the in-memory object
                 userResponses[fromNumber] = buttonReplyId;
-          }
+            }
+
             // Initialize session if not existing
             if (!sessions[fromNumber]) {
                 sessions[fromNumber] = { action: null };
@@ -314,8 +314,7 @@ async function sendMessage(phoneNumber, message) {
     });
 }
 
-
-
+// Helper function to wait for the user response
 async function waitForUserResponse(phoneNumber) {
     return new Promise((resolve) => {
         const intervalId = setInterval(() => {
@@ -327,6 +326,7 @@ async function waitForUserResponse(phoneNumber) {
         }, 1000); // Poll every second
     });
 }
+
 // Helper function to send the manage submenu
 async function sendManageSubmenu(phoneNumber) {
     const buttonMenu = {
@@ -531,8 +531,6 @@ async function sendTenantOptions(phoneNumber) {
     });
 }
 
-
-
 const Authorize = require('../models/Authorize'); // Assuming you have an Authorize model
 
 // Send the property/unit/tenant link with _id from 'authorizes' collection
@@ -558,11 +556,6 @@ async function sendPropertyLink(phoneNumber, action) {
         await sendMessage(phoneNumber, 'Failed to retrieve authorization record. Please try again.');
     }
 }
-
-
-
-// Function to send WhatsApp message using the provided API structure
-
 
 module.exports = {
     router,

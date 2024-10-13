@@ -9,7 +9,7 @@ const path = require('path');
 const axios = require("axios");
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3000; // Glitch uses dynamic port
 
 // Trust the first proxy
 app.set('trust proxy', 1);
@@ -53,7 +53,7 @@ const signupLimiter = rateLimit({
 const { router, waitForUserResponse } = require('./routes/webhook');
 app.use('/webhook', router); // Link to webhook.js
 
-const Authorize = require('./models/Authorize');
+const Authorize = require('./models/Authorize'); // Import the Authorize model
 
 // Add property route that waits for WhatsApp authorization
 app.get('/addproperty/:id', async (req, res) => {
@@ -114,6 +114,8 @@ app.get('/checkAuthorization/:id', async (req, res) => {
 
         if (userResponse && userResponse.toLowerCase() === 'yes_authorize') {
             // Clear the response after successful authorization to prevent repeated checks
+            delete userResponses[phoneNumber];
+
             res.json({ status: 'authorized' });
         } else {
             res.json({ status: 'waiting' });
@@ -127,6 +129,7 @@ app.get('/checkAuthorization/:id', async (req, res) => {
 // POST route to handle the form submission after authorization
 app.post('/addproperty/:id', async (req, res) => {
     // Your form submission logic here
+    // You can access form data via req.body (e.g., req.body.name, req.body.units, etc.)
     res.send('Property added successfully!');
 });
 
