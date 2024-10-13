@@ -560,4 +560,5 @@ async function sendPropertyLink(phoneNumber, action) {
 module.exports = {
     router,
     waitForUserResponse,
+    userResponses, // Export userResponses
 };

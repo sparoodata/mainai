@@ -50,7 +50,7 @@ const signupLimiter = rateLimit({
 });
 
 // Routes and webhook handling
-const { router, waitForUserResponse } = require('./routes/webhook');
+const { router, waitForUserResponse, userResponses } = require('./routes/webhook'); // Import userResponses
 app.use('/webhook', router); // Link to webhook.js
 
 const Authorize = require('./models/Authorize'); // Import the Authorize model
@@ -97,6 +97,7 @@ app.get('/addproperty/:id', async (req, res) => {
 });
 
 // Separate endpoint to check the authorization status
+// Separate endpoint to check the authorization status
 app.get('/checkAuthorization/:id', async (req, res) => {
     const id = req.params.id;
 
@@ -116,7 +117,23 @@ app.get('/checkAuthorization/:id', async (req, res) => {
             // Clear the response after successful authorization to prevent repeated checks
             delete userResponses[phoneNumber];
 
-            res.json({ status: 'authorized' });
+            // Render the HTML form for adding the property
+            res.send(`
+                <html>
+                <body>
+                    <h2>Authorization successful! Add your property below:</h2>
+                    <form action="/addproperty/${id}" method="POST">
+                        <label for="property_name">Property Name:</label>
+                        <input type="text" id="property_name" name="property_name" required><br><br>
+                        <label for="units">Number of Units:</label>
+                        <input type="number" id="units" name="units" required><br><br>
+                        <label for="image">Property Image URL:</label>
+                        <input type="url" id="image" name="image"><br><br>
+                        <button type="submit">Submit</button>
+                    </form>
+                </body>
+                </html>
+            `);
         } else {
             res.json({ status: 'waiting' });
         }
