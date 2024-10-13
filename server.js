@@ -73,45 +73,48 @@ app.get('/addproperty/:id', async (req, res) => {
 
         // Respond with an HTML page that includes the client-side polling script
         res.send(`
-            <html>
+  <html>
+            <head>
+                <link rel="stylesheet" type="text/css" href="/styles.css">
+            </head>
             <body>
-                <h2>Waiting for authorization from WhatsApp...</h2>
-                <p>Please authorize the action in WhatsApp to proceed with adding the property.</p>
-       <script>
-    const pollAuthorizationStatus = async () => {
-        try {
-            console.log("Polling started...");
-            const response = await fetch('/checkAuthorization/${id}', {
-                headers: { 'Accept': 'application/json' } // Request JSON response
-            });
+                <div class="container">
+                    <h2>Waiting for WhatsApp Authorization...</h2>
+                    <p>Please authorize the action in WhatsApp to proceed with adding the property.</p>
+                </div>
 
-            // Check if the response is JSON (status checking)
-            const contentType = response.headers.get("content-type");
+                <script>
+                    const pollAuthorizationStatus = async () => {
+                        try {
+                            console.log("Polling started...");
+                            const response = await fetch('/checkAuthorization/${id}', {
+                                headers: { 'Accept': 'application/json' } // Request JSON response
+                            });
 
-            if (contentType && contentType.indexOf("application/json") !== -1) {
-                const result = await response.json();
-                console.log("Polling result:", result);
+                            const contentType = response.headers.get("content-type");
 
-                if (result.status === 'authorized') {
-                    console.log("Authorization successful, reloading page...");
-                    window.location.reload();  // Page reload to show form when authorized
-                } else if (result.status === 'waiting') {
-                    console.log("Still waiting for authorization...");
-                }
-            } else {
-                // If the response is not JSON (it's likely the HTML form), stop polling
-                console.log("Received HTML form, stopping polling...");
-                document.documentElement.innerHTML = await response.text(); // Replace the current page with the HTML form
-            }
-        } catch (error) {
-            console.error('Error checking authorization status:', error);
-        }
-    };
+                            if (contentType && contentType.indexOf("application/json") !== -1) {
+                                const result = await response.json();
+                                console.log("Polling result:", result);
 
-    // Set the polling interval to run every 5 seconds
-    setInterval(pollAuthorizationStatus, 5000);
-</script>
+                                if (result.status === 'authorized') {
+                                    console.log("Authorization successful, reloading page...");
+                                    window.location.reload();  // Page reload to show form when authorized
+                                } else if (result.status === 'waiting') {
+                                    console.log("Still waiting for authorization...");
+                                }
+                            } else {
+                                console.log("Received HTML form, stopping polling...");
+                                document.documentElement.innerHTML = await response.text(); // Replace the current page with the HTML form
+                            }
+                        } catch (error) {
+                            console.error('Error checking authorization status:', error);
+                        }
+                    };
 
+                    // Set the polling interval to run every 5 seconds
+                    setInterval(pollAuthorizationStatus, 5000);
+                </script>
             </body>
             </html>
         `);
@@ -148,26 +151,31 @@ app.get('/checkAuthorization/:id', async (req, res) => {
 // Add enctype for file upload in the form
 res.send(`
     <html>
+    <head>
+        <link rel="stylesheet" type="text/css" href="/styles.css">
+    </head>
     <body>
-        <h2>Authorization successful! Add your property below:</h2>
-        <form action="/addproperty/${id}" method="POST" enctype="multipart/form-data">
-            <label for="property_name">Property Name:</label>
-            <input type="text" id="property_name" name="property_name" required><br><br>
+        <div class="container">
+            <h2>Authorization successful! Add your property below:</h2>
+            <form action="/addproperty/${id}" method="POST" enctype="multipart/form-data">
+                <label for="property_name">Property Name:</label>
+                <input type="text" id="property_name" name="property_name" required><br><br>
 
-            <label for="units">Number of Units:</label>
-            <input type="number" id="units" name="units" required><br><br>
+                <label for="units">Number of Units:</label>
+                <input type="number" id="units" name="units" required><br><br>
 
-            <label for="address">Address:</label>
-            <input type="text" id="address" name="address" required><br><br>
+                <label for="address">Address:</label>
+                <input type="text" id="address" name="address" required><br><br>
 
-            <label for="totalAmount">Total Amount:</label>
-            <input type="number" id="totalAmount" name="totalAmount" required><br><br>
+                <label for="totalAmount">Total Amount:</label>
+                <input type="number" id="totalAmount" name="totalAmount" required><br><br>
 
-            <label for="image">Property Image:</label>
-            <input type="file" id="image" name="image" required><br><br>
+                <label for="image">Property Image:</label>
+                <input type="file" id="image" name="image" required><br><br>
 
-            <button type="submit">Submit</button>
-        </form>
+                <button type="submit">Submit</button>
+            </form>
+        </div>
     </body>
     </html>
 `);
