@@ -126,8 +126,12 @@ app.get('/addproperty/:id', async (req, res) => {
 
 // Separate endpoint to check the authorization status
 // Separate endpoint to check the authorization status
+
+
+
 app.get('/checkAuthorization/:id', async (req, res) => {
     const id = req.params.id;
+    const action = req.query.action; // Capture the action, either 'addproperty' or 'addunit'
 
     try {
         // Find the authorization record
@@ -144,13 +148,13 @@ app.get('/checkAuthorization/:id', async (req, res) => {
 
         if (userResponse && userResponse.toLowerCase() === 'yes_authorize') {
             console.log("User authorized the action.");
-            // Clear the response after successful authorization
             delete userResponses[phoneNumber];
 
-            // Render the HTML form for adding the property
-// Add enctype for file upload in the form
-res.send(`
-    <html>
+            // Check if the action is 'addproperty' or 'addunit'
+            if (action === 'addproperty') {
+                // Render the form for adding a property (reuse your existing form)
+                res.send(`
+                    <html>
     <head>
         <link rel="stylesheet" type="text/css" href="/styles.css">
     </head>
@@ -178,8 +182,47 @@ res.send(`
         </div>
     </body>
     </html>
-`);
+                `);
+            } else if (action === 'addunit') {
+                // Render the form for adding a unit (new form with unit-specific fields)
+                const properties = await Property.find().select('name _id');
 
+                res.send(`
+                    <html>
+                    <head>
+                        <link rel="stylesheet" type="text/css" href="/styles.css">
+                    </head>
+                    <body>
+                        <div class="container">
+                            <h2>Authorization successful! Add your unit below:</h2>
+                            <form action="/addunit/${id}" method="POST" enctype="multipart/form-data">
+                                <label for="property">Property:</label>
+                                <select id="property" name="property" required>
+                                    ${properties.map(property => `<option value="${property._id}">${property.name}</option>`).join('')}
+                                </select><br><br>
+
+                                <label for="unit_number">Unit Number:</label>
+                                <input type="text" id="unit_number" name="unit_number" required><br><br>
+
+                                <label for="rent_amount">Rent Amount:</label>
+                                <input type="number" id="rent_amount" name="rent_amount" required><br><br>
+
+                                <label for="floor">Floor:</label>
+                                <input type="number" id="floor" name="floor" required><br><br>
+
+                                <label for="size">Size (sqft):</label>
+                                <input type="number" id="size" name="size" required><br><br>
+
+                                <label for="image">Unit Image:</label>
+                                <input type="file" id="image" name="image" required><br><br>
+
+                                <button type="submit">Submit</button>
+                            </form>
+                        </div>
+                    </body>
+                    </html>
+                `);
+            }
         } else {
             console.log("Still waiting for authorization.");
             return res.json({ status: 'waiting' });
@@ -189,6 +232,148 @@ res.send(`
         res.status(500).send('An error occurred while checking authorization.');
     }
 });
+
+
+
+
+// Route to display the "add unit" form
+// Route to initiate the "add unit" process with authorization
+app.get('/addunit/:id', async (req, res) => {
+    const id = req.params.id;
+
+    try {
+        // Find the authorization record in the 'authorizes' collection
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        const phoneNumber = authorizeRecord.phoneNumber;
+
+        // Send the WhatsApp authorization message
+        await sendWhatsAppAuthMessage(phoneNumber);
+
+        // Respond with an HTML page that includes the client-side polling script
+        res.send(`
+  <html>
+            <head>
+                <link rel="stylesheet" type="text/css" href="/styles.css">
+            </head>
+            <body>
+                <div class="container">
+                    <h2>Waiting for WhatsApp Authorization...</h2>
+                    <p>Please authorize the action in WhatsApp to proceed with adding the unit.</p>
+                </div>
+
+                <script>
+                    const pollAuthorizationStatus = async () => {
+                        try {
+                            console.log("Polling started...");
+                            const response = await fetch('/checkAuthorization/${id}', {
+                                headers: { 'Accept': 'application/json' }
+                            });
+
+                            const contentType = response.headers.get("content-type");
+
+                            if (contentType && contentType.indexOf("application/json") !== -1) {
+                                const result = await response.json();
+                                console.log("Polling result:", result);
+
+                                if (result.status === 'authorized') {
+                                    console.log("Authorization successful, reloading page...");
+                                    window.location.reload();
+                                } else if (result.status === 'waiting') {
+                                    console.log("Still waiting for authorization...");
+                                }
+                            } else {
+                                console.log("Received HTML form, stopping polling...");
+                                document.documentElement.innerHTML = await response.text(); // Replace the current page with the HTML form
+                            }
+                        } catch (error) {
+                            console.error('Error checking authorization status:', error);
+                        }
+                    };
+
+                    // Set the polling interval to run every 5 seconds
+                    setInterval(pollAuthorizationStatus, 5000);
+                </script>
+            </body>
+            </html>
+        `);
+    } catch (error) {
+        console.error('Error during authorization or fetching phone number:', error);
+        res.status(500).send('An error occurred during authorization.');
+    }
+});
+
+// Model for storing units
+const Unit = require('./models/Unit'); // Assuming you create a Unit model
+
+// Route to handle unit form submission
+// POST route to handle adding a unit after authorization
+// Route to initiate the "add unit" process with authorization
+app.get('/addunit/:id', async (req, res) => {
+    const id = req.params.id;
+
+    try {
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        const phoneNumber = authorizeRecord.phoneNumber;
+
+        // Send WhatsApp authorization message
+        await sendWhatsAppAuthMessage(phoneNumber);
+
+        res.send(`
+  <html>
+            <head>
+                <link rel="stylesheet" type="text/css" href="/styles.css">
+            </head>
+            <body>
+                <div class="container">
+                    <h2>Waiting for WhatsApp Authorization...</h2>
+                    <p>Please authorize the action in WhatsApp to proceed with adding the unit.</p>
+                </div>
+
+                <script>
+                    const pollAuthorizationStatus = async () => {
+                        try {
+                            const response = await fetch('/checkAuthorization/${id}?action=addunit', {
+                                headers: { 'Accept': 'application/json' }
+                            });
+
+                            const contentType = response.headers.get("content-type");
+
+                            if (contentType && contentType.indexOf("application/json") !== -1) {
+                                const result = await response.json();
+
+                                if (result.status === 'authorized') {
+                                    window.location.reload();
+                                } else if (result.status === 'waiting') {
+                                    console.log("Still waiting for authorization...");
+                                }
+                            } else {
+                                document.documentElement.innerHTML = await response.text();
+                            }
+                        } catch (error) {
+                            console.error('Error checking authorization status:', error);
+                        }
+                    };
+
+                    setInterval(pollAuthorizationStatus, 5000);
+                </script>
+            </body>
+            </html>
+        `);
+    } catch (error) {
+        console.error('Error during authorization or fetching phone number:', error);
+        res.status(500).send('An error occurred during authorization.');
+    }
+});
+
+
 
 
 
