@@ -6,7 +6,7 @@ const MongoStore = require('connect-mongo');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
-const axios = require("axios"); 
+const axios = require("axios");
 
 const app = express();
 const port = process.env.PORT || 3000; // Glitch uses dynamic port
@@ -55,53 +55,82 @@ app.use('/webhook', router); // Link to webhook.js
 
 const Authorize = require('./models/Authorize'); // Import the Authorize model
 
+// Add property route that waits for WhatsApp authorization
 app.get('/addproperty/:id', async (req, res) => {
     const id = req.params.id;
 
     try {
+        // Find the authorization record in the 'authorizes' collection
         const authorizeRecord = await Authorize.findById(id);
         if (!authorizeRecord) {
             return res.status(404).send('Authorization record not found.');
         }
 
-        const phoneNumber = authorizeRecord.phoneNumber; // Get the phone number from the record
-        await sendWhatsAppAuthMessage(phoneNumber); // Send WhatsApp message
+        const phoneNumber = authorizeRecord.phoneNumber;
 
-        // Wait for user response from the webhook
-        const userResponse = await waitForUserResponse(phoneNumber);
-        console.log(`User response received: ${userResponse}`); // Log the user response
+        // Send the WhatsApp authorization message
+        await sendWhatsAppAuthMessage(phoneNumber);
 
-        if (userResponse && userResponse.toLowerCase() === 'yes_authorize') {
-            res.send(`
-                <html>
-                <body>
-                    <h2>Add Property Details</h2>
-                    <form action="/addproperty/${id}" method="POST" enctype="multipart/form-data">
-                        <label>Property Name:</label>
-                        <input type="text" name="name" required /><br/>
-                        <label>Number of Units:</label>
-                        <input type="number" name="units" required /><br/>
-                        <label>Address:</label>
-                        <input type="text" name="address" required /><br/>
-                        <label>Total Amount:</label>
-                        <input type="number" name="totalAmount" required /><br/>
-                        <label>Upload Image:</label>
-                        <input type="file" name="image" accept="image/*" required /><br/>
-                        <button type="submit">Add Property</button>
-                    </form>
-                </body>
-                </html>
-            `);
-        } else {
-            res.send('<h1>Access Denied</h1>');
-        }
+        // Initially respond with a "waiting" message
+        res.send(`
+            <html>
+            <body>
+                <h2>Waiting for authorization from WhatsApp...</h2>
+                <p>Please authorize the action in WhatsApp to proceed with adding the property.</p>
+                <script>
+                    // Poll the server every 5 seconds to check for authorization status
+                    setInterval(async () => {
+                        const response = await fetch('/checkAuthorization/${id}');
+                        const result = await response.json();
+                        if (result.status === 'authorized') {
+                            window.location.reload(); // Reload the page to show the form
+                        }
+                    }, 5000);
+                </script>
+            </body>
+            </html>
+        `);
     } catch (error) {
         console.error('Error during authorization or fetching phone number:', error);
         res.status(500).send('An error occurred during authorization.');
     }
 });
 
+// Separate endpoint to check the authorization status
+app.get('/checkAuthorization/:id', async (req, res) => {
+    const id = req.params.id;
 
+    try {
+        // Find the authorization record
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).json({ status: 'not_found' });
+        }
+
+        const phoneNumber = authorizeRecord.phoneNumber;
+
+        // Check if the user response was 'Yes_authorize'
+        const userResponse = await waitForUserResponse(phoneNumber);
+
+        if (userResponse && userResponse.toLowerCase() === 'yes_authorize') {
+            res.json({ status: 'authorized' });
+        } else {
+            res.json({ status: 'waiting' });
+        }
+    } catch (error) {
+        console.error('Error checking authorization status:', error);
+        res.status(500).json({ status: 'error' });
+    }
+});
+
+// POST route to handle the form submission after authorization
+app.post('/addproperty/:id', async (req, res) => {
+    // Your form submission logic here
+    // You can access form data via req.body (e.g., req.body.name, req.body.units, etc.)
+    res.send('Property added successfully!');
+});
+
+// Function to send WhatsApp message for authorization
 async function sendWhatsAppAuthMessage(phoneNumber) {
     return axios.post(process.env.WHATSAPP_API_URL, {
         messaging_product: 'whatsapp',
