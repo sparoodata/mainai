@@ -25,16 +25,12 @@ async function shortenUrl(longUrl) {
 
 // Webhook verification for WhatsApp API
 router.get('/', (req, res) => {
-    const VERIFY_TOKEN = process.env.VERIFY_TOKEN; // Your WhatsApp verification token
-
-    // Parse query parameters
+    const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
 
-    // Check if mode and token are present
     if (mode && token) {
-        // Verify the token matches
         if (mode === 'subscribe' && token === VERIFY_TOKEN) {
             console.log('Webhook verified successfully');
             res.status(200).send(challenge);
@@ -338,15 +334,14 @@ async function sendMessage(phoneNumber, message) {
 }
 
 
+
 async function waitForUserResponse(phoneNumber) {
-  
     return new Promise((resolve) => {
         const intervalId = setInterval(() => {
-            // Check if the response for this phone number exists
             if (userResponses[phoneNumber]) {
                 const response = userResponses[phoneNumber];
-                clearInterval(intervalId); // Stop polling
-                resolve(response); // Resolve the promise with the response (Yes_authorize or No_authorize)
+                clearInterval(intervalId);
+                resolve(response);
             }
         }, 1000); // Poll every 1 second
     });

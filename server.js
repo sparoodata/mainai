@@ -7,20 +7,16 @@ const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const axios = require("axios"); 
-const multer = require('multer');
-
-
 
 const app = express();
 const port = process.env.PORT || 3000; // Glitch uses dynamic port
 
-
-// Trust the first proxy (or set this to a higher number if you're behind multiple proxies)
+// Trust the first proxy
 app.set('trust proxy', 1);
+
 // Middleware
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-
 
 // MongoDB connection
 mongoose.connect(process.env.MONGODB_URI, {
@@ -53,26 +49,12 @@ const signupLimiter = rateLimit({
     message: 'Too many signup attempts. Try again later.',
 });
 
-// In-memory session tracking (you can later move this to MongoDB or Redis for scalability)
-let sessions = {};
-
-// Routes for sending auth and handling status checks
-// const signupRoutes = require('./routes/signup');
-// const verifyOtpRoutes = require('./routes/verify-otp');
-// const sendAuthRoutes = require('./routes/send-auth');
-// const loginRoutes = require('./routes/login');
+// Routes and webhook handling
 const { router, waitForUserResponse } = require('./routes/webhook');
-
-//app.use('/signup', signupRoutes);
-//app.use('/verify-otp', verifyOtpRoutes);
-//app.use('/send-auth', sendAuthRoutes);
-//app.use('/login', loginRoutes);
-app.use('/webhook', router); // Ensure this is correctly linked to your `webhook.js` file
-
+app.use('/webhook', router); // Link to webhook.js
 
 const Authorize = require('./models/Authorize'); // Import the Authorize model
 
-console.log(waitForUserResponse);
 app.get('/addproperty/:id', async (req, res) => {
     const id = req.params.id;
 
@@ -83,12 +65,13 @@ app.get('/addproperty/:id', async (req, res) => {
         }
 
         const phoneNumber = authorizeRecord.phoneNumber; // Get the phone number from the record
+        await sendWhatsAppAuthMessage(phoneNumber); // Send WhatsApp message
 
-        await sendWhatsAppAuthMessage(phoneNumber);
-        
-        const userResponse = await waitForUserResponse(phoneNumber); // This should now work
+        // Wait for user response from the webhook
+        const userResponse = await waitForUserResponse(phoneNumber);
+        console.log(`User response received: ${userResponse}`); // Log the user response
 
-        if (userResponse.toLowerCase() === 'yes_authorize') {
+        if (userResponse && userResponse.toLowerCase() === 'yes_authorize') {
             res.send(`
                 <html>
                 <body>
@@ -118,7 +101,7 @@ app.get('/addproperty/:id', async (req, res) => {
     }
 });
 
-// Simulate user response handling (In reality, this should be a webhook listening for WhatsApp replies)
+
 async function sendWhatsAppAuthMessage(phoneNumber) {
     return axios.post(process.env.WHATSAPP_API_URL, {
         messaging_product: 'whatsapp',
@@ -155,7 +138,6 @@ async function sendWhatsAppAuthMessage(phoneNumber) {
         },
     });
 }
-
 
 // Start the server
 app.listen(port, () => {
