@@ -321,11 +321,13 @@ async function waitForUserResponse(phoneNumber) {
             if (userResponses[phoneNumber]) {
                 const response = userResponses[phoneNumber];
                 clearInterval(intervalId);
+                console.log(`Captured user response: ${response}`); // Debugging log
                 resolve(response);
             }
         }, 1000); // Poll every second
     });
 }
+
 
 // Helper function to send the manage submenu
 async function sendManageSubmenu(phoneNumber) {

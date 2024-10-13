@@ -144,49 +144,53 @@ app.get('/checkAuthorization/:id', async (req, res) => {
 
         // Check if the user response was 'Yes_authorize'
         const userResponse = await waitForUserResponse(phoneNumber);
-        console.log(`User response for ${phoneNumber}:`, userResponse);
+        console.log(`User response for ${phoneNumber}:`, userResponse); // Debugging log
 
         if (userResponse && userResponse.toLowerCase() === 'yes_authorize') {
             console.log("User authorized the action.");
-            delete userResponses[phoneNumber];
+            delete userResponses[phoneNumber]; // Clear the stored response
 
-            // Check if the action is 'addproperty' or 'addunit'
+            // Check the action type ('addproperty' or 'addunit')
             if (action === 'addproperty') {
+                console.log('Rendering add property form'); // Debugging log
+
                 // Render the form for adding a property (reuse your existing form)
                 res.send(`
                     <html>
-    <head>
-        <link rel="stylesheet" type="text/css" href="/styles.css">
-    </head>
-    <body>
-        <div class="container">
-            <h2>Authorization successful! Add your property below:</h2>
-            <form action="/addproperty/${id}" method="POST" enctype="multipart/form-data">
-                <label for="property_name">Property Name:</label>
-                <input type="text" id="property_name" name="property_name" required><br><br>
+                    <head>
+                        <link rel="stylesheet" type="text/css" href="/styles.css">
+                    </head>
+                    <body>
+                        <div class="container">
+                            <h2>Authorization successful! Add your property below:</h2>
+                            <form action="/addproperty/${id}" method="POST" enctype="multipart/form-data">
+                                <label for="property_name">Property Name:</label>
+                                <input type="text" id="property_name" name="property_name" required><br><br>
 
-                <label for="units">Number of Units:</label>
-                <input type="number" id="units" name="units" required><br><br>
+                                <label for="units">Number of Units:</label>
+                                <input type="number" id="units" name="units" required><br><br>
 
-                <label for="address">Address:</label>
-                <input type="text" id="address" name="address" required><br><br>
+                                <label for="address">Address:</label>
+                                <input type="text" id="address" name="address" required><br><br>
 
-                <label for="totalAmount">Total Amount:</label>
-                <input type="number" id="totalAmount" name="totalAmount" required><br><br>
+                                <label for="totalAmount">Total Amount:</label>
+                                <input type="number" id="totalAmount" name="totalAmount" required><br><br>
 
-                <label for="image">Property Image:</label>
-                <input type="file" id="image" name="image" required><br><br>
+                                <label for="image">Property Image:</label>
+                                <input type="file" id="image" name="image" required><br><br>
 
-                <button type="submit">Submit</button>
-            </form>
-        </div>
-    </body>
-    </html>
+                                <button type="submit">Submit</button>
+                            </form>
+                        </div>
+                    </body>
+                    </html>
                 `);
             } else if (action === 'addunit') {
-                // Render the form for adding a unit (new form with unit-specific fields)
-                const properties = await Property.find().select('name _id');
+                console.log('Rendering add unit form'); // Debugging log
 
+                const properties = await Property.find().select('name _id'); // Fetch properties
+
+                // Render the form for adding a unit
                 res.send(`
                     <html>
                     <head>
@@ -224,7 +228,7 @@ app.get('/checkAuthorization/:id', async (req, res) => {
                 `);
             }
         } else {
-            console.log("Still waiting for authorization.");
+            console.log("Still waiting for authorization."); // Debugging log
             return res.json({ status: 'waiting' });
         }
     } catch (error) {
@@ -238,11 +242,11 @@ app.get('/checkAuthorization/:id', async (req, res) => {
 
 // Route to display the "add unit" form
 // Route to initiate the "add unit" process with authorization
+// Route to initiate the "add unit" process with authorization
 app.get('/addunit/:id', async (req, res) => {
     const id = req.params.id;
 
     try {
-        // Find the authorization record in the 'authorizes' collection
         const authorizeRecord = await Authorize.findById(id);
         if (!authorizeRecord) {
             return res.status(404).send('Authorization record not found.');
@@ -250,10 +254,9 @@ app.get('/addunit/:id', async (req, res) => {
 
         const phoneNumber = authorizeRecord.phoneNumber;
 
-        // Send the WhatsApp authorization message
+        // Send WhatsApp authorization message
         await sendWhatsAppAuthMessage(phoneNumber);
 
-        // Respond with an HTML page that includes the client-side polling script
         res.send(`
   <html>
             <head>
@@ -268,8 +271,7 @@ app.get('/addunit/:id', async (req, res) => {
                 <script>
                     const pollAuthorizationStatus = async () => {
                         try {
-                            console.log("Polling started...");
-                            const response = await fetch('/checkAuthorization/${id}', {
+                            const response = await fetch('/checkAuthorization/${id}?action=addunit', {
                                 headers: { 'Accept': 'application/json' }
                             });
 
@@ -277,24 +279,20 @@ app.get('/addunit/:id', async (req, res) => {
 
                             if (contentType && contentType.indexOf("application/json") !== -1) {
                                 const result = await response.json();
-                                console.log("Polling result:", result);
 
                                 if (result.status === 'authorized') {
-                                    console.log("Authorization successful, reloading page...");
                                     window.location.reload();
                                 } else if (result.status === 'waiting') {
                                     console.log("Still waiting for authorization...");
                                 }
                             } else {
-                                console.log("Received HTML form, stopping polling...");
-                                document.documentElement.innerHTML = await response.text(); // Replace the current page with the HTML form
+                                document.documentElement.innerHTML = await response.text();
                             }
                         } catch (error) {
                             console.error('Error checking authorization status:', error);
                         }
                     };
 
-                    // Set the polling interval to run every 5 seconds
                     setInterval(pollAuthorizationStatus, 5000);
                 </script>
             </body>
@@ -305,6 +303,7 @@ app.get('/addunit/:id', async (req, res) => {
         res.status(500).send('An error occurred during authorization.');
     }
 });
+
 
 // Model for storing units
 const Unit = require('./models/Unit'); // Assuming you create a Unit model
