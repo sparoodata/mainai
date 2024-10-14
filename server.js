@@ -418,6 +418,42 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
     }
 });
 
+app.post('/addunit/:id', upload.single('image'), async (req, res) => {
+    const { property, unit_number, rent_amount, floor, size } = req.body;
+
+    try {
+        // Save the unit data to MongoDB
+        const unit = new Unit({
+            property: property, // Property selected from the dropdown
+            unitNumber: unit_number,
+            rentAmount: rent_amount,
+            floor: floor,
+            size: size,
+        });
+
+        await unit.save();
+
+        // Save the image data to the 'images' collection
+        if (req.file) {
+            const image = new Image({
+                unitId: unit._id,
+                imageUrl: '/uploads/' + req.file.filename,
+                imageName: req.file.originalname,
+            });
+
+            await image.save();
+
+            // Link the image to the unit
+            unit.images.push(image._id);
+            await unit.save();
+        }
+
+        res.send('Unit and image added successfully!');
+    } catch (error) {
+        console.error('Error adding unit and image:', error);
+        res.status(500).send('An error occurred while adding the unit and image.');
+    }
+});
 
 
 // Function to send WhatsApp message for authorization
