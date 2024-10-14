@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const Property = require('../models/Property');
+const Unit = require('../models/Unit');
 const Image = require('../models/Image');
 const { sendWhatsAppAuthMessage } = require('../utils/whatsapp');
 
@@ -16,11 +16,8 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-const { router, waitForUserResponse, userResponses } = require('./routes/webhook'); // Import userResponses
-app.use('/webhook', router); // Link to webhook.js
-
-// Route to add a property
-router.get('/addproperty/:id', async (req, res) => {
+// Route to add a unit
+router.get('/addunit/:id', async (req, res) => {
     const id = req.params.id;
     try {
         const authorizeRecord = await Authorize.findById(id);
@@ -34,7 +31,7 @@ router.get('/addproperty/:id', async (req, res) => {
 
         res.send(`
             <html>
-            <!-- Property form HTML code here -->
+            <!-- Unit form HTML code here -->
             </html>
         `);
     } catch (error) {
@@ -42,36 +39,37 @@ router.get('/addproperty/:id', async (req, res) => {
     }
 });
 
-// POST route for submitting the property form
-router.post('/addproperty/:id', upload.single('image'), async (req, res) => {
-    const { property_name, units, address, totalAmount } = req.body;
+// POST route for submitting the unit form
+router.post('/addunit/:id', upload.single('image'), async (req, res) => {
+    const { property, unit_number, rent_amount, floor, size } = req.body;
 
     try {
-        const property = new Property({
-            name: property_name,
-            units,
-            address,
-            totalAmount,
+        const unit = new Unit({
+            property,
+            unitNumber: unit_number,
+            rentAmount: rent_amount,
+            floor,
+            size,
         });
 
-        await property.save();
+        await unit.save();
 
         if (req.file) {
             const image = new Image({
-                propertyId: property._id,
+                unitId: unit._id,
                 imageUrl: '/uploads/' + req.file.filename,
                 imageName: req.file.originalname,
             });
 
             await image.save();
 
-            property.images.push(image._id);
-            await property.save();
+            unit.images.push(image._id);
+            await unit.save();
         }
 
-        res.send('Property and image added successfully!');
+        res.send('Unit and image added successfully!');
     } catch (error) {
-        res.status(500).send('An error occurred while adding the property and image.');
+        res.status(500).send('An error occurred while adding the unit and image.');
     }
 });
 
