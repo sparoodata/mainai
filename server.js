@@ -223,7 +223,11 @@ app.get('/checkAuthorization/:id', async (req, res) => {
                     </body>
                     </html>
                 `);            }
-        } else {
+        } 
+      
+      
+      
+           else {
             console.log("Still waiting for authorization.");
             return res.json({ status: 'waiting' });
         }
@@ -361,6 +365,144 @@ app.get('/addunit/:id', async (req, res) => {
     } catch (error) {
         console.error('Error during authorization or fetching phone number:', error);
         res.status(500).send('An error occurred during authorization.');
+    }
+});
+
+// Route to display the "add tenant" form
+app.get('/addtenant/:id', async (req, res) => {
+    const id = req.params.id;
+
+    try {
+        // Fetch the list of properties
+        const properties = await Property.find().select('name _id');
+
+        // Render the tenant form with property dropdown
+        res.send(`
+            <html>
+            <head>
+                <link rel="stylesheet" type="text/css" href="/styles.css">
+                <script>
+                    // Fetch the units when the property is selected
+                    async function fetchUnits(propertyId) {
+                        const response = await fetch('/getUnits/' + propertyId);
+                        const units = await response.json();
+                        const unitDropdown = document.getElementById('unitAssigned');
+
+                        // Clear the unit dropdown
+                        unitDropdown.innerHTML = '';
+
+                        // Populate the unit dropdown with corresponding units
+                        units.forEach(unit => {
+                            const option = document.createElement('option');
+                            option.value = unit._id;
+                            option.text = unit.unitNumber;
+                            unitDropdown.appendChild(option);
+                        });
+                    }
+                </script>
+            </head>
+            <body>
+                <div class="container">
+                    <h2>Add a New Tenant</h2>
+                    <form action="/addtenant/${id}" method="POST" enctype="multipart/form-data">
+                        <label for="name">Tenant Name:</label>
+                        <input type="text" id="name" name="name" required><br><br>
+
+                        <label for="phoneNumber">Phone Number:</label>
+                        <input type="text" id="phoneNumber" name="phoneNumber" required><br><br>
+
+                        <label for="propertyName">Property:</label>
+                        <select id="propertyName" name="propertyName" required onchange="fetchUnits(this.value)">
+                            ${properties.map(property => `<option value="${property._id}">${property.name}</option>`).join('')}
+                        </select><br><br>
+
+                        <label for="unitAssigned">Unit Assigned:</label>
+                        <select id="unitAssigned" name="unitAssigned" required>
+                            <option value="">Select a property first</option>
+                        </select><br><br>
+
+                        <label for="lease_start">Lease Start Date:</label>
+                        <input type="date" id="lease_start" name="lease_start" required><br><br>
+
+                        <label for="deposit">Deposit Amount:</label>
+                        <input type="number" id="deposit" name="deposit" required><br><br>
+
+                        <label for="idProof">ID Proof (Image):</label>
+                        <input type="file" id="idProof" name="idProof" required><br><br>
+
+                        <label for="photo">Photo (Image):</label>
+                        <input type="file" id="photo" name="photo" required><br><br>
+
+                        <button type="submit">Submit</button>
+                    </form>
+                </div>
+            </body>
+            </html>
+        `);
+    } catch (error) {
+        console.error('Error fetching properties:', error);
+        res.status(500).send('An error occurred while fetching properties.');
+    }
+});
+
+
+// Route to get units for a selected property
+app.get('/getUnits/:propertyId', async (req, res) => {
+    const propertyId = req.params.propertyId;
+
+    try {
+        // Find all units that belong to the selected property
+        const units = await Unit.find({ property: propertyId }).select('unitNumber _id');
+
+        res.json(units); // Return the units as JSON
+    } catch (error) {
+        console.error('Error fetching units:', error);
+        res.status(500).send('An error occurred while fetching units.');
+    }
+});
+
+
+app.post('/addtenant/:id', upload.fields([{ name: 'idProof', maxCount: 1 }, { name: 'photo', maxCount: 1 }]), async (req, res) => {
+    const { name, phoneNumber, propertyName, unitAssigned, lease_start, deposit } = req.body;
+
+    try {
+        // Save the tenant data to MongoDB
+        const tenant = new Tenant({
+            name: name,
+            phoneNumber: phoneNumber,
+            propertyName: propertyName,
+            unitAssigned: unitAssigned,
+            lease_start: lease_start,
+            deposit: deposit,
+            status: 'unpaid',
+        });
+
+        // Save the ID proof and photo if they are uploaded
+        if (req.files['idProof']) {
+            const idProofImage = new Image({
+                tenantId: tenant._id,
+                imageUrl: '/uploads/' + req.files['idProof'][0].filename,
+                imageName: req.files['idProof'][0].originalname,
+            });
+            await idProofImage.save();
+            tenant.idProof = idProofImage.imageUrl;
+        }
+
+        if (req.files['photo']) {
+            const photoImage = new Image({
+                tenantId: tenant._id,
+                imageUrl: '/uploads/' + req.files['photo'][0].filename,
+                imageName: req.files['photo'][0].originalname,
+            });
+            await photoImage.save();
+            tenant.photo = photoImage.imageUrl;
+        }
+
+        await tenant.save();
+        res.send('Tenant and images added successfully!');
+    } catch (error) {
+        console.error('Error adding tenant and images:', error);
+        res.status(500).send('An error occurred while adding the tenant and images.');
     }
 });
 
