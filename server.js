@@ -19,6 +19,8 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // MongoDB connection
+mongoose.set('strictQuery', false);
+
 mongoose.connect(process.env.MONGODB_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
@@ -361,9 +363,6 @@ app.get('/addunit/:id', async (req, res) => {
         res.status(500).send('An error occurred during authorization.');
     }
 });
-
-
-
 
 
 const multer = require('multer');
