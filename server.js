@@ -56,11 +56,11 @@ app.use('/webhook', router); // Link to webhook.js
 const Authorize = require('./models/Authorize'); // Import the Authorize model
 
 // Add property route that waits for WhatsApp authorization
+// Route to initiate the "add property" process with authorization
 app.get('/addproperty/:id', async (req, res) => {
     const id = req.params.id;
 
     try {
-        // Find the authorization record in the 'authorizes' collection
         const authorizeRecord = await Authorize.findById(id);
         if (!authorizeRecord) {
             return res.status(404).send('Authorization record not found.');
@@ -68,12 +68,11 @@ app.get('/addproperty/:id', async (req, res) => {
 
         const phoneNumber = authorizeRecord.phoneNumber;
 
-        // Send the WhatsApp authorization message
+        // Send WhatsApp authorization message
         await sendWhatsAppAuthMessage(phoneNumber);
 
-        // Respond with an HTML page that includes the client-side polling script
         res.send(`
-  <html>
+            <html>
             <head>
                 <link rel="stylesheet" type="text/css" href="/styles.css">
             </head>
@@ -86,33 +85,28 @@ app.get('/addproperty/:id', async (req, res) => {
                 <script>
                     const pollAuthorizationStatus = async () => {
                         try {
-                            console.log("Polling started...");
-                            const response = await fetch('/checkAuthorization/${id}', {
-                                headers: { 'Accept': 'application/json' } // Request JSON response
+                            const response = await fetch('/checkAuthorization/${id}?action=addproperty', {
+                                headers: { 'Accept': 'application/json' }
                             });
 
                             const contentType = response.headers.get("content-type");
 
                             if (contentType && contentType.indexOf("application/json") !== -1) {
                                 const result = await response.json();
-                                console.log("Polling result:", result);
 
                                 if (result.status === 'authorized') {
-                                    console.log("Authorization successful, reloading page...");
-                                    window.location.reload();  // Page reload to show form when authorized
+                                    window.location.reload();
                                 } else if (result.status === 'waiting') {
                                     console.log("Still waiting for authorization...");
                                 }
                             } else {
-                                console.log("Received HTML form, stopping polling...");
-                                document.documentElement.innerHTML = await response.text(); // Replace the current page with the HTML form
+                                document.documentElement.innerHTML = await response.text();
                             }
                         } catch (error) {
                             console.error('Error checking authorization status:', error);
                         }
                     };
 
-                    // Set the polling interval to run every 5 seconds
                     setInterval(pollAuthorizationStatus, 5000);
                 </script>
             </body>
@@ -124,8 +118,9 @@ app.get('/addproperty/:id', async (req, res) => {
     }
 });
 
-// Separate endpoint to check the authorization status
-// Separate endpoint to check the authorization status
+
+
+
 
 
 
@@ -144,7 +139,7 @@ app.get('/checkAuthorization/:id', async (req, res) => {
 
         // Check if the user response was 'Yes_authorize'
         const userResponse = await waitForUserResponse(phoneNumber);
-        console.log(`User response for ${phoneNumber}:`, userResponse); // Debugging log
+        console.log(`User response for ${phoneNumber}:`, userResponse);
 
         if (userResponse && userResponse.toLowerCase() === 'yes_authorize') {
             console.log("User authorized the action.");
@@ -225,10 +220,9 @@ app.get('/checkAuthorization/:id', async (req, res) => {
                         </div>
                     </body>
                     </html>
-                `);
-            }
+                `);            }
         } else {
-            console.log("Still waiting for authorization."); // Debugging log
+            console.log("Still waiting for authorization.");
             return res.json({ status: 'waiting' });
         }
     } catch (error) {
@@ -239,10 +233,6 @@ app.get('/checkAuthorization/:id', async (req, res) => {
 
 
 
-
-// Route to display the "add unit" form
-// Route to initiate the "add unit" process with authorization
-// Route to initiate the "add unit" process with authorization
 app.get('/addunit/:id', async (req, res) => {
     const id = req.params.id;
 
