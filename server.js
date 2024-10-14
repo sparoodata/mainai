@@ -524,79 +524,66 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
 
 
 // Route to display the "add tenant" form
+// Route to initiate the "add tenant" process with authorization
 app.get('/addtenant/:id', async (req, res) => {
     const id = req.params.id;
 
     try {
-        // Fetch the list of properties
-        const properties = await Property.find().select('name _id');
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
 
-        // Render the tenant form with property dropdown
+        const phoneNumber = authorizeRecord.phoneNumber;
+
+        // Send WhatsApp authorization message
+        await sendWhatsAppAuthMessage(phoneNumber); // Assuming sendWhatsAppAuthMessage is already implemented
+
+        // Respond with an HTML page that includes the client-side polling script
         res.send(`
             <html>
             <head>
                 <link rel="stylesheet" type="text/css" href="/styles.css">
-                <script>
-                    // Fetch the units when the property is selected
-                    async function fetchUnits(propertyId) {
-                        const response = await fetch('/getUnits/' + propertyId);
-                        const units = await response.json();
-                        const unitDropdown = document.getElementById('unitAssigned');
-
-                        // Clear the unit dropdown
-                        unitDropdown.innerHTML = '';
-
-                        // Populate the unit dropdown with corresponding units
-                        units.forEach(unit => {
-                            const option = document.createElement('option');
-                            option.value = unit._id;
-                            option.text = unit.unitNumber;
-                            unitDropdown.appendChild(option);
-                        });
-                    }
-                </script>
             </head>
             <body>
                 <div class="container">
-                    <h2>Add a New Tenant</h2>
-                    <form action="/addtenant/${id}" method="POST" enctype="multipart/form-data">
-                        <label for="name">Tenant Name:</label>
-                        <input type="text" id="name" name="name" required><br><br>
-
-                        <label for="phoneNumber">Phone Number:</label>
-                        <input type="text" id="phoneNumber" name="phoneNumber" required><br><br>
-
-                        <label for="propertyName">Property:</label>
-                        <select id="propertyName" name="propertyName" required onchange="fetchUnits(this.value)">
-                            ${properties.map(property => `<option value="${property._id}">${property.name}</option>`).join('')}
-                        </select><br><br>
-
-                        <label for="unitAssigned">Unit Assigned:</label>
-                        <select id="unitAssigned" name="unitAssigned" required>
-                            <option value="">Select a property first</option>
-                        </select><br><br>
-
-                        <label for="lease_start">Lease Start Date:</label>
-                        <input type="date" id="lease_start" name="lease_start" required><br><br>
-
-                        <label for="deposit">Deposit Amount:</label>
-                        <input type="number" id="deposit" name="deposit" required><br><br>
-
-                        <label for="idProof">ID Proof (Image):</label>
-                        <input type="file" id="idProof" name="idProof" required><br><br>
-
-                        <label for="photo">Photo (Image):</label>
-                        <input type="file" id="photo" name="photo" required><br><br>
-
-                        <button type="submit">Submit</button>
-                    </form>
+                    <h2>Waiting for WhatsApp Authorization...</h2>
+                    <p>Please authorize the action in WhatsApp to proceed with adding the tenant.</p>
                 </div>
+
+                <script>
+                    const pollAuthorizationStatus = async () => {
+                        try {
+                            const response = await fetch('/checkAuthorization/${id}?action=addtenant', {
+                                headers: { 'Accept': 'application/json' }
+                            });
+
+                            const contentType = response.headers.get("content-type");
+
+                            if (contentType && contentType.indexOf("application/json") !== -1) {
+                                const result = await response.json();
+
+                                if (result.status === 'authorized') {
+                                    window.location.reload();  // Reload the page to show the form after authorization
+                                } else if (result.status === 'waiting') {
+                                    console.log("Still waiting for authorization...");
+                                }
+                            } else {
+                                document.documentElement.innerHTML = await response.text(); // Replace the current page with the HTML form
+                            }
+                        } catch (error) {
+                            console.error('Error checking authorization status:', error);
+                        }
+                    };
+
+                    setInterval(pollAuthorizationStatus, 5000); // Poll the authorization status every 5 seconds
+                </script>
             </body>
             </html>
         `);
     } catch (error) {
-        console.error('Error fetching properties:', error);
-        res.status(500).send('An error occurred while fetching properties.');
+        console.error('Error during authorization or fetching phone number:', error);
+        res.status(500).send('An error occurred during authorization.');
     }
 });
 
