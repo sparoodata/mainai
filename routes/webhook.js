@@ -3,7 +3,6 @@ const axios = require('axios');
 const User = require('../models/User'); // Assuming you have a User model
 const Tenant = require('../models/Tenant'); // Assuming you have a Tenant model
 const router = express.Router();
-
 // WhatsApp API credentials
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;

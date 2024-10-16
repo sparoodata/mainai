@@ -7,6 +7,7 @@ const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const axios = require("axios");
+const Tenant = require('./models/Tenant');
 
 const app = express();
 const port = process.env.PORT || 3000; // Glitch uses dynamic port
