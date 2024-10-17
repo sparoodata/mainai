@@ -241,6 +241,54 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
         res.status(500).send('An error occurred while adding the unit and image.');
     }
 });
+app.post('/addtenant/:id', upload.fields([{ name: 'idProof', maxCount: 1 }, { name: 'photo', maxCount: 1 }]), async (req, res) => {
+    const { name, phoneNumber, propertyName, unitAssigned, lease_start, deposit } = req.body;
+    const id = req.params.id; // This is the authorization ID
+
+    try {
+        // Save the tenant data to MongoDB
+        const tenant = new Tenant({
+            name: name,
+            phoneNumber: phoneNumber,
+            propertyName: propertyName,
+            unitAssigned: unitAssigned,
+            lease_start: lease_start,
+            deposit: deposit,
+            status: 'unpaid',
+        });
+
+        // Save the ID proof and photo if they are uploaded
+        if (req.files['idProof']) {
+            const idProofImage = new Image({
+                tenantId: tenant._id,
+                imageUrl: '/uploads/' + req.files['idProof'][0].filename,
+                imageName: req.files['idProof'][0].originalname,
+            });
+            await idProofImage.save();
+            tenant.idProof = idProofImage.imageUrl;
+        }
+
+        if (req.files['photo']) {
+            const photoImage = new Image({
+                tenantId: tenant._id,
+                imageUrl: '/uploads/' + req.files['photo'][0].filename,
+                imageName: req.files['photo'][0].originalname,
+            });
+            await photoImage.save();
+            tenant.photo = photoImage.imageUrl;
+        }
+
+        // Save the tenant to the database
+        await tenant.save();
+
+        // Send success response after tenant is added
+        res.send('Tenant and images added successfully!');
+    } catch (error) {
+        console.error('Error adding tenant and images:', error);
+        res.status(500).send('An error occurred while adding the tenant and images.');
+    }
+});
+
 
 // Start the server
 app.listen(port, () => {
