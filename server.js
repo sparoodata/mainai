@@ -182,6 +182,23 @@ async function sendWhatsAppAuthMessage(phoneNumber) {
     });
 }
 
+// Route to get units for a selected property (used by AJAX)
+app.get('/getUnits/:propertyId', async (req, res) => {
+    const propertyId = req.params.propertyId;
+
+    try {
+        // Fetch units associated with the selected property from the database
+        const units = await Unit.find({ property: propertyId }).select('unitNumber _id');
+        
+        // Send the units as a JSON response
+        res.json(units);
+    } catch (error) {
+        console.error('Error fetching units:', error);
+        res.status(500).send('An error occurred while fetching units.');
+    }
+});
+
+
 // Route to display the "add tenant" form
 app.get('/addtenant/:id', async (req, res) => {
     const id = req.params.id;
