@@ -9,10 +9,10 @@ const path = require('path');
 const axios = require("axios");
 const multer = require('multer');
 const Tenant = require('./models/Tenant');
-const Image = require('./models/Image'); // Import Image model
-const Property = require('./models/Property'); // Import Property model
-const Authorize = require('./models/Authorize'); // Import the Authorize model
-const Unit = require('./models/Unit'); // Assuming you create a Unit model
+const Image = require('./models/Image');
+const Property = require('./models/Property');
+const Authorize = require('./models/Authorize');
+const Unit = require('./models/Unit');
 
 const app = express();
 const port = process.env.PORT || 3000; // Glitch uses dynamic port
@@ -72,8 +72,8 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 // Routes and webhook handling
-const { router, waitForUserResponse, userResponses } = require('./routes/webhook'); // Import userResponses
-app.use('/webhook', router); // Link to webhook.js
+const { router, waitForUserResponse, userResponses } = require('./routes/webhook');
+app.use('/webhook', router);
 
 // Add property route that waits for WhatsApp authorization
 app.get('/addproperty/:id', async (req, res) => {
@@ -88,6 +88,7 @@ app.get('/addproperty/:id', async (req, res) => {
         const phoneNumber = authorizeRecord.phoneNumber;
         await sendWhatsAppAuthMessage(phoneNumber); // Send WhatsApp authorization message
 
+        // Render the waiting page for WhatsApp authorization
         res.render('waitingAuthorization', { id, action: 'addproperty' });
     } catch (error) {
         console.error('Error during authorization or fetching phone number:', error);
@@ -146,6 +147,30 @@ app.get('/addunit/:id', async (req, res) => {
         res.status(500).send('An error occurred during authorization.');
     }
 });
+
+// Function to send WhatsApp message for authorization
+async function sendWhatsAppAuthMessage(phoneNumber) {
+    return axios.post(process.env.WHATSAPP_API_URL, {
+        messaging_product: 'whatsapp',
+        to: phoneNumber,
+        type: 'interactive',
+        interactive: {
+            type: 'button',
+            body: { text: 'Do you authorize this action?' },
+            action: {
+                buttons: [
+                    { type: 'reply', reply: { id: 'Yes_authorize', title: 'Yes' } },
+                    { type: 'reply', reply: { id: 'No_authorize', title: 'No' } }
+                ]
+            }
+        }
+    }, {
+        headers: {
+            'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+        },
+    });
+}
 
 // Route to display the "add tenant" form
 app.get('/addtenant/:id', async (req, res) => {
@@ -216,30 +241,6 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
         res.status(500).send('An error occurred while adding the unit and image.');
     }
 });
-
-// Function to send WhatsApp message for authorization
-async function sendWhatsAppAuthMessage(phoneNumber) {
-    return axios.post(process.env.WHATSAPP_API_URL, {
-        messaging_product: 'whatsapp',
-        to: phoneNumber,
-        type: 'interactive',
-        interactive: {
-            type: 'button',
-            body: { text: 'Do you authorize this action?' },
-            action: {
-                buttons: [
-                    { type: 'reply', reply: { id: 'Yes_authorize', title: 'Yes' } },
-                    { type: 'reply', reply: { id: 'No_authorize', title: 'No' } }
-                ]
-            }
-        }
-    }, {
-        headers: {
-            'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
-        },
-    });
-}
 
 // Start the server
 app.listen(port, () => {
