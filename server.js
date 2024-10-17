@@ -97,10 +97,9 @@ app.get('/addproperty/:id', async (req, res) => {
 });
 
 // Check authorization and render the appropriate form (Add Property or Add Unit)
-// Check authorization and render the appropriate form (Add Property, Add Unit, Add Tenant)
 app.get('/checkAuthorization/:id', async (req, res) => {
     const id = req.params.id;
-    const action = req.query.action; // action can be 'addproperty', 'addunit', or 'addtenant'
+    const action = req.query.action;
 
     try {
         const authorizeRecord = await Authorize.findById(id);
@@ -109,25 +108,16 @@ app.get('/checkAuthorization/:id', async (req, res) => {
         }
 
         const phoneNumber = authorizeRecord.phoneNumber;
-        const userResponse = await waitForUserResponse(phoneNumber); // Await WhatsApp authorization response
+        const userResponse = await waitForUserResponse(phoneNumber);
 
         if (userResponse && userResponse.toLowerCase() === 'yes_authorize') {
             delete userResponses[phoneNumber]; // Clear the stored response
 
-            // Handle based on the 'action' parameter
             if (action === 'addproperty') {
-                // Render the Add Property form
                 res.render('addProperty', { id });
             } else if (action === 'addunit') {
-                // Fetch properties and render the Add Unit form
-                const properties = await Property.find().select('name _id');
+                const properties = await Property.find().select('name _id'); // Fetch properties
                 res.render('addUnit', { id, properties });
-            } else if (action === 'addtenant') {
-                // Fetch properties and render the Add Tenant form
-                const properties = await Property.find().select('name _id');
-                res.render('addTenant', { id, properties });
-            } else {
-                return res.status(400).send('Invalid action.');
             }
         } else {
             return res.json({ status: 'waiting' });
@@ -182,41 +172,16 @@ async function sendWhatsAppAuthMessage(phoneNumber) {
     });
 }
 
-// Route to get units for a selected property (used by AJAX)
-app.get('/getUnits/:propertyId', async (req, res) => {
-    const propertyId = req.params.propertyId;
-
-    try {
-        // Fetch units associated with the selected property from the database
-        const units = await Unit.find({ property: propertyId }).select('unitNumber _id');
-        
-        // Send the units as a JSON response
-        res.json(units);
-    } catch (error) {
-        console.error('Error fetching units:', error);
-        res.status(500).send('An error occurred while fetching units.');
-    }
-});
-
-
 // Route to display the "add tenant" form
 app.get('/addtenant/:id', async (req, res) => {
     const id = req.params.id;
 
     try {
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        const phoneNumber = authorizeRecord.phoneNumber;
-        await sendWhatsAppAuthMessage(phoneNumber); // Send WhatsApp authorization message
-
-        // Render the waiting page for WhatsApp authorization
-        res.render('waitingAuthorization', { id, action: 'addtenant' });
+        const properties = await Property.find().select('name _id');
+        res.render('addTenant', { id, properties });
     } catch (error) {
-        console.error('Error during authorization or fetching phone number:', error);
-        res.status(500).send('An error occurred during authorization.');
+        console.error('Error fetching properties:', error);
+        res.status(500).send('An error occurred while fetching properties.');
     }
 });
 
