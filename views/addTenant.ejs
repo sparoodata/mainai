@@ -1,34 +1,84 @@
-<form action="/addtenant/<%= id %>" method="POST" enctype="multipart/form-data">
-    <label for="name">Tenant Name:</label>
-    <input type="text" id="name" name="name" required><br><br>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Tenant</title>
+    <script>
+        // JavaScript to fetch units when a property is selected
+        document.addEventListener("DOMContentLoaded", function() {
+            const propertySelect = document.getElementById('propertySelect');
+            const unitSelect = document.getElementById('unitAssigned');
 
-    <label for="phoneNumber">Phone Number:</label>
-    <input type="text" id="phoneNumber" name="phoneNumber" required><br><br>
+            propertySelect.addEventListener('change', async function() {
+                const propertyId = this.value;
+                
+                // Clear existing options
+                unitSelect.innerHTML = '<option value="">Select a unit</option>';
 
-    <label for="propertyName">Property:</label>
-    <select id="propertyName" name="propertyName" required onchange="fetchUnits(this.value)">
-        <option value="">Select a property</option>
-        <% properties.forEach(function(property) { %>
-            <option value="<%= property._id %>"><%= property.name %></option>
-        <% }) %>
-    </select><br><br>
+                if (propertyId) {
+                    try {
+                        // Fetch the units for the selected property
+                        const response = await fetch(`/getUnits/${propertyId}`);
+                        const units = await response.json();
 
-    <label for="unitAssigned">Unit Assigned:</label>
-    <select id="unitAssigned" name="unitAssigned" required>
-        <option value="">Select a property first</option>
-    </select><br><br>
+                        // Populate the unitAssigned dropdown with the fetched units
+                        units.forEach(unit => {
+                            const option = document.createElement('option');
+                            option.value = unit._id;
+                            option.textContent = unit.unitNumber;
+                            unitSelect.appendChild(option);
+                        });
 
-    <label for="lease_start">Lease Start Date:</label>
-    <input type="date" id="lease_start" name="lease_start" required><br><br>
+                    } catch (error) {
+                        console.error('Error fetching units:', error);
+                    }
+                }
+            });
+        });
+    </script>
+</head>
+<body>
 
-    <label for="deposit">Deposit Amount:</label>
-    <input type="number" id="deposit" name="deposit" required><br><br>
+    <h1>Add Tenant</h1>
 
-    <label for="idProof">ID Proof (Image):</label>
-    <input type="file" id="idProof" name="idProof" required><br><br>
+    <form method="POST" enctype="multipart/form-data" action="/addtenant/<%= id %>">
+        
+        <label for="name">Name:</label>
+        <input type="text" id="name" name="name" required><br>
 
-    <label for="photo">Photo (Image):</label>
-    <input type="file" id="photo" name="photo" required><br><br>
+        <label for="phoneNumber">Phone Number:</label>
+        <input type="text" id="phoneNumber" name="phoneNumber" required><br>
 
-    <button type="submit">Submit</button>
-</form>
+        <label for="propertySelect">Property:</label>
+        <select id="propertySelect" name="propertyName" required>
+            <option value="">Select a property</option>
+            <% properties.forEach(property => { %>
+                <option value="<%= property._id %>"><%= property.name %></option>
+            <% }) %>
+        </select><br>
+
+        <label for="unitAssigned">Unit Assigned:</label>
+        <select id="unitAssigned" name="unitAssigned" required>
+            <option value="">Select a unit</option>
+            <!-- Units will be populated here based on the selected property -->
+        </select><br>
+
+        <label for="lease_start">Lease Start Date:</label>
+        <input type="date" id="lease_start" name="lease_start" required><br>
+
+        <label for="deposit">Deposit Amount:</label>
+        <input type="number" id="deposit" name="deposit" required><br>
+
+        <label for="idProof">ID Proof:</label>
+        <input type="file" id="idProof" name="idProof" required><br>
+
+        <label for="photo">Photo:</label>
+        <input type="file" id="photo" name="photo" required><br>
+
+        <button type="submit">Add Tenant</button>
+    </form>
+
+</body>
+</html>

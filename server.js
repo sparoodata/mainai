@@ -99,7 +99,7 @@ app.get('/addproperty/:id', async (req, res) => {
 // Check authorization and render the appropriate form (Add Property or Add Unit)
 app.get('/checkAuthorization/:id', async (req, res) => {
     const id = req.params.id;
-    const action = req.query.action;
+    const action = req.query.action; // This action can now be addproperty, addunit, or addtenant
 
     try {
         const authorizeRecord = await Authorize.findById(id);
@@ -118,6 +118,9 @@ app.get('/checkAuthorization/:id', async (req, res) => {
             } else if (action === 'addunit') {
                 const properties = await Property.find().select('name _id'); // Fetch properties
                 res.render('addUnit', { id, properties });
+            } else if (action === 'addtenant') {
+                const properties = await Property.find().select('name _id'); // Fetch properties for addtenant as well
+                res.render('addTenant', { id, properties });
             }
         } else {
             return res.json({ status: 'waiting' });
@@ -128,8 +131,9 @@ app.get('/checkAuthorization/:id', async (req, res) => {
     }
 });
 
+
 // Add unit route
-app.get('/addunit/:id', async (req, res) => {
+app.get('/addtenant/:id', async (req, res) => {
     const id = req.params.id;
 
     try {
@@ -141,12 +145,15 @@ app.get('/addunit/:id', async (req, res) => {
         const phoneNumber = authorizeRecord.phoneNumber;
         await sendWhatsAppAuthMessage(phoneNumber); // Send WhatsApp authorization message
 
-        res.render('waitingAuthorization', { id, action: 'addunit' });
+        const properties = await Property.find().select('name _id');
+        res.render('waitingAuthorization', { id, action: 'addtenant', properties });
     } catch (error) {
-        console.error('Error during authorization or fetching phone number:', error);
-        res.status(500).send('An error occurred during authorization.');
+        console.error('Error during authorization or fetching properties:', error);
+        res.status(500).send('An error occurred while fetching properties.');
     }
 });
+
+
 
 // Function to send WhatsApp message for authorization
 async function sendWhatsAppAuthMessage(phoneNumber) {
