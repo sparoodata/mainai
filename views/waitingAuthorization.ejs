@@ -1,0 +1,33 @@
+<html>
+<head>
+    <link rel="stylesheet" type="text/css" href="/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h2>Waiting for WhatsApp Authorization...</h2>
+        <p>Please authorize the action in WhatsApp to proceed with adding the property.</p>
+    </div>
+    <script>
+        const pollAuthorizationStatus = async () => {
+            try {
+                const response = await fetch('/checkAuthorization/<%= id %>?action=<%= action %>', {
+                    headers: { 'Accept': 'application/json' }
+                });
+
+                const contentType = response.headers.get("content-type");
+                if (contentType && contentType.indexOf("application/json") !== -1) {
+                    const result = await response.json();
+                    if (result.status === 'authorized') {
+                        window.location.reload();
+                    }
+                } else {
+                    document.documentElement.innerHTML = await response.text();
+                }
+            } catch (error) {
+                console.error('Error checking authorization status:', error);
+            }
+        };
+        setInterval(pollAuthorizationStatus, 5000);
+    </script>
+</body>
+</html>
