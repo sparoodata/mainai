@@ -1,12 +1,12 @@
 const mongoose = require('mongoose');
-
-// Property Schema
+const Schema = mongoose.Schema;
 const propertySchema = new mongoose.Schema({
     name: String,
     units: Number,
     address: String,
     totalAmount: Number,
-    images: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Image' }] // Link to images collection
+    images: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Image' }],
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }  // Reference to the User model
 });
 
-module.exports = mongoose.model('Property', propertySchema);
+module.exports = mongoose.model('properties', propertySchema);
