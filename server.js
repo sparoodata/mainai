@@ -69,8 +69,10 @@ const storage = multer.diskStorage({
         cb(null, Date.now() + '-' + file.originalname); // Unique file names
     }
 });
-const upload = multer({ storage: storage });
-
+const upload = multer({ 
+    storage: storage, 
+    limits: { fileSize: 5 * 1024 * 1024 }, // Limit file size to 5 MB
+});
 // Routes and webhook handling
 const { router, waitForUserResponse, userResponses } = require('./routes/webhook');
 app.use('/webhook', router);
@@ -97,6 +99,7 @@ app.get('/addproperty/:id', async (req, res) => {
 });
 
 // Check authorization and render the appropriate form (Add Property or Add Unit)
+// Check authorization and render the appropriate form (Add Property, Add Unit, or Add Tenant)
 app.get('/checkAuthorization/:id', async (req, res) => {
     const id = req.params.id;
     const action = req.query.action; // This action can now be addproperty, addunit, or addtenant
@@ -119,8 +122,9 @@ app.get('/checkAuthorization/:id', async (req, res) => {
                 const properties = await Property.find().select('name _id'); // Fetch properties
                 res.render('addUnit', { id, properties });
             } else if (action === 'addtenant') {
-                const properties = await Property.find().select('name _id'); // Fetch properties for addtenant as well
-                res.render('addTenant', { id, properties });
+                const properties = await Property.find().select('name _id'); // Fetch properties for tenant assignment
+                const units = await Unit.find().select('unitNumber _id property'); // Fetch units for tenant assignment
+                res.render('addTenant', { id, properties, units }); // Render a form where users can add a tenant
             }
         } else {
             return res.json({ status: 'waiting' });
@@ -130,30 +134,6 @@ app.get('/checkAuthorization/:id', async (req, res) => {
         res.status(500).send('An error occurred while checking authorization.');
     }
 });
-
-
-// Add unit route
-app.get('/addtenant/:id', async (req, res) => {
-    const id = req.params.id;
-
-    try {
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        const phoneNumber = authorizeRecord.phoneNumber;
-        await sendWhatsAppAuthMessage(phoneNumber); // Send WhatsApp authorization message
-
-        const properties = await Property.find().select('name _id');
-        res.render('waitingAuthorization', { id, action: 'addtenant', properties });
-    } catch (error) {
-        console.error('Error during authorization or fetching properties:', error);
-        res.status(500).send('An error occurred while fetching properties.');
-    }
-});
-
-
 
 // Function to send WhatsApp message for authorization
 async function sendWhatsAppAuthMessage(phoneNumber) {
@@ -179,45 +159,19 @@ async function sendWhatsAppAuthMessage(phoneNumber) {
     });
 }
 
-// Route to display the "add tenant" form
-app.get('/addtenant/:id', async (req, res) => {
-    const id = req.params.id;
-
-    try {
-        const properties = await Property.find().select('name _id');
-        res.render('addTenant', { id, properties });
-    } catch (error) {
-        console.error('Error fetching properties:', error);
-        res.status(500).send('An error occurred while fetching properties.');
-    }
-});
-
 // Route to get units for a selected property
 app.get('/getUnits/:propertyId', async (req, res) => {
     const propertyId = req.params.propertyId;
 
-    console.log('Fetching units for property ID:', propertyId);  // Log the property ID
-
     try {
         // Fetch units from the database based on the selected property
         const units = await Unit.find({ property: propertyId }).select('unitNumber _id');
-
-        // Check if units were found and log the result
-        if (units.length === 0) {
-            console.log(`No units found for property ID: ${propertyId}`);
-        } else {
-            console.log('Units found:', units);
-        }
-
-        // Return the units as JSON
         res.json(units);
     } catch (error) {
-        // Log the error to the server console
         console.error('Error fetching units:', error);
         res.status(500).send('An error occurred while fetching units.');
     }
 });
-
 
 // Handle form submission and image upload (add property)
 app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
@@ -241,6 +195,19 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
     }
 });
 
+// Add unit route (rendering the form)
+app.get('/addunit/:id', async (req, res) => {
+    const id = req.params.id;
+
+    try {
+        const properties = await Property.find().select('name _id'); // Fetch properties for unit assignment
+        res.render('addUnit', { id, properties }); // Render a form where users can add a unit
+    } catch (error) {
+        console.error('Error fetching properties:', error);
+        res.status(500).send('An error occurred while fetching properties.');
+    }
+});
+
 // Handle form submission and image upload (add unit)
 app.post('/addunit/:id', upload.single('image'), async (req, res) => {
     const { property, unit_number, rent_amount, floor, size } = req.body;
@@ -255,7 +222,6 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
             unit.images.push(image._id);
             await unit.save();
         }
-      
 
         res.send('Unit and image added successfully!');
     } catch (error) {
@@ -263,51 +229,60 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
         res.status(500).send('An error occurred while adding the unit and image.');
     }
 });
-app.post('/addtenant/:id', upload.fields([{ name: 'idProof', maxCount: 1 }, { name: 'photo', maxCount: 1 }]), async (req, res) => {
-    const { name, phoneNumber, propertyName, unitAssigned, lease_start, deposit } = req.body;
-    const id = req.params.id; // This is the authorization ID
+
+
+// Add tenant route that waits for WhatsApp authorization
+app.get('/addtenant/:id', async (req, res) => {
+    const id = req.params.id;
 
     try {
-        // Save the tenant data to MongoDB
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        const phoneNumber = authorizeRecord.phoneNumber;
+        await sendWhatsAppAuthMessage(phoneNumber); // Send WhatsApp authorization message
+
+        // Render the waiting page for WhatsApp authorization
+        res.render('waitingAuthorization', { id, action: 'addtenant' });
+    } catch (error) {
+        console.error('Error during authorization or fetching phone number:', error);
+        res.status(500).send('An error occurred during authorization.');
+    }
+});
+
+
+app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
+    const { name, phoneNumber, propertyName, unitAssigned, lease_start, deposit, rent_amount, tenant_id } = req.body;
+    
+    try {
+        // Create new tenant instance
         const tenant = new Tenant({
-            name: name,
-            phoneNumber: phoneNumber,
-            propertyName: propertyName,
-            unitAssigned: unitAssigned,
-            lease_start: lease_start,
-            deposit: deposit,
-            status: 'unpaid',
+            name,
+            phoneNumber,
+            propertyName,
+            unitAssigned,
+            lease_start: new Date(lease_start),
+            deposit,
+            rent_amount,
+            tenant_id,
         });
 
-        // Save the ID proof and photo if they are uploaded
-        if (req.files['idProof']) {
-            const idProofImage = new Image({
-                tenantId: tenant._id,
-                imageUrl: '/uploads/' + req.files['idProof'][0].filename,
-                imageName: req.files['idProof'][0].originalname,
-            });
-            await idProofImage.save();
-            tenant.idProof = idProofImage.imageUrl;
+        // If files are uploaded, save their paths
+        if (req.files.photo) {
+            tenant.photo = '/uploads/' + req.files.photo[0].filename;
+        }
+        if (req.files.idProof) {
+            tenant.idProof = '/uploads/' + req.files.idProof[0].filename;
         }
 
-        if (req.files['photo']) {
-            const photoImage = new Image({
-                tenantId: tenant._id,
-                imageUrl: '/uploads/' + req.files['photo'][0].filename,
-                imageName: req.files['photo'][0].originalname,
-            });
-            await photoImage.save();
-            tenant.photo = photoImage.imageUrl;
-        }
-
-        // Save the tenant to the database
+        // Save tenant to the database
         await tenant.save();
-
-        // Send success response after tenant is added
-        res.send('Tenant and images added successfully!');
+        res.send('Tenant added successfully!');
     } catch (error) {
-        console.error('Error adding tenant and images:', error);
-        res.status(500).send('An error occurred while adding the tenant and images.');
+        console.error('Error adding tenant:', error);
+        res.status(500).send('An error occurred while adding the tenant.');
     }
 });
 

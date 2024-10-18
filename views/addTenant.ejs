@@ -1,0 +1,41 @@
+<form action="/addtenant/<%= id %>" method="POST" enctype="multipart/form-data">
+    <label for="name">Tenant Name:</label>
+    <input type="text" name="name" required><br>
+    
+    <label for="phoneNumber">Phone Number:</label>
+    <input type="text" name="phoneNumber" required><br>
+    
+    <label for="propertyName">Property:</label>
+    <select name="propertyName" required>
+        <% properties.forEach(function(property) { %>
+            <option value="<%= property._id %>"><%= property.name %></option>
+        <% }); %>
+    </select><br>
+    
+    <label for="unitAssigned">Unit:</label>
+    <select name="unitAssigned" required>
+        <% units.forEach(function(unit) { %>
+            <option value="<%= unit._id %>"><%= unit.unitNumber %> (Property: <%= unit.property %>)</option>
+        <% }); %>
+    </select><br>
+    
+    <label for="lease_start">Lease Start Date:</label>
+    <input type="date" name="lease_start" required><br>
+    
+    <label for="deposit">Deposit Amount:</label>
+    <input type="number" name="deposit" required><br>
+    
+    <label for="rent_amount">Rent Amount:</label>
+    <input type="number" name="rent_amount" required><br>
+    
+    <label for="tenant_id">Tenant ID:</label>
+    <input type="text" name="tenant_id" required><br>
+    
+    <label for="photo">Photo:</label>
+    <input type="file" name="photo" required><br>
+    
+    <label for="idProof">ID Proof:</label>
+    <input type="file" name="idProof" required><br>
+    
+    <button type="submit">Add Tenant</button>
+</form>
