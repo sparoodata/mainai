@@ -196,14 +196,28 @@ app.get('/addtenant/:id', async (req, res) => {
 app.get('/getUnits/:propertyId', async (req, res) => {
     const propertyId = req.params.propertyId;
 
+    console.log('Fetching units for property ID:', propertyId);  // Log the property ID
+
     try {
+        // Fetch units from the database based on the selected property
         const units = await Unit.find({ property: propertyId }).select('unitNumber _id');
-        res.json(units); // Return the units as JSON
+
+        // Check if units were found and log the result
+        if (units.length === 0) {
+            console.log(`No units found for property ID: ${propertyId}`);
+        } else {
+            console.log('Units found:', units);
+        }
+
+        // Return the units as JSON
+        res.json(units);
     } catch (error) {
+        // Log the error to the server console
         console.error('Error fetching units:', error);
         res.status(500).send('An error occurred while fetching units.');
     }
 });
+
 
 // Handle form submission and image upload (add property)
 app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
