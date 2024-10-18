@@ -241,6 +241,7 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
             unit.images.push(image._id);
             await unit.save();
         }
+      
 
         res.send('Unit and image added successfully!');
     } catch (error) {

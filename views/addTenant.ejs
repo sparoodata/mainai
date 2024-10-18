@@ -5,39 +5,54 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Add Tenant</title>
-    <script>
-        // JavaScript to fetch units when a property is selected
-        document.addEventListener("DOMContentLoaded", function() {
-            const propertySelect = document.getElementById('propertySelect');
-            const unitSelect = document.getElementById('unitAssigned');
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const propertySelect = document.getElementById('propertySelect');
+        const unitSelect = document.getElementById('unitAssigned');
 
-            propertySelect.addEventListener('change', async function() {
-                const propertyId = this.value;
-                
-                // Clear existing options
-                unitSelect.innerHTML = '<option value="">Select a unit</option>';
+        // Event listener for property selection
+        propertySelect.addEventListener('change', async function() {
+            const propertyId = this.value;
 
-                if (propertyId) {
-                    try {
-                        // Fetch the units for the selected property
-                        const response = await fetch(`/getUnits/${propertyId}`);
-                        const units = await response.json();
+            console.log('Property selected:', propertyId);  // Log the selected property ID
 
-                        // Populate the unitAssigned dropdown with the fetched units
+            // Clear existing options in the unit dropdown
+            unitSelect.innerHTML = '<option value="">Select a unit</option>';
+
+            if (propertyId) {
+                try {
+                    console.log(`Fetching units for property ID: ${propertyId}`);
+
+                    const response = await fetch(`/getUnits/${propertyId}`);
+                    const units = await response.json();
+
+                    console.log('Units fetched:', units);  // Log the units received from the server
+
+                    // Check if units are being received and proceed to populate the dropdown
+                    if (units.length > 0) {
                         units.forEach(unit => {
+                            console.log('Appending unit:', unit.unitNumber, 'with ID:', unit._id);
+
+                            // Create new option element and append to unitSelect
                             const option = document.createElement('option');
                             option.value = unit._id;
                             option.textContent = unit.unitNumber;
                             unitSelect.appendChild(option);
                         });
-
-                    } catch (error) {
-                        console.error('Error fetching units:', error);
+                    } else {
+                        console.log('No units available for this property.');
                     }
+
+                } catch (error) {
+                    console.error('Error fetching units:', error);
                 }
-            });
+            } else {
+                console.log('No property selected.');
+            }
         });
-    </script>
+    });
+</script>
+
 </head>
 <body>
 
