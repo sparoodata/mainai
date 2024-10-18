@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const Schema = mongoose.Schema;
+
 const tenantSchema = new mongoose.Schema({
     name: String,
     phoneNumber: String,
@@ -13,8 +13,7 @@ const tenantSchema = new mongoose.Schema({
     lease_start: Date,
     deposit: Number,
     rent_amount: Number,
-    tenant_id: String,
-    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }  // Reference to the User model
+    tenant_id: String
 });
 
 module.exports = mongoose.model('tenants', tenantSchema);

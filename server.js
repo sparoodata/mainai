@@ -13,8 +13,6 @@ const Image = require('./models/Image');
 const Property = require('./models/Property');
 const Authorize = require('./models/Authorize');
 const Unit = require('./models/Unit');
-const User = require('./models/User');
-
 
 const app = express();
 const port = process.env.PORT || 3000; // Glitch uses dynamic port
@@ -137,6 +135,7 @@ app.get('/checkAuthorization/:id', async (req, res) => {
     }
 });
 
+
 // Function to send WhatsApp message for authorization
 async function sendWhatsAppAuthMessage(phoneNumber) {
     return axios.post(process.env.WHATSAPP_API_URL, {
@@ -178,25 +177,11 @@ app.get('/getUnits/:propertyId', async (req, res) => {
 // Handle form submission and image upload (add property)
 app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
     const { property_name, units, address, totalAmount } = req.body;
-    const userPhoneNumber = req.session.phoneNumber || req.body.phoneNumber;
 
     try {
-        // Find the user in the users collection
-        const user = await User.findOne({ phoneNumber: userPhoneNumber });
-        if (!user) {
-            return res.status(404).send('User not found.');
-        }
+        const property = new Property({ name: property_name, units, address, totalAmount });
+        await property.save();
 
-        // Create new property instance with a reference to the user
-        const property = new Property({
-            name: property_name,
-            units,
-            address,
-            totalAmount,
-            user: user._id  // Reference to the user
-        });
-
-        // If an image is uploaded, save its path
         if (req.file) {
             const image = new Image({ propertyId: property._id, imageUrl: '/uploads/' + req.file.filename });
             await image.save();
@@ -206,11 +191,10 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
 
         res.send('Property and image added successfully!');
     } catch (error) {
-        console.error('Error adding property:', error);
+        console.error('Error adding property and image:', error);
         res.status(500).send('An error occurred while adding the property and image.');
     }
 });
-
 
 // Add unit route (rendering the form)
 app.get('/addunit/:id', async (req, res) => {
@@ -228,26 +212,11 @@ app.get('/addunit/:id', async (req, res) => {
 // Handle form submission and image upload (add unit)
 app.post('/addunit/:id', upload.single('image'), async (req, res) => {
     const { property, unit_number, rent_amount, floor, size } = req.body;
-    const userPhoneNumber = req.session.phoneNumber || req.body.phoneNumber;
 
     try {
-        // Find the user in the users collection
-        const user = await User.findOne({ phoneNumber: userPhoneNumber });
-        if (!user) {
-            return res.status(404).send('User not found.');
-        }
+        const unit = new Unit({ property, unitNumber: unit_number, rentAmount: rent_amount, floor, size });
+        await unit.save();
 
-        // Create new unit instance with a reference to the user
-        const unit = new Unit({
-            property,
-            unitNumber: unit_number,
-            rentAmount: rent_amount,
-            floor,
-            size,
-            user: user._id  // Reference to the user
-        });
-
-        // If an image is uploaded, save its path
         if (req.file) {
             const image = new Image({ unitId: unit._id, imageUrl: '/uploads/' + req.file.filename });
             await image.save();
@@ -261,7 +230,6 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
         res.status(500).send('An error occurred while adding the unit and image.');
     }
 });
-
 
 
 // Add tenant route that waits for WhatsApp authorization
@@ -288,16 +256,9 @@ app.get('/addtenant/:id', async (req, res) => {
 
 app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
     const { name, phoneNumber, propertyName, unitAssigned, lease_start, deposit, rent_amount, tenant_id } = req.body;
-    const userPhoneNumber = req.session.phoneNumber || req.body.phoneNumber; // Assuming the user's phoneNumber is stored in the session or passed in the body
-
+    
     try {
-        // Find the user in the users collection
-        const user = await User.findOne({ phoneNumber: userPhoneNumber });
-        if (!user) {
-            return res.status(404).send('User not found.');
-        }
-
-        // Create new tenant instance with a reference to the user
+        // Create new tenant instance
         const tenant = new Tenant({
             name,
             phoneNumber,
@@ -307,9 +268,6 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
             deposit,
             rent_amount,
             tenant_id,
-            apartment_id: propertyName, // Reference to the property
-            unit: unitAssigned,         // Reference to the unit
-            user: user._id              // Reference to the user
         });
 
         // If files are uploaded, save their paths
@@ -328,7 +286,6 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
         res.status(500).send('An error occurred while adding the tenant.');
     }
 });
-
 
 
 // Start the server
