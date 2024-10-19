@@ -23,7 +23,9 @@
     "ejs": "^3.1.10",
     "cors": "^2.8.5",
     "helmet": "^8.0.0",
-    "compression": "^1.7.4"
+    "compression": "^1.7.4",
+    "googleapis": "^144.0.0",
+    "fs": "^0.0.2"
   },
   "engines": {
     "node": "14.x"

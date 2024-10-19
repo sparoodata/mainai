@@ -8,11 +8,13 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const axios = require("axios");
 const multer = require('multer');
+const fs = require('fs');
 const Tenant = require('./models/Tenant');
 const Image = require('./models/Image');
 const Property = require('./models/Property');
 const Authorize = require('./models/Authorize');
 const Unit = require('./models/Unit');
+const { authenticate, uploadFileToGoogleDrive } = require('./googleDrive'); // Import Google Drive functions
 
 const app = express();
 const port = process.env.PORT || 3000; // Glitch uses dynamic port
@@ -61,18 +63,11 @@ const signupLimiter = rateLimit({
 });
 
 // Configure multer for image uploads
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/'); // Folder where images will be saved
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + '-' + file.originalname); // Unique file names
-    }
-});
 const upload = multer({ 
-    storage: storage, 
+    storage: multer.memoryStorage(), // Use memory storage since we'll upload directly to Google Drive
     limits: { fileSize: 5 * 1024 * 1024 }, // Limit file size to 5 MB
 });
+
 // Routes and webhook handling
 const { router, waitForUserResponse, userResponses } = require('./routes/webhook');
 app.use('/webhook', router);
@@ -102,7 +97,6 @@ app.get('/addproperty/:id', async (req, res) => {
     }
 });
 
-// Check authorization and render the appropriate form (Add Property or Add Unit)
 // Check authorization and render the appropriate form (Add Property, Add Unit, or Add Tenant)
 app.get('/checkAuthorization/:id', async (req, res) => {
     const id = req.params.id;
@@ -139,9 +133,6 @@ app.get('/checkAuthorization/:id', async (req, res) => {
     }
 });
 
-
-// Function to send WhatsApp message for authorization
-// Function to send WhatsApp message for authorization
 // Function to send WhatsApp message for authorization with dynamic action text
 async function sendWhatsAppAuthMessage(phoneNumber, actionType) {
     // Customize the authorization message based on the action type
@@ -183,7 +174,6 @@ async function sendWhatsAppAuthMessage(phoneNumber, actionType) {
     }
 }
 
-
 // Route to get units for a selected property
 app.get('/getUnits/:propertyId', async (req, res) => {
     const propertyId = req.params.propertyId;
@@ -207,13 +197,25 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
         await property.save();
 
         if (req.file) {
-            const image = new Image({ propertyId: property._id, imageUrl: '/uploads/' + req.file.filename });
+            // Authenticate with Google Drive and upload the file
+            const auth = await authenticate();
+            const fileName = `${Date.now()}-${req.file.originalname}`;
+            // Write the file buffer to a temporary file
+            const tempFilePath = path.join(__dirname, 'temp', fileName);
+            fs.writeFileSync(tempFilePath, req.file.buffer);
+
+            const fileId = await uploadFileToGoogleDrive(auth, tempFilePath, fileName);
+
+            // Delete the temporary file
+            fs.unlinkSync(tempFilePath);
+
+            const image = new Image({ propertyId: property._id, imageUrl: `https://drive.google.com/uc?id=${fileId}` });
             await image.save();
             property.images.push(image._id);
             await property.save();
         }
 
-        res.send('Property and image added successfully!');
+        res.send('Property and image added successfully to Google Drive!');
     } catch (error) {
         console.error('Error adding property and image:', error);
         res.status(500).send('An error occurred while adding the property and image.');
@@ -245,7 +247,6 @@ app.get('/addunit/:id', async (req, res) => {
     }
 });
 
-
 // Handle form submission and image upload (add unit)
 app.post('/addunit/:id', upload.single('image'), async (req, res) => {
     const { property, unit_number, rent_amount, floor, size } = req.body;
@@ -255,19 +256,30 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
         await unit.save();
 
         if (req.file) {
-            const image = new Image({ unitId: unit._id, imageUrl: '/uploads/' + req.file.filename });
+            // Authenticate with Google Drive and upload the file
+            const auth = await authenticate();
+            const fileName = `${Date.now()}-${req.file.originalname}`;
+            // Write the file buffer to a temporary file
+            const tempFilePath = path.join(__dirname, 'temp', fileName);
+            fs.writeFileSync(tempFilePath, req.file.buffer);
+
+            const fileId = await uploadFileToGoogleDrive(auth, tempFilePath, fileName);
+
+            // Delete the temporary file
+            fs.unlinkSync(tempFilePath);
+
+            const image = new Image({ unitId: unit._id, imageUrl: `https://drive.google.com/uc?id=${fileId}` });
             await image.save();
             unit.images.push(image._id);
             await unit.save();
         }
 
-        res.send('Unit and image added successfully!');
+        res.send('Unit and image added successfully to Google Drive!');
     } catch (error) {
         console.error('Error adding unit and image:', error);
         res.status(500).send('An error occurred while adding the unit and image.');
     }
 });
-
 
 // Add tenant route that waits for WhatsApp authorization
 app.get('/addtenant/:id', async (req, res) => {
@@ -295,8 +307,6 @@ app.get('/addtenant/:id', async (req, res) => {
     }
 });
 
-
-
 app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
     const { name, phoneNumber, propertyName, unitAssigned, lease_start, deposit, rent_amount, tenant_id } = req.body;
     
@@ -313,23 +323,40 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
             tenant_id,
         });
 
-        // If files are uploaded, save their paths
+        // If files are uploaded, upload them to Google Drive
         if (req.files.photo) {
-            tenant.photo = '/uploads/' + req.files.photo[0].filename;
+            const photoFile = req.files.photo[0];
+            const auth = await authenticate();
+            const fileName = `${Date.now()}-${photoFile.originalname}`;
+            const tempFilePath = path.join(__dirname, 'temp', fileName);
+            fs.writeFileSync(tempFilePath, photoFile.buffer);
+
+            const fileId = await uploadFileToGoogleDrive(auth, tempFilePath, fileName);
+            fs.unlinkSync(tempFilePath);
+
+            tenant.photo = `https://drive.google.com/uc?id=${fileId}`;
         }
         if (req.files.idProof) {
-            tenant.idProof = '/uploads/' + req.files.idProof[0].filename;
+            const idProofFile = req.files.idProof[0];
+            const auth = await authenticate();
+            const fileName = `${Date.now()}-${idProofFile.originalname}`;
+            const tempFilePath = path.join(__dirname, 'temp', fileName);
+            fs.writeFileSync(tempFilePath, idProofFile.buffer);
+
+            const fileId = await uploadFileToGoogleDrive(auth, tempFilePath, fileName);
+            fs.unlinkSync(tempFilePath);
+
+            tenant.idProof = `https://drive.google.com/uc?id=${fileId}`;
         }
 
         // Save tenant to the database
         await tenant.save();
-        res.send('Tenant added successfully!');
+        res.send('Tenant added successfully with images uploaded to Google Drive!');
     } catch (error) {
         console.error('Error adding tenant:', error);
         res.status(500).send('An error occurred while adding the tenant.');
     }
 });
-
 
 // Start the server
 app.listen(port, () => {
