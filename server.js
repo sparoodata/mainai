@@ -88,7 +88,11 @@ app.get('/addproperty/:id', async (req, res) => {
         }
 
         const phoneNumber = authorizeRecord.phoneNumber;
-        await sendWhatsAppAuthMessage(phoneNumber); // Send WhatsApp authorization message
+        const messageSent = await sendWhatsAppAuthMessage(phoneNumber, 'adding a property'); // Pass action type
+
+        if (!messageSent) {
+            return res.status(500).send('Failed to send WhatsApp authorization message.');
+        }
 
         // Render the waiting page for WhatsApp authorization
         res.render('waitingAuthorization', { id, action: 'addproperty' });
@@ -138,7 +142,11 @@ app.get('/checkAuthorization/:id', async (req, res) => {
 
 // Function to send WhatsApp message for authorization
 // Function to send WhatsApp message for authorization
-async function sendWhatsAppAuthMessage(phoneNumber) {
+// Function to send WhatsApp message for authorization with dynamic action text
+async function sendWhatsAppAuthMessage(phoneNumber, actionType) {
+    // Customize the authorization message based on the action type
+    const messageText = `Do you authorize this action for ${actionType}?`;
+
     try {
         const response = await axios.post(process.env.WHATSAPP_API_URL, {
             messaging_product: 'whatsapp',
@@ -146,7 +154,7 @@ async function sendWhatsAppAuthMessage(phoneNumber) {
             type: 'interactive',
             interactive: {
                 type: 'button',
-                body: { text: 'Do you authorize this action?' },
+                body: { text: messageText },
                 action: {
                     buttons: [
                         { type: 'reply', reply: { id: 'Yes_authorize', title: 'Yes' } },
@@ -217,13 +225,26 @@ app.get('/addunit/:id', async (req, res) => {
     const id = req.params.id;
 
     try {
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        const phoneNumber = authorizeRecord.phoneNumber;
+        const messageSent = await sendWhatsAppAuthMessage(phoneNumber, 'adding a unit'); // Pass action type
+
+        if (!messageSent) {
+            return res.status(500).send('Failed to send WhatsApp authorization message.');
+        }
+
         const properties = await Property.find().select('name _id'); // Fetch properties for unit assignment
-        res.render('addUnit', { id, properties }); // Render a form where users can add a unit
+        res.render('addUnit', { id, properties });
     } catch (error) {
         console.error('Error fetching properties:', error);
         res.status(500).send('An error occurred while fetching properties.');
     }
 });
+
 
 // Handle form submission and image upload (add unit)
 app.post('/addunit/:id', upload.single('image'), async (req, res) => {
@@ -259,15 +280,21 @@ app.get('/addtenant/:id', async (req, res) => {
         }
 
         const phoneNumber = authorizeRecord.phoneNumber;
-        await sendWhatsAppAuthMessage(phoneNumber); // Send WhatsApp authorization message
+        const messageSent = await sendWhatsAppAuthMessage(phoneNumber, 'adding a tenant'); // Pass action type
 
-        // Render the waiting page for WhatsApp authorization
-        res.render('waitingAuthorization', { id, action: 'addtenant' });
+        if (!messageSent) {
+            return res.status(500).send('Failed to send WhatsApp authorization message.');
+        }
+
+        const properties = await Property.find().select('name _id');
+        const units = await Unit.find().select('unitNumber _id property');
+        res.render('addTenant', { id, properties, units });
     } catch (error) {
         console.error('Error during authorization or fetching phone number:', error);
         res.status(500).send('An error occurred during authorization.');
     }
 });
+
 
 
 app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
