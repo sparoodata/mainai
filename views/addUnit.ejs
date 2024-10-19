@@ -1,35 +1,110 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" type="text/css" href="/styles.css">
+    <title>Add Unit</title>
 </head>
 <body>
+    <!-- Success Message -->
+    <div class="success-message">
+        Authorization successful! Add your unit below:
+    </div>
+
+    <!-- Form Container -->
     <div class="container">
-        <h2>Authorization successful! Add your unit below:</h2>
-        <form action="/addunit/<%= id %>" method="POST" enctype="multipart/form-data">
+        <h2>Add Unit</h2>
+        <form action="/addunit/<%= id %>" method="POST" enctype="multipart/form-data" onsubmit="return validateUnitForm()">
+            
+            <!-- Property Selection -->
             <label for="property">Property:</label>
             <select id="property" name="property" required>
                 <% properties.forEach(function(property) { %>
                     <option value="<%= property._id %>"><%= property.name %></option>
                 <% }) %>
-            </select><br><br>
+            </select>
+            <small id="propertyError" class="error-message"></small>
 
+            <!-- Unit Number -->
             <label for="unit_number">Unit Number:</label>
-            <input type="text" id="unit_number" name="unit_number" required><br><br>
+            <input type="text" id="unit_number" name="unit_number" required>
+            <small id="unitNumberError" class="error-message"></small>
 
+            <!-- Rent Amount -->
             <label for="rent_amount">Rent Amount:</label>
-            <input type="number" id="rent_amount" name="rent_amount" required><br><br>
+            <input type="number" id="rent_amount" name="rent_amount" required min="0">
+            <small id="rentAmountError" class="error-message"></small>
 
+            <!-- Floor -->
             <label for="floor">Floor:</label>
-            <input type="number" id="floor" name="floor" required><br><br>
+            <input type="number" id="floor" name="floor" required min="0">
+            <small id="floorError" class="error-message"></small>
 
+            <!-- Size -->
             <label for="size">Size (sqft):</label>
-            <input type="number" id="size" name="size" required><br><br>
+            <input type="number" id="size" name="size" required min="0">
+            <small id="sizeError" class="error-message"></small>
 
-            <label for="image">Unit Image:</label>
-            <input type="file" id="image" name="image" required><br><br>
+            <!-- Unit Image -->
+            <label for="image">Unit Image (Max 5MB):</label>
+            <input type="file" id="image" name="image" required accept="image/*">
+            <small id="imageError" class="error-message"></small>
 
+            <!-- Submit Button -->
             <button type="submit">Submit</button>
         </form>
     </div>
+
+    <!-- JavaScript for validation -->
+    <script>
+        function validateUnitForm() {
+            const unitNumber = document.getElementById('unit_number').value;
+            const rentAmount = document.getElementById('rent_amount').value;
+            const floor = document.getElementById('floor').value;
+            const size = document.getElementById('size').value;
+            const image = document.getElementById('image').files[0];
+
+            let valid = true;
+
+            document.getElementById('unitNumberError').innerHTML = "";
+            document.getElementById('rentAmountError').innerHTML = "";
+            document.getElementById('floorError').innerHTML = "";
+            document.getElementById('sizeError').innerHTML = "";
+            document.getElementById('imageError').innerHTML = "";
+
+            // Unit Number validation
+            if (unitNumber.trim() === "") {
+                document.getElementById('unitNumberError').innerHTML = "Unit number is required.";
+                valid = false;
+            }
+
+            // Rent Amount validation
+            if (isNaN(rentAmount) || rentAmount <= 0) {
+                document.getElementById('rentAmountError').innerHTML = "Please enter a valid rent amount.";
+                valid = false;
+            }
+
+            // Floor validation
+            if (isNaN(floor) || floor < 0) {
+                document.getElementById('floorError').innerHTML = "Please enter a valid floor number.";
+                valid = false;
+            }
+
+            // Size validation
+            if (isNaN(size) || size <= 0) {
+                document.getElementById('sizeError').innerHTML = "Please enter a valid size.";
+                valid = false;
+            }
+
+            // Image validation
+            if (image && image.size > 5 * 1024 * 1024) {
+                document.getElementById('imageError').innerHTML = "Image size cannot exceed 5MB.";
+                valid = false;
+            }
+
+            return valid;
+        }
+    </script>
 </body>
 </html>
