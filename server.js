@@ -137,28 +137,44 @@ app.get('/checkAuthorization/:id', async (req, res) => {
 
 
 // Function to send WhatsApp message for authorization
+// Function to send WhatsApp message for authorization
 async function sendWhatsAppAuthMessage(phoneNumber) {
-    return axios.post(process.env.WHATSAPP_API_URL, {
-        messaging_product: 'whatsapp',
-        to: phoneNumber,
-        type: 'interactive',
-        interactive: {
-            type: 'button',
-            body: { text: 'Do you authorize this action?' },
-            action: {
-                buttons: [
-                    { type: 'reply', reply: { id: 'Yes_authorize', title: 'Yes' } },
-                    { type: 'reply', reply: { id: 'No_authorize', title: 'No' } }
-                ]
+    try {
+        const response = await axios.post(process.env.WHATSAPP_API_URL, {
+            messaging_product: 'whatsapp',
+            to: phoneNumber,
+            type: 'interactive',
+            interactive: {
+                type: 'button',
+                body: { text: 'Do you authorize this action?' },
+                action: {
+                    buttons: [
+                        { type: 'reply', reply: { id: 'Yes_authorize', title: 'Yes' } },
+                        { type: 'reply', reply: { id: 'No_authorize', title: 'No' } }
+                    ]
+                }
             }
+        }, {
+            headers: {
+                'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        // Check response status
+        if (response.status === 200) {
+            console.log('WhatsApp message sent successfully');
+            return true; // Indicates success
+        } else {
+            console.error('Failed to send WhatsApp message:', response.statusText);
+            return false; // Indicates failure
         }
-    }, {
-        headers: {
-            'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
-        },
-    });
+    } catch (error) {
+        console.error('Error sending WhatsApp message:', error.message || error);
+        return false; // Indicates failure
+    }
 }
+
 
 // Route to get units for a selected property
 app.get('/getUnits/:propertyId', async (req, res) => {
