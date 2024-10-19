@@ -8,10 +8,6 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const axios = require("axios");
 const multer = require('multer');
-const cors = require('cors');
-const helmet = require('helmet');
-const compression = require('compression');
-const fs = require('fs');
 const Tenant = require('./models/Tenant');
 const Image = require('./models/Image');
 const Property = require('./models/Property');
@@ -31,19 +27,6 @@ app.set('views', path.join(__dirname, 'views'));
 // Middleware
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:3000', // Modify with your frontend URL
-}));
-app.use(helmet({
-    contentSecurityPolicy: false,  // Disables CSP for now, you can configure it if necessary
-}));
-app.use(compression());  // Compress all responses to improve performance
-
-// Ensure the uploads directory exists
-const uploadDir = 'uploads';
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir);
-}
 
 // MongoDB connection
 mongoose.set('strictQuery', false);
@@ -64,13 +47,11 @@ app.use(session({
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         maxAge: 3600000, // 1 hour
-        sameSite: 'strict', // Protect against CSRF
     },
 }));
 
-// Serve static files (public directory and uploads directory)
+// Serve static files (public directory)
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Rate limiter for signup
 const signupLimiter = rateLimit({
@@ -92,8 +73,7 @@ const upload = multer({
     storage: storage, 
     limits: { fileSize: 5 * 1024 * 1024 }, // Limit file size to 5 MB
 });
-
-// Webhook routes
+// Routes and webhook handling
 const { router, waitForUserResponse, userResponses } = require('./routes/webhook');
 app.use('/webhook', router);
 
@@ -118,10 +98,11 @@ app.get('/addproperty/:id', async (req, res) => {
     }
 });
 
+// Check authorization and render the appropriate form (Add Property or Add Unit)
 // Check authorization and render the appropriate form (Add Property, Add Unit, or Add Tenant)
 app.get('/checkAuthorization/:id', async (req, res) => {
     const id = req.params.id;
-    const action = req.query.action;
+    const action = req.query.action; // This action can now be addproperty, addunit, or addtenant
 
     try {
         const authorizeRecord = await Authorize.findById(id);
@@ -141,9 +122,9 @@ app.get('/checkAuthorization/:id', async (req, res) => {
                 const properties = await Property.find().select('name _id'); // Fetch properties
                 res.render('addUnit', { id, properties });
             } else if (action === 'addtenant') {
-                const properties = await Property.find().select('name _id');
-                const units = await Unit.find().select('unitNumber _id property');
-                res.render('addTenant', { id, properties, units });
+                const properties = await Property.find().select('name _id'); // Fetch properties for tenant assignment
+                const units = await Unit.find().select('unitNumber _id property'); // Fetch units for tenant assignment
+                res.render('addTenant', { id, properties, units }); // Render a form where users can add a tenant
             }
         } else {
             return res.json({ status: 'waiting' });
@@ -153,6 +134,7 @@ app.get('/checkAuthorization/:id', async (req, res) => {
         res.status(500).send('An error occurred while checking authorization.');
     }
 });
+
 
 // Function to send WhatsApp message for authorization
 async function sendWhatsAppAuthMessage(phoneNumber) {
@@ -183,6 +165,7 @@ app.get('/getUnits/:propertyId', async (req, res) => {
     const propertyId = req.params.propertyId;
 
     try {
+        // Fetch units from the database based on the selected property
         const units = await Unit.find({ property: propertyId }).select('unitNumber _id');
         res.json(units);
     } catch (error) {
@@ -195,10 +178,6 @@ app.get('/getUnits/:propertyId', async (req, res) => {
 app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
     const { property_name, units, address, totalAmount } = req.body;
 
-    if (!property_name || !units || !address || !totalAmount) {
-        return res.status(400).send('All fields are required.');
-    }
-
     try {
         const property = new Property({ name: property_name, units, address, totalAmount });
         await property.save();
@@ -210,7 +189,7 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
             await property.save();
         }
 
-        res.status(200).send('Property and image added successfully!');
+        res.send('Property and image added successfully!');
     } catch (error) {
         console.error('Error adding property and image:', error);
         res.status(500).send('An error occurred while adding the property and image.');
@@ -223,7 +202,7 @@ app.get('/addunit/:id', async (req, res) => {
 
     try {
         const properties = await Property.find().select('name _id'); // Fetch properties for unit assignment
-        res.render('addUnit', { id, properties });
+        res.render('addUnit', { id, properties }); // Render a form where users can add a unit
     } catch (error) {
         console.error('Error fetching properties:', error);
         res.status(500).send('An error occurred while fetching properties.');
@@ -233,10 +212,6 @@ app.get('/addunit/:id', async (req, res) => {
 // Handle form submission and image upload (add unit)
 app.post('/addunit/:id', upload.single('image'), async (req, res) => {
     const { property, unit_number, rent_amount, floor, size } = req.body;
-
-    if (!property || !unit_number || !rent_amount || !floor || !size) {
-        return res.status(400).send('All fields are required.');
-    }
 
     try {
         const unit = new Unit({ property, unitNumber: unit_number, rentAmount: rent_amount, floor, size });
@@ -249,12 +224,13 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
             await unit.save();
         }
 
-        res.status(200).send('Unit and image added successfully!');
+        res.send('Unit and image added successfully!');
     } catch (error) {
         console.error('Error adding unit and image:', error);
         res.status(500).send('An error occurred while adding the unit and image.');
     }
 });
+
 
 // Add tenant route that waits for WhatsApp authorization
 app.get('/addtenant/:id', async (req, res) => {
@@ -267,7 +243,7 @@ app.get('/addtenant/:id', async (req, res) => {
         }
 
         const phoneNumber = authorizeRecord.phoneNumber;
-        await sendWhatsAppAuthMessage(phoneNumber);
+        await sendWhatsAppAuthMessage(phoneNumber); // Send WhatsApp authorization message
 
         // Render the waiting page for WhatsApp authorization
         res.render('waitingAuthorization', { id, action: 'addtenant' });
@@ -277,15 +253,12 @@ app.get('/addtenant/:id', async (req, res) => {
     }
 });
 
-// Handle form submission and image upload (add tenant)
+
 app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
     const { name, phoneNumber, propertyName, unitAssigned, lease_start, deposit, rent_amount, tenant_id } = req.body;
-
-    if (!name || !phoneNumber || !propertyName || !unitAssigned || !lease_start || !deposit || !rent_amount) {
-        return res.status(400).send('All fields are required.');
-    }
-
+    
     try {
+        // Create new tenant instance
         const tenant = new Tenant({
             name,
             phoneNumber,
@@ -297,6 +270,7 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
             tenant_id,
         });
 
+        // If files are uploaded, save their paths
         if (req.files.photo) {
             tenant.photo = '/uploads/' + req.files.photo[0].filename;
         }
@@ -304,19 +278,15 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
             tenant.idProof = '/uploads/' + req.files.idProof[0].filename;
         }
 
+        // Save tenant to the database
         await tenant.save();
-        res.status(200).send('Tenant added successfully!');
+        res.send('Tenant added successfully!');
     } catch (error) {
         console.error('Error adding tenant:', error);
         res.status(500).send('An error occurred while adding the tenant.');
     }
 });
 
-// Global error handling middleware
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).send('Something went wrong!');
-});
 
 // Start the server
 app.listen(port, () => {
