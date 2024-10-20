@@ -1,12 +1,71 @@
 <html>
 <head>
     <link rel="stylesheet" type="text/css" href="/styles.css">
+    <style>
+        /* Add some basic styles for centering */
+        body, html {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: Arial, sans-serif;
+        }
+        
+        .container {
+            text-align: center;
+        }
+
+        /* Loading spinner styles */
+        .spinner {
+            border: 8px solid #f3f3f3;
+            border-top: 8px solid #3498db;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Responsive font size */
+        h2 {
+            font-size: 2vw;
+        }
+        
+        p {
+            font-size: 1.5vw;
+        }
+
+        /* Media query for smaller screens */
+        @media (max-width: 768px) {
+            h2 {
+                font-size: 5vw;
+            }
+            
+            p {
+                font-size: 3vw;
+            }
+
+            .spinner {
+                width: 40px;
+                height: 40px;
+                border-width: 6px;
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="container">
         <h2>Waiting for WhatsApp Authorization...</h2>
+        <div class="spinner"></div> <!-- Loading spinner -->
         <p>Please authorize the action in WhatsApp to proceed with adding the property.</p>
     </div>
+    
     <script>
         const pollAuthorizationStatus = async () => {
             try {

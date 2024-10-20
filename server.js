@@ -189,12 +189,13 @@ app.get('/getUnits/:propertyId', async (req, res) => {
     try {
         // Fetch units from the database based on the selected property
         const units = await Unit.find({ property: propertyId }).select('unitNumber _id');
-        res.json(units);
+        res.json(units); // Return the list of units in JSON format
     } catch (error) {
         console.error('Error fetching units:', error);
         res.status(500).send('An error occurred while fetching units.');
     }
 });
+
 
 // Handle form submission and image upload to Dropbox (add property)
 app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
