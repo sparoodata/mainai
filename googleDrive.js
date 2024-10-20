@@ -22,12 +22,24 @@ async function authenticate() {
     // Create a new OAuth2 client
     const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
 
-    // Check if the token.json file exists and read it
+    // Check if token.json exists and is valid
     if (fs.existsSync(TOKEN_PATH)) {
-        const token = fs.readFileSync(TOKEN_PATH);
-        oAuth2Client.setCredentials(JSON.parse(token));
+        try {
+            const token = fs.readFileSync(TOKEN_PATH, 'utf-8');
+            if (!token) {
+                // If the token file is empty, get a new token
+                await getAccessToken(oAuth2Client);
+            } else {
+                // Try parsing the token, if it fails, reauthenticate
+                oAuth2Client.setCredentials(JSON.parse(token));
+            }
+        } catch (error) {
+            console.error("Error reading or parsing token.json:", error.message);
+            // If there's any error reading or parsing the token, get a new one
+            await getAccessToken(oAuth2Client);
+        }
     } else {
-        // If token.json does not exist, we get a new access token
+        // If token.json doesn't exist, prompt for a new token
         await getAccessToken(oAuth2Client);
     }
 
@@ -56,47 +68,26 @@ function getAccessToken(oAuth2Client) {
             // Exchange the code for an access token
             oAuth2Client.getToken(code, (err, token) => {
                 if (err) {
-                    console.error('Error retrieving access token', err);
-                    return reject(err);
+                    console.error('Error retrieving access token:', err.message);
+                    return reject(err); // Add better error handling here
                 }
+                console.log('Token received:', token); // Log the received token
+                
                 // Set the credentials for the OAuth2 client
                 oAuth2Client.setCredentials(token);
-                // Store the token in token.json for future use
-                fs.writeFileSync(TOKEN_PATH, JSON.stringify(token));
-                console.log('Token stored to', TOKEN_PATH);
-                resolve(oAuth2Client);
+
+                // Now write the token to token.json
+                try {
+                    fs.writeFileSync(TOKEN_PATH, JSON.stringify(token));
+                    console.log('Token stored to', TOKEN_PATH);
+                    resolve(oAuth2Client);
+                } catch (writeError) {
+                    console.error('Error saving token to token.json:', writeError.message);
+                    reject(writeError); // Handle token save failure
+                }
             });
         });
     });
 }
 
-// Function to upload a file to Google Drive
-async function uploadFileToGoogleDrive(auth, filePath, fileName) {
-    const drive = google.drive({ version: 'v3', auth }); // Initialize Drive API client
-    const fileMetadata = {
-        name: fileName,
-        // Optionally, add the folder ID where you want to upload the file
-        // parents: ['your-folder-id-on-drive'],
-    };
-    const media = {
-        mimeType: 'image/jpeg', // Adjust this depending on your file type (e.g., 'image/png', 'application/pdf', etc.)
-        body: fs.createReadStream(filePath), // Read the file from the file path
-    };
-
-    try {
-        // Upload the file to Google Drive
-        const response = await drive.files.create({
-            resource: fileMetadata,
-            media: media,
-            fields: 'id', // Only requesting the file ID in the response
-        });
-        console.log('File uploaded to Google Drive, file ID:', response.data.id);
-        return response.data.id;
-    } catch (error) {
-        console.error('Error uploading file to Google Drive:', error);
-        throw new Error('Failed to upload file to Google Drive');
-    }
-}
-
-// Export the authenticate and upload functions
-module.exports = { authenticate, uploadFileToGoogleDrive };
+module.exports = { authenticate };
