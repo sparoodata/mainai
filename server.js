@@ -13,9 +13,14 @@ const Image = require('./models/Image');
 const Property = require('./models/Property');
 const Authorize = require('./models/Authorize');
 const Unit = require('./models/Unit');
+const Dropbox = require('dropbox').Dropbox;
+const fetch = require('isomorphic-fetch');
 
 const app = express();
 const port = process.env.PORT || 3000; // Glitch uses dynamic port
+
+// Dropbox instance
+const dbx = new Dropbox({ accessToken: process.env.DROPBOX_ACCESS_TOKEN, fetch: fetch });
 
 // Trust the first proxy
 app.set('trust proxy', 1);
@@ -60,19 +65,13 @@ const signupLimiter = rateLimit({
     message: 'Too many signup attempts. Try again later.',
 });
 
-// Configure multer for image uploads
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/'); // Folder where images will be saved
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + '-' + file.originalname); // Unique file names
-    }
-});
+// Configure multer for image uploads (memory storage)
+const storage = multer.memoryStorage(); // Use memory storage for direct upload to Dropbox
 const upload = multer({ 
     storage: storage, 
     limits: { fileSize: 5 * 1024 * 1024 }, // Limit file size to 5 MB
 });
+
 // Routes and webhook handling
 const { router, waitForUserResponse, userResponses } = require('./routes/webhook');
 app.use('/webhook', router);
@@ -98,7 +97,6 @@ app.get('/addproperty/:id', async (req, res) => {
     }
 });
 
-// Check authorization and render the appropriate form (Add Property or Add Unit)
 // Check authorization and render the appropriate form (Add Property, Add Unit, or Add Tenant)
 app.get('/checkAuthorization/:id', async (req, res) => {
     const id = req.params.id;
@@ -134,7 +132,6 @@ app.get('/checkAuthorization/:id', async (req, res) => {
         res.status(500).send('An error occurred while checking authorization.');
     }
 });
-
 
 // Function to send WhatsApp message for authorization
 async function sendWhatsAppAuthMessage(phoneNumber) {
@@ -174,7 +171,7 @@ app.get('/getUnits/:propertyId', async (req, res) => {
     }
 });
 
-// Handle form submission and image upload (add property)
+// Handle form submission and image upload to Dropbox (add property)
 app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
     const { property_name, units, address, totalAmount } = req.body;
 
@@ -183,7 +180,23 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
         await property.save();
 
         if (req.file) {
-            const image = new Image({ propertyId: property._id, imageUrl: '/uploads/' + req.file.filename });
+            const dropboxPath = '/images/' + Date.now() + '-' + req.file.originalname; // Dropbox path
+
+            // Upload image to Dropbox
+            const dropboxResponse = await dbx.filesUpload({
+                path: dropboxPath,
+                contents: req.file.buffer
+            });
+
+            // Get Dropbox shared link
+            const sharedLinkResponse = await dbx.sharingCreateSharedLinkWithSettings({
+                path: dropboxResponse.result.path_lower
+            });
+
+            const imageUrl = sharedLinkResponse.result.url.replace('dl=0', 'raw=1'); // Direct link to image
+
+            // Save image details in MongoDB
+            const image = new Image({ propertyId: property._id, imageUrl: imageUrl });
             await image.save();
             property.images.push(image._id);
             await property.save();
@@ -196,20 +209,7 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
     }
 });
 
-// Add unit route (rendering the form)
-app.get('/addunit/:id', async (req, res) => {
-    const id = req.params.id;
-
-    try {
-        const properties = await Property.find().select('name _id'); // Fetch properties for unit assignment
-        res.render('addUnit', { id, properties }); // Render a form where users can add a unit
-    } catch (error) {
-        console.error('Error fetching properties:', error);
-        res.status(500).send('An error occurred while fetching properties.');
-    }
-});
-
-// Handle form submission and image upload (add unit)
+// Handle form submission and image upload to Dropbox (add unit)
 app.post('/addunit/:id', upload.single('image'), async (req, res) => {
     const { property, unit_number, rent_amount, floor, size } = req.body;
 
@@ -218,7 +218,19 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
         await unit.save();
 
         if (req.file) {
-            const image = new Image({ unitId: unit._id, imageUrl: '/uploads/' + req.file.filename });
+            const dropboxPath = '/images/' + Date.now() + '-' + req.file.originalname;
+            const dropboxResponse = await dbx.filesUpload({
+                path: dropboxPath,
+                contents: req.file.buffer
+            });
+
+            const sharedLinkResponse = await dbx.sharingCreateSharedLinkWithSettings({
+                path: dropboxResponse.result.path_lower
+            });
+
+            const imageUrl = sharedLinkResponse.result.url.replace('dl=0', 'raw=1');
+
+            const image = new Image({ unitId: unit._id, imageUrl: imageUrl });
             await image.save();
             unit.images.push(image._id);
             await unit.save();
@@ -230,7 +242,6 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
         res.status(500).send('An error occurred while adding the unit and image.');
     }
 });
-
 
 // Add tenant route that waits for WhatsApp authorization
 app.get('/addtenant/:id', async (req, res) => {
@@ -253,7 +264,6 @@ app.get('/addtenant/:id', async (req, res) => {
     }
 });
 
-
 app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
     const { name, phoneNumber, propertyName, unitAssigned, lease_start, deposit, rent_amount, tenant_id } = req.body;
     
@@ -270,12 +280,33 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
             tenant_id,
         });
 
-        // If files are uploaded, save their paths
+        // If files are uploaded, save their paths in Dropbox
         if (req.files.photo) {
-            tenant.photo = '/uploads/' + req.files.photo[0].filename;
+            const photoPath = '/images/' + Date.now() + '-' + req.files.photo[0].originalname;
+            const dropboxResponse = await dbx.filesUpload({
+                path: photoPath,
+                contents: req.files.photo[0].buffer
+            });
+
+            const sharedLinkResponse = await dbx.sharingCreateSharedLinkWithSettings({
+                path: dropboxResponse.result.path_lower
+            });
+
+            tenant.photo = sharedLinkResponse.result.url.replace('dl=0', 'raw=1');
         }
+
         if (req.files.idProof) {
-            tenant.idProof = '/uploads/' + req.files.idProof[0].filename;
+            const idProofPath = '/images/' + Date.now() + '-' + req.files.idProof[0].originalname;
+            const dropboxResponse = await dbx.filesUpload({
+                path: idProofPath,
+                contents: req.files.idProof[0].buffer
+            });
+
+            const sharedLinkResponse = await dbx.sharingCreateSharedLinkWithSettings({
+                path: dropboxResponse.result.path_lower
+            });
+
+            tenant.idProof = sharedLinkResponse.result.url.replace('dl=0', 'raw=1');
         }
 
         // Save tenant to the database
@@ -286,7 +317,6 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
         res.status(500).send('An error occurred while adding the tenant.');
     }
 });
-
 
 // Start the server
 app.listen(port, () => {
