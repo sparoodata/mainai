@@ -184,7 +184,8 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
             return res.status(404).send('Authorization record not found.');
         }
 
-        const phoneNumber = authorizeRecord.phoneNumber;
+        const phoneNumber = '+' + authorizeRecord.phoneNumber;
+       console.log(phoneNumber);
 
         // Find the user by phone number
         const user = await User.findOne({ phoneNumber });
@@ -244,7 +245,7 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
             return res.status(404).send('Authorization record not found.');
         }
 
-        const phoneNumber = authorizeRecord.phoneNumber;
+        const phoneNumber = '+' + authorizeRecord.phoneNumber;
 
         // Find the user by phone number
         const user = await User.findOne({ phoneNumber });
@@ -322,7 +323,7 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
             return res.status(404).send('Authorization record not found.');
         }
 
-        const phoneNumber = authorizeRecord.phoneNumber;
+        const phoneNumber = '+' + authorizeRecord.phoneNumber;
 
         // Find the user by phone number
         const user = await User.findOne({ phoneNumber });
