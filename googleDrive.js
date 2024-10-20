@@ -30,8 +30,17 @@ async function authenticate() {
                 // If the token file is empty, get a new token
                 await getAccessToken(oAuth2Client);
             } else {
-                // Try parsing the token, if it fails, reauthenticate
-                oAuth2Client.setCredentials(JSON.parse(token));
+                // Try parsing the token
+                const parsedToken = JSON.parse(token);
+                oAuth2Client.setCredentials(parsedToken);
+
+                // Check if the access token is expired, if so, refresh it
+                if (isTokenExpired(parsedToken)) {
+                    console.log("Access token expired, refreshing...");
+                    await refreshAccessToken(oAuth2Client);
+                } else {
+                    console.log("Using existing token");
+                }
             }
         } catch (error) {
             console.error("Error reading or parsing token.json:", error.message);
@@ -88,6 +97,26 @@ function getAccessToken(oAuth2Client) {
             });
         });
     });
+}
+
+// Function to check if the access token is expired
+function isTokenExpired(token) {
+    const now = Date.now();
+    return token.expiry_date && token.expiry_date <= now;
+}
+
+// Function to refresh the access token
+async function refreshAccessToken(oAuth2Client) {
+    try {
+        const newTokens = await oAuth2Client.refreshAccessToken();
+        const token = newTokens.credentials;
+        
+        // Save the new token to token.json
+        fs.writeFileSync(TOKEN_PATH, JSON.stringify(token));
+        console.log('Refreshed and saved new token');
+    } catch (error) {
+        console.error('Error refreshing access token:', error.message);
+    }
 }
 
 module.exports = { authenticate };
