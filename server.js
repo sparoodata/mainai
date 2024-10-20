@@ -158,6 +158,30 @@ async function sendWhatsAppAuthMessage(phoneNumber) {
     });
 }
 
+
+app.get('/addunit/:id', async (req, res) => {
+    const id = req.params.id;
+
+    try {
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        const phoneNumber = authorizeRecord.phoneNumber;
+
+        // Fetch properties to associate the unit with a property
+        const properties = await Property.find().select('name _id');
+
+        // Render the add unit form and pass properties for selection
+        res.render('addUnit', { id, properties });
+    } catch (error) {
+        console.error('Error during authorization or fetching properties:', error);
+        res.status(500).send('An error occurred while fetching data.');
+    }
+});
+
+
 // Route to get units for a selected property
 app.get('/getUnits/:propertyId', async (req, res) => {
     const propertyId = req.params.propertyId;

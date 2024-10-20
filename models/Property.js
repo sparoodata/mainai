@@ -1,12 +1,15 @@
 const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
 
-// Property Schema
-const propertySchema = new mongoose.Schema({
-    name: String,
-    units: Number,
-    address: String,
-    totalAmount: Number,
-    images: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Image' }] // Link to images collection
+const propertySchema = new Schema({
+    name: { type: String, required: true },
+    units: { type: Number, required: true },
+    address: { type: String, required: true },
+    totalAmount: { type: Number, required: true },
+    images: [{ type: Schema.Types.ObjectId, ref: 'Image' }],
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true } // Reference to User
 });
 
 module.exports = mongoose.model('Property', propertySchema);
+
+
