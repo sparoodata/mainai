@@ -11,6 +11,7 @@ const multer = require('multer');
 const Tenant = require('./models/Tenant');
 const Image = require('./models/Image');
 const Property = require('./models/Property');
+const User = require('./models/User');
 const Authorize = require('./models/Authorize');
 const Unit = require('./models/Unit');
 const Dropbox = require('dropbox').Dropbox;
@@ -174,13 +175,36 @@ app.get('/getUnits/:propertyId', async (req, res) => {
 // Handle form submission and image upload to Dropbox (add property)
 app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
     const { property_name, units, address, totalAmount } = req.body;
+    const id = req.params.id;
 
     try {
-        const property = new Property({ name: property_name, units, address, totalAmount });
+        // Find authorization record by ID to get the phone number
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        const phoneNumber = authorizeRecord.phoneNumber;
+
+        // Find the user by phone number
+        const user = await User.findOne({ phoneNumber });
+        if (!user) {
+            return res.status(404).send('User not found.');
+        }
+
+        // Create new property and reference the user by their ID
+        const property = new Property({ 
+            name: property_name, 
+            units, 
+            address, 
+            totalAmount, 
+            userId: user._id // Reference to the users collection
+        });
+
         await property.save();
 
         if (req.file) {
-            const dropboxPath = '/images/' + Date.now() + '-' + req.file.originalname; // Dropbox path
+            const dropboxPath = '/images/' + Date.now() + '-' + req.file.originalname;
 
             // Upload image to Dropbox
             const dropboxResponse = await dbx.filesUpload({
@@ -188,14 +212,12 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
                 contents: req.file.buffer
             });
 
-            // Get Dropbox shared link
             const sharedLinkResponse = await dbx.sharingCreateSharedLinkWithSettings({
                 path: dropboxResponse.result.path_lower
             });
 
-            const imageUrl = sharedLinkResponse.result.url.replace('dl=0', 'raw=1'); // Direct link to image
+            const imageUrl = sharedLinkResponse.result.url.replace('dl=0', 'raw=1');
 
-            // Save image details in MongoDB
             const image = new Image({ propertyId: property._id, imageUrl: imageUrl });
             await image.save();
             property.images.push(image._id);
@@ -209,12 +231,37 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
     }
 });
 
+
 // Handle form submission and image upload to Dropbox (add unit)
 app.post('/addunit/:id', upload.single('image'), async (req, res) => {
     const { property, unit_number, rent_amount, floor, size } = req.body;
+    const id = req.params.id;
 
     try {
-        const unit = new Unit({ property, unitNumber: unit_number, rentAmount: rent_amount, floor, size });
+        // Find authorization record by ID to get the phone number
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        const phoneNumber = authorizeRecord.phoneNumber;
+
+        // Find the user by phone number
+        const user = await User.findOne({ phoneNumber });
+        if (!user) {
+            return res.status(404).send('User not found.');
+        }
+
+        // Create new unit and reference the user by their ID
+        const unit = new Unit({
+            property, 
+            unitNumber: unit_number, 
+            rentAmount: rent_amount, 
+            floor, 
+            size, 
+            userId: user._id // Reference to the users collection
+        });
+
         await unit.save();
 
         if (req.file) {
@@ -265,13 +312,29 @@ app.get('/addtenant/:id', async (req, res) => {
 });
 
 app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
-    const { name, phoneNumber, propertyName, unitAssigned, lease_start, deposit, rent_amount, tenant_id } = req.body;
-    
+    const { name, propertyName, unitAssigned, lease_start, deposit, rent_amount, tenant_id } = req.body;
+    const id = req.params.id;
+
     try {
-        // Create new tenant instance
+        // Find authorization record by ID to get the phone number
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        const phoneNumber = authorizeRecord.phoneNumber;
+
+        // Find the user by phone number
+        const user = await User.findOne({ phoneNumber });
+        if (!user) {
+            return res.status(404).send('User not found.');
+        }
+
+        // Create new tenant and reference the user by their ID
         const tenant = new Tenant({
             name,
-            phoneNumber,
+            phoneNumber: user.phoneNumber, // Store tenant's phone number
+            userId: user._id, // Reference to the users collection
             propertyName,
             unitAssigned,
             lease_start: new Date(lease_start),
