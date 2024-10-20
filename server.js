@@ -14,7 +14,7 @@ const Image = require('./models/Image');
 const Property = require('./models/Property');
 const Authorize = require('./models/Authorize');
 const Unit = require('./models/Unit');
-const BoxSDK = require('box-node-sdk'); // Import Box SDK
+const BoxSDK = require('box-node-sdk'); // Box SDK
 
 const app = express();
 const port = process.env.PORT || 3000; // Glitch uses dynamic port
@@ -26,14 +26,15 @@ const sdk = BoxSDK.getPreconfiguredInstance({
         clientSecret: process.env.BOX_CLIENT_SECRET,
         appAuth: {
             publicKeyID: process.env.BOX_PUBLIC_KEY_ID,
-            privateKey: process.env.BOX_PRIVATE_KEY.replace(/\\n/g, '\n'), // Ensure proper formatting of the private key
+            privateKey: process.env.BOX_PRIVATE_KEY.replace(/\\n/g, '\n'), // Properly format private key
             passphrase: process.env.BOX_PASSPHRASE
         }
     },
     enterpriseID: process.env.BOX_ENTERPRISE_ID
 });
 
-const client = sdk.getAppAuthClient('enterprise', process.env.BOX_ENTERPRISE_ID);
+// Authenticate as App User (replace APP_USER_ID with the actual Box App User ID)
+const client = sdk.getAppAuthClient('user', process.env.BOX_APP_USER_ID);
 
 // Trust the first proxy
 app.set('trust proxy', 1);
