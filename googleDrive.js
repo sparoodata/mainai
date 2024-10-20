@@ -6,6 +6,7 @@ const path = require('path');
 const CREDENTIALS_PATH = path.join(__dirname, 'credentials.json');
 const TOKEN_PATH = path.join(__dirname, 'token.json');
 
+// Function to authenticate with Google Drive
 async function authenticate() {
     const content = fs.readFileSync(CREDENTIALS_PATH);
     const credentials = JSON.parse(content);
@@ -13,7 +14,6 @@ async function authenticate() {
     // Handle both web and installed (desktop) credentials
     const { client_secret, client_id, redirect_uris } = credentials.installed || credentials.web;
     
-    // Check if redirect_uris is present and not undefined
     if (!redirect_uris || redirect_uris.length === 0) {
         throw new Error("No redirect URIs found in credentials.json");
     }
@@ -24,13 +24,13 @@ async function authenticate() {
         const token = fs.readFileSync(TOKEN_PATH);
         oAuth2Client.setCredentials(JSON.parse(token));
     } else {
-        // Get a new token if none is found
         await getAccessToken(oAuth2Client);
     }
 
     return oAuth2Client;
 }
 
+// Function to get the access token from the Google OAuth consent screen
 function getAccessToken(oAuth2Client) {
     const authUrl = oAuth2Client.generateAuthUrl({
         access_type: 'offline',
@@ -52,7 +52,6 @@ function getAccessToken(oAuth2Client) {
                     console.error('Error retrieving access token', err);
                     return reject(err);
                 }
-
                 oAuth2Client.setCredentials(token);
                 // Store the token to disk for later program executions
                 fs.writeFileSync(TOKEN_PATH, JSON.stringify(token));
@@ -61,6 +60,33 @@ function getAccessToken(oAuth2Client) {
             });
         });
     });
+}
+
+// Function to upload a file to Google Drive
+async function uploadFileToGoogleDrive(auth, filePath, fileName) {
+    const drive = google.drive({ version: 'v3', auth });
+    const fileMetadata = {
+        name: fileName,
+        // Optionally, set your folder ID here:
+        // parents: ['your-folder-id-on-drive'],
+    };
+    const media = {
+        mimeType: 'image/jpeg', // Adjust this depending on the file type
+        body: fs.createReadStream(filePath),
+    };
+
+    try {
+        const response = await drive.files.create({
+            resource: fileMetadata,
+            media: media,
+            fields: 'id',
+        });
+        console.log('File uploaded to Google Drive, file ID:', response.data.id);
+        return response.data.id;
+    } catch (error) {
+        console.error('Error uploading file to Google Drive:', error);
+        throw new Error('Failed to upload file to Google Drive');
+    }
 }
 
 module.exports = { authenticate, uploadFileToGoogleDrive };
