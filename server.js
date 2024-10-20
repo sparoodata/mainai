@@ -114,7 +114,7 @@ app.get('/checkAuthorization/:id', async (req, res) => {
 
         if (userResponse && userResponse.toLowerCase() === 'yes_authorize') {
             delete userResponses[phoneNumber]; // Clear the stored response
-
+            console.log(action);
             if (action === 'addproperty') {
                 res.render('addProperty', { id });
             } else if (action === 'addunit') {
