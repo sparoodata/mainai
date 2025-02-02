@@ -177,13 +177,16 @@ app.post('/chat', async (req, res) => {
 
     // Extract the query text inside "db.<collection>.<operation>( ... )"
     const rawQuery = match[1]?.trim(); 
+    console.log(rawQuery);
 
     // 3C. Parse out the collection name, operation, and arguments.
     const afterDb = rawQuery.replace(/^db\./, "");
     const [collectionAndRest] = afterDb.split('(');
+    console.log(collectionAndRest.split('.'));
     const [collectionName, operation] = collectionAndRest.split('.');
 
     const argsMatch = /\((.*?)\)/.exec(rawQuery);
+    console.log(argsMatch);
     if (!argsMatch) {
       return res.json({
         success: false,
@@ -191,7 +194,7 @@ app.post('/chat', async (req, res) => {
       });
     }
     const argString = argsMatch[1].trim();
-console.log(argString);
+    console.log(argString);
     let queryArgs;
     try {
       queryArgs = JSON.parse(argString);
