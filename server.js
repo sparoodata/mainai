@@ -2,8 +2,8 @@ const express = require('express');
 const axios = require('axios');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
-const User = require('../models/User'); // Assuming you have a User model
-const Tenant = require('../models/Tenant'); // Assuming you have a Tenant model
+const User = require('./models/User'); // Assuming you have a User model
+const Tenant = require('./models/Tenant'); // Assuming you have a Tenant model
 
 const app = express();
 app.use(bodyParser.json());
@@ -14,7 +14,13 @@ const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const GLITCH_HOST = process.env.GLITCH_HOST; // Your Glitch project URL
 
 // MongoDB connection
-mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+mongoose.set('strictQuery', false);
+mongoose.connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+})
+.then(() => console.log('MongoDB connected'))
+.catch(error => console.error('MongoDB connection error:', error));
 
 // Function to execute MongoDB query
 async function executeMongoQuery(query) {
