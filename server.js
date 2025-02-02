@@ -1,413 +1,252 @@
+
+
 require('dotenv').config();
 const express = require('express');
-const bodyParser = require('body-parser');
-const session = require('express-session');
-const MongoStore = require('connect-mongo');
 const mongoose = require('mongoose');
-const rateLimit = require('express-rate-limit');
-const path = require('path');
-const axios = require("axios");
-const multer = require('multer');
-const Tenant = require('./models/Tenant');
-const Image = require('./models/Image');
+const fetch = require('node-fetch'); // or `axios`
+const Tenant = require('./models/Tenant'); // import your models
 const Property = require('./models/Property');
-const User = require('./models/User');
-const Authorize = require('./models/Authorize');
 const Unit = require('./models/Unit');
-const Dropbox = require('dropbox').Dropbox;
-const fetch = require('isomorphic-fetch');
+const Image = require('./models/Image');
+const Authorize = require('./models/Authorize');
 
 const app = express();
-const port = process.env.PORT || 3000; // Glitch uses dynamic port
+app.use(express.json());
 
-// Dropbox instance
-const dbx = new Dropbox({ accessToken: process.env.DROPBOX_ACCESS_TOKEN, fetch: fetch });
-
-// Trust the first proxy
-app.set('trust proxy', 1);
-
-// Set up EJS as the templating engine
-app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, 'views'));
-
-// Middleware
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-
-// MongoDB connection
-mongoose.set('strictQuery', false);
+// 1. Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
 })
-.then(() => console.log('MongoDB connected'))
-.catch(error => console.error('MongoDB connection error:', error));
+.then(() => console.log("MongoDB connected"))
+.catch((err) => console.error("MongoDB connection error:", err));
 
-// Session setup
-app.use(session({
-    secret: process.env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: true,
-    store: MongoStore.create({ mongoUrl: process.env.MONGODB_URI }),
-    cookie: {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 3600000, // 1 hour
-    },
-}));
+// 2. Simple System Prompt
+const systemPrompt = `
+You are a rental management assistant for the database. Your main purpose is to help a landlord manage properties, units, tenants, images, and authorizations.
 
-// Serve static files (public directory)
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Rate limiter for signup
-const signupLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 10,
-    message: 'Too many signup attempts. Try again later.',
+---
+### DATABASE SCHEMAS
+\`\`\`js
+// authorizeSchema
+const mongoose = require("mongoose");
+const authorizeSchema = new mongoose.Schema({
+    phoneNumber: { type: String, required: true },
+    status: { type: String, required: true, default: "Sent" }
 });
+const Authorize = mongoose.model("Authorize", authorizeSchema);
+module.exports = Authorize;
 
-// Configure multer for image uploads (memory storage)
-const storage = multer.memoryStorage(); // Use memory storage for direct upload to Dropbox
-const upload = multer({ 
-    storage: storage, 
-    limits: { fileSize: 5 * 1024 * 1024 }, // Limit file size to 5 MB
+// imageSchema
+const imageSchema = new mongoose.Schema({
+    propertyId: { type: mongoose.Schema.Types.ObjectId, ref: "Property" },
+    imageUrl: String,
+    imageName: String,
+    uploadedAt: { type: Date, default: Date.now }
 });
+module.exports = mongoose.model("Image", imageSchema);
 
-// Routes and webhook handling
-const { router, waitForUserResponse, userResponses } = require('./routes/webhook');
-app.use('/webhook', router);
-
-// Add property route that waits for WhatsApp authorization
-app.get('/addproperty/:id', async (req, res) => {
-    const id = req.params.id;
-
-    try {
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        const phoneNumber = authorizeRecord.phoneNumber;
-        await sendWhatsAppAuthMessage(phoneNumber); // Send WhatsApp authorization message
-
-        // Render the waiting page for WhatsApp authorization
-        res.render('waitingAuthorization', { id, action: 'addproperty' });
-    } catch (error) {
-        console.error('Error during authorization or fetching phone number:', error);
-        res.status(500).send('An error occurred during authorization.');
-    }
+// propertySchema
+const propertySchema = new mongoose.Schema({
+    name: { type: String, required: true },
+    units: { type: Number, required: true },
+    address: { type: String, required: true },
+    totalAmount: { type: Number, required: true },
+    images: [{ type: mongoose.Schema.Types.ObjectId, ref: "Image" }],
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }
 });
+module.exports = mongoose.model("Property", propertySchema);
 
-// Check authorization and render the appropriate form (Add Property, Add Unit, or Add Tenant)
-app.get('/checkAuthorization/:id', async (req, res) => {
-    const id = req.params.id;
-    const action = req.query.action; // This action can now be addproperty, addunit, or addtenant
-
-    try {
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        const phoneNumber = authorizeRecord.phoneNumber;
-        const userResponse = await waitForUserResponse(phoneNumber);
-
-        if (userResponse && userResponse.toLowerCase() === 'yes_authorize') {
-            delete userResponses[phoneNumber]; // Clear the stored response
-
-            if (action === 'addproperty') {
-                res.render('addProperty', { id });
-            } else if (action === 'addunit') {
-                const properties = await Property.find().select('name _id'); // Fetch properties
-                res.render('addUnit', { id, properties });
-            } else if (action === 'addtenant') {
-                const properties = await Property.find().select('name _id'); // Fetch properties for tenant assignment
-                const units = await Unit.find().select('unitNumber _id property'); // Fetch units for tenant assignment
-                res.render('addTenant', { id, properties, units }); // Render a form where users can add a tenant
-            }
-        } else {
-            return res.json({ status: 'waiting' });
-        }
-    } catch (error) {
-        console.error('Error checking authorization status:', error);
-        res.status(500).send('An error occurred while checking authorization.');
-    }
+// tenantSchema
+const tenantSchema = new mongoose.Schema({
+    name: { type: String, required: true },
+    phoneNumber: { type: String, required: true },
+    propertyName: { type: String, required: true },
+    unitAssigned: { type: mongoose.Schema.Types.ObjectId, ref: "Unit", required: true },
+    lease_start: { type: Date, required: true },
+    deposit: { type: Number, required: true },
+    rent_amount: { type: Number, required: true },
+    tenant_id: { type: String, required: true },
+    photo: { type: String },
+    idProof: { type: String },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }
 });
+module.exports = mongoose.model("Tenant", tenantSchema);
 
-// Function to send WhatsApp message for authorization
-async function sendWhatsAppAuthMessage(phoneNumber) {
-    return axios.post(process.env.WHATSAPP_API_URL, {
-        messaging_product: 'whatsapp',
-        to: phoneNumber,
-        type: 'interactive',
-        interactive: {
-            type: 'button',
-            body: { text: 'Do you authorize this action?' },
-            action: {
-                buttons: [
-                    { type: 'reply', reply: { id: 'Yes_authorize', title: 'Yes' } },
-                    { type: 'reply', reply: { id: 'No_authorize', title: 'No' } }
-                ]
-            }
-        }
-    }, {
-        headers: {
-            'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
-        },
+// unitSchema
+const unitSchema = new mongoose.Schema({
+    property: { type: mongoose.Schema.Types.ObjectId, ref: "Property", required: true },
+    unitNumber: { type: String, required: true },
+    rentAmount: { type: Number, required: true },
+    floor: { type: String },
+    size: { type: Number },
+    images: [{ type: mongoose.Schema.Types.ObjectId, ref: "Image" }],
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }
+});
+module.exports = mongoose.model("Unit", unitSchema);
+\`\`\`
+
+---
+### INSTRUCTIONS
+
+1. **Role & Behavior**
+   - You will receive queries and tasks from the user (landlord). They may request data retrieval, updates, inserts, etc.
+   - If a **MongoDB query** is needed, respond **only** with the exact query between the lines \`QUERY:\` and \`ENDQUERY\` and **nothing else** (no additional text or explanation).
+   - If **no database query** is needed, provide **no output** at all.
+
+2. **MongoDB Query Format**
+   - Your query must be in this form:
+     \`\`\`
+     QUERY:
+     db.<collection>.<operation>( ... )
+     ENDQUERY
+     \`\`\`
+   - Do **not** include any extra text, comments, or explanations outside this code block.
+
+3. **Examples**
+   - **Find** example:
+     \`\`\`
+     QUERY:
+     db.tenants.find({ "phoneNumber": "123-456-7890" })
+     ENDQUERY
+     \`\`\`
+   - **Insert** example:
+     \`\`\`
+     QUERY:
+     db.properties.insertOne({ "name": "New Building", "units": 10, ... })
+     ENDQUERY
+     \`\`\`
+   - **Update** example:
+     \`\`\`
+     QUERY:
+     db.units.updateOne({ "_id": ObjectId("...") }, { "$set": { "rentAmount": 1200 } })
+     ENDQUERY
+     \`\`\`
+
+4. **Style & Output**
+   - If a query is needed, produce **only** the query in the code block, nothing else.
+   - If no query is needed, produce **no output**.
+
+5. **Security & Edge Cases**
+   - If the user requests a destructive or unusual action (e.g., dropping a collection), you may clarify or warn. However, if you must provide such a query, do so carefully—but still **only** provide the query if the user insists.
+
+---
+END OF SYSTEM PROMPT
+`.trim();
+
+// 3. Endpoint to handle user messages
+app.post('/chat', async (req, res) => {
+  try {
+    const userMessage = req.body.message; // the message user typed
+
+    // 3A. Send the conversation to Groq/OpenAI
+    //     - We'll pass systemPrompt as the first (system) message
+    //     - Then the user message as the second
+    const apiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile", // example model
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage }
+        ]
+      })
     });
-}
+    
+    const data = await apiResponse.json();
+    // The assistant's reply (potentially containing the Mongo query)
+    const assistantReply = data.choices?.[0]?.message?.content || "";
 
+    // 3B. Check if there's a code block with QUERY
+    const queryRegex = /QUERY:\s*(.*?)\s*ENDQUERY/gs;
+    const match = queryRegex.exec(assistantReply);
+    console.log(assistantReply);
 
-app.get('/addunit/:id', async (req, res) => {
-    const id = req.params.id;
-
-    try {
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        const phoneNumber = authorizeRecord.phoneNumber;
-
-        // Fetch properties to associate the unit with a property
-        const properties = await Property.find().select('name _id');
-
-        // Render the add unit form and pass properties for selection
-        res.render('addUnit', { id, properties });
-    } catch (error) {
-        console.error('Error during authorization or fetching properties:', error);
-        res.status(500).send('An error occurred while fetching data.');
+    if (!match) {
+      // Means the AI decided "no query needed," or no valid code block found
+      return res.json({
+        success: true,
+        message: "No database query was generated. (Nothing to execute.)",
+        assistantReply
+      });
     }
+
+    // Extract the query text inside "db.<collection>.<operation>( ... )"
+    const rawQuery = match[1]?.trim(); 
+
+    // 3C. Parse out the collection name, operation, and arguments.
+    const afterDb = rawQuery.replace(/^db\./, "");
+    const [collectionAndRest] = afterDb.split('(');
+    const [collectionName, operation] = collectionAndRest.split('.');
+
+    const argsMatch = /\((.*?)\)/.exec(rawQuery);
+    if (!argsMatch) {
+      return res.json({
+        success: false,
+        message: "Unable to parse query arguments from the assistant."
+      });
+    }
+    const argString = argsMatch[1].trim();
+console.log(argString);
+    let queryArgs;
+    try {
+      queryArgs = JSON.parse(argString);
+      
+    } catch (err) {
+      return res.json({
+        success: false,
+        message: "Failed to parse the JSON arguments. Raw arguments: " + argString
+      });
+    }
+
+    // 3D. Execute the query via Mongoose
+    let results;
+
+    if (collectionName === 'tenants') {
+      if (operation === 'find') {
+        results = await Tenant.find(queryArgs);
+      } else if (operation === 'insertOne') {
+        results = await Tenant.create(queryArgs);
+      } else {
+        results = { error: `Operation '${operation}' not implemented in this example` };
+      }
+    } 
+    else if (collectionName === 'properties') {
+      if (operation === 'find') {
+        results = await Property.find(queryArgs);
+      } else {
+        results = { error: `Operation '${operation}' not implemented for properties in this example` };
+      }
+    }
+    else if (collectionName === 'units') {
+      results = { error: `Collection 'units' not implemented in this example` };
+    }
+    else {
+      results = { error: `Unknown collection: ${collectionName}` };
+    }
+
+    // 3E. Return the query + results to the user
+    return res.json({
+      success: true,
+      rawQuery,
+      collectionName,
+      operation,
+      args: queryArgs,
+      results
+    });
+
+  } catch (error) {
+    console.error("Error in /chat route:", error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
 });
 
-
-// Route to get units for a selected property
-app.get('/getUnits/:propertyId', async (req, res) => {
-    const propertyId = req.params.propertyId;
-
-    try {
-        // Fetch units from the database based on the selected property
-        const units = await Unit.find({ property: propertyId }).select('unitNumber _id');
-        res.json(units); // Return the list of units in JSON format
-    } catch (error) {
-        console.error('Error fetching units:', error);
-        res.status(500).send('An error occurred while fetching units.');
-    }
-});
-
-
-// Handle form submission and image upload to Dropbox (add property)
-app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
-    const { property_name, units, address, totalAmount } = req.body;
-    const id = req.params.id;
-
-    try {
-        // Find authorization record by ID to get the phone number
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        const phoneNumber = '+' + authorizeRecord.phoneNumber;
-       console.log(phoneNumber);
-
-        // Find the user by phone number
-        const user = await User.findOne({ phoneNumber });
-        if (!user) {
-            return res.status(404).send('User not found.');
-        }
-
-        // Create new property and reference the user by their ID
-        const property = new Property({ 
-            name: property_name, 
-            units, 
-            address, 
-            totalAmount, 
-            userId: user._id // Reference to the users collection
-        });
-
-        await property.save();
-
-        if (req.file) {
-            const dropboxPath = '/images/' + Date.now() + '-' + req.file.originalname;
-
-            // Upload image to Dropbox
-            const dropboxResponse = await dbx.filesUpload({
-                path: dropboxPath,
-                contents: req.file.buffer
-            });
-
-            const sharedLinkResponse = await dbx.sharingCreateSharedLinkWithSettings({
-                path: dropboxResponse.result.path_lower
-            });
-
-            const imageUrl = sharedLinkResponse.result.url.replace('dl=0', 'raw=1');
-
-            const image = new Image({ propertyId: property._id, imageUrl: imageUrl });
-            await image.save();
-            property.images.push(image._id);
-            await property.save();
-        }
-
-        res.send('Property and image added successfully!');
-    } catch (error) {
-        console.error('Error adding property and image:', error);
-        res.status(500).send('An error occurred while adding the property and image.');
-    }
-});
-
-
-// Handle form submission and image upload to Dropbox (add unit)
-app.post('/addunit/:id', upload.single('image'), async (req, res) => {
-    const { property, unit_number, rent_amount, floor, size } = req.body;
-    const id = req.params.id;
-
-    try {
-        // Find authorization record by ID to get the phone number
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        const phoneNumber = '+' + authorizeRecord.phoneNumber;
-
-        // Find the user by phone number
-        const user = await User.findOne({ phoneNumber });
-        if (!user) {
-            return res.status(404).send('User not found.');
-        }
-
-        // Create new unit and reference the user by their ID
-        const unit = new Unit({
-            property, 
-            unitNumber: unit_number, 
-            rentAmount: rent_amount, 
-            floor, 
-            size, 
-            userId: user._id // Reference to the users collection
-        });
-
-        await unit.save();
-
-        if (req.file) {
-            const dropboxPath = '/images/' + Date.now() + '-' + req.file.originalname;
-            const dropboxResponse = await dbx.filesUpload({
-                path: dropboxPath,
-                contents: req.file.buffer
-            });
-
-            const sharedLinkResponse = await dbx.sharingCreateSharedLinkWithSettings({
-                path: dropboxResponse.result.path_lower
-            });
-
-            const imageUrl = sharedLinkResponse.result.url.replace('dl=0', 'raw=1');
-
-            const image = new Image({ unitId: unit._id, imageUrl: imageUrl });
-            await image.save();
-            unit.images.push(image._id);
-            await unit.save();
-        }
-
-        res.send('Unit and image added successfully!');
-    } catch (error) {
-        console.error('Error adding unit and image:', error);
-        res.status(500).send('An error occurred while adding the unit and image.');
-    }
-});
-
-// Add tenant route that waits for WhatsApp authorization
-app.get('/addtenant/:id', async (req, res) => {
-    const id = req.params.id;
-
-    try {
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        const phoneNumber = authorizeRecord.phoneNumber;
-        await sendWhatsAppAuthMessage(phoneNumber); // Send WhatsApp authorization message
-
-        // Render the waiting page for WhatsApp authorization
-        res.render('waitingAuthorization', { id, action: 'addtenant' });
-    } catch (error) {
-        console.error('Error during authorization or fetching phone number:', error);
-        res.status(500).send('An error occurred during authorization.');
-    }
-});
-
-app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
-    const { name, propertyName, unitAssigned, lease_start, deposit, rent_amount, tenant_id } = req.body;
-    const id = req.params.id;
-
-    try {
-        // Find authorization record by ID to get the phone number
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        const phoneNumber = '+' + authorizeRecord.phoneNumber;
-
-        // Find the user by phone number
-        const user = await User.findOne({ phoneNumber });
-        if (!user) {
-            return res.status(404).send('User not found.');
-        }
-
-        // Create new tenant and reference the user by their ID
-        const tenant = new Tenant({
-            name,
-            phoneNumber: user.phoneNumber, // Store tenant's phone number
-            userId: user._id, // Reference to the users collection
-            propertyName,
-            unitAssigned,
-            lease_start: new Date(lease_start),
-            deposit,
-            rent_amount,
-            tenant_id,
-        });
-
-        // If files are uploaded, save their paths in Dropbox
-        if (req.files.photo) {
-            const photoPath = '/images/' + Date.now() + '-' + req.files.photo[0].originalname;
-            const dropboxResponse = await dbx.filesUpload({
-                path: photoPath,
-                contents: req.files.photo[0].buffer
-            });
-
-            const sharedLinkResponse = await dbx.sharingCreateSharedLinkWithSettings({
-                path: dropboxResponse.result.path_lower
-            });
-
-            tenant.photo = sharedLinkResponse.result.url.replace('dl=0', 'raw=1');
-        }
-
-        if (req.files.idProof) {
-            const idProofPath = '/images/' + Date.now() + '-' + req.files.idProof[0].originalname;
-            const dropboxResponse = await dbx.filesUpload({
-                path: idProofPath,
-                contents: req.files.idProof[0].buffer
-            });
-
-            const sharedLinkResponse = await dbx.sharingCreateSharedLinkWithSettings({
-                path: dropboxResponse.result.path_lower
-            });
-
-            tenant.idProof = sharedLinkResponse.result.url.replace('dl=0', 'raw=1');
-        }
-
-        // Save tenant to the database
-        await tenant.save();
-        res.send('Tenant added successfully!');
-    } catch (error) {
-        console.error('Error adding tenant:', error);
-        res.status(500).send('An error occurred while adding the tenant.');
-    }
-});
-
-// Start the server
-app.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}`);
+// 4. Start the server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
 });
