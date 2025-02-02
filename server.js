@@ -1,10 +1,8 @@
-
-
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
-const fetch = require('node-fetch'); // or `axios`
-const Tenant = require('./models/Tenant'); // import your models
+const fetch = require('node-fetch');
+const Tenant = require('./models/Tenant');
 const Property = require('./models/Property');
 const Unit = require('./models/Unit');
 const Image = require('./models/Image');
@@ -140,8 +138,6 @@ app.post('/chat', async (req, res) => {
     const userMessage = req.body.message; // the message user typed
 
     // 3A. Send the conversation to Groq/OpenAI
-    //     - We'll pass systemPrompt as the first (system) message
-    //     - Then the user message as the second
     const apiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: 'POST',
       headers: {
@@ -158,16 +154,14 @@ app.post('/chat', async (req, res) => {
     });
     
     const data = await apiResponse.json();
-    // The assistant's reply (potentially containing the Mongo query)
     const assistantReply = data.choices?.[0]?.message?.content || "";
 
     // 3B. Check if there's a code block with QUERY
     const queryRegex = /QUERY:\s*(.*?)\s*ENDQUERY/gs;
     const match = queryRegex.exec(assistantReply);
-    console.log(assistantReply);
+    console.log("Assistant Reply:\n", assistantReply);
 
     if (!match) {
-      // Means the AI decided "no query needed," or no valid code block found
       return res.json({
         success: true,
         message: "No database query was generated. (Nothing to execute.)",
@@ -177,33 +171,41 @@ app.post('/chat', async (req, res) => {
 
     // Extract the query text inside "db.<collection>.<operation>( ... )"
     const rawQuery = match[1]?.trim(); 
-    console.log(rawQuery);
+    console.log("Extracted Query:", rawQuery);
 
     // 3C. Parse out the collection name, operation, and arguments.
     const afterDb = rawQuery.replace(/^db\./, "");
     const [collectionAndRest] = afterDb.split('(');
-    console.log(collectionAndRest.split('.'));
+    console.log("Split for collection/operation:", collectionAndRest.split('.'));
     const [collectionName, operation] = collectionAndRest.split('.');
 
+    // Attempt to extract the argument string inside the parentheses
     const argsMatch = /\((.*?)\)/.exec(rawQuery);
-    console.log(argsMatch);
+    console.log("Parentheses content:", argsMatch);
+
     if (!argsMatch) {
       return res.json({
         success: false,
         message: "Unable to parse query arguments from the assistant."
       });
     }
+
     const argString = argsMatch[1].trim();
-    console.log(argString);
+    console.log("Argument string:", argString);
+
+    // If the parentheses are empty, let's treat it as an empty object
     let queryArgs;
-    try {
-      queryArgs = JSON.parse(argString);
-      
-    } catch (err) {
-      return res.json({
-        success: false,
-        message: "Failed to parse the JSON arguments. Raw arguments: " + argString
-      });
+    if (!argString) {
+      queryArgs = {};  // e.g. db.properties.find() means find({})
+    } else {
+      try {
+        queryArgs = JSON.parse(argString);
+      } catch (err) {
+        return res.json({
+          success: false,
+          message: "Failed to parse the JSON arguments. Raw arguments: " + argString
+        });
+      }
     }
 
     // 3D. Execute the query via Mongoose
@@ -232,7 +234,7 @@ app.post('/chat', async (req, res) => {
       results = { error: `Unknown collection: ${collectionName}` };
     }
 
-    // 3E. Return the query + results to the user
+    // 3E. Return the query + results
     return res.json({
       success: true,
       rawQuery,
