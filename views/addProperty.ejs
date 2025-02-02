@@ -43,7 +43,7 @@
             <small id="imageError" class="error-message"></small>
 
             <!-- Submit Button -->
-            <button type="submit" id="submitBtn">Submit</button>
+            <button type="submit">Submit</button>
         </form>
     </div>
 
@@ -56,7 +56,6 @@
             const address = document.getElementById('address').value;
             const totalAmount = document.getElementById('totalAmount').value;
             const image = document.getElementById('image').files[0];
-            const submitBtn = document.getElementById('submitBtn');
 
             let valid = true;
 
@@ -95,12 +94,6 @@
             if (image && image.size > 5 * 1024 * 1024) {
                 document.getElementById('imageError').innerHTML = "Image size cannot exceed 5MB.";
                 valid = false;
-            }
-
-            // Disable submit button if the form is valid
-            if (valid) {
-                submitBtn.disabled = true;
-                submitBtn.innerHTML = 'Submitting...'; // Change button text to indicate submission
             }
 
             return valid;
