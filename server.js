@@ -1,257 +1,100 @@
-require('dotenv').config();
-const express = require('express');
-const mongoose = require('mongoose');
-const fetch = require('node-fetch');
-const Tenant = require('./models/Tenant');
-const Property = require('./models/Property');
-const Unit = require('./models/Unit');
-const Image = require('./models/Image');
-const Authorize = require('./models/Authorize');
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+const axios = require("axios");
+const { Server } = require("socket.io");
+require("dotenv").config();
 
 const app = express();
+const server = require("http").createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
+app.use(express.static("public"));
+
 app.use(express.json());
+app.use(cors());
 
-// 1. Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log("MongoDB connected"))
-.catch((err) => console.error("MongoDB connection error:", err));
+mongoose
+  .connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log("MongoDB connected"))
+  .catch(err => console.error(err));
 
-// 2. Simple System Prompt
-const systemPrompt = `
-You are a rental management assistant for the database. Your main purpose is to help a landlord manage properties, units, tenants, images, and authorizations.
+// Import Mongoose Models
+const Property = require("./models/Property");
 
----
-### DATABASE SCHEMAS
-\`\`\`js
-// authorizeSchema
-const mongoose = require("mongoose");
-const authorizeSchema = new mongoose.Schema({
-    phoneNumber: { type: String, required: true },
-    status: { type: String, required: true, default: "Sent" }
-});
-const Authorize = mongoose.model("Authorize", authorizeSchema);
-module.exports = Authorize;
+// Chat Assistant API
+app.post("/chat", async (req, res) => {
+  const userMessage = req.body.message;
 
-// imageSchema
-const imageSchema = new mongoose.Schema({
-    propertyId: { type: mongoose.Schema.Types.ObjectId, ref: "Property" },
-    imageUrl: String,
-    imageName: String,
-    uploadedAt: { type: Date, default: Date.now }
-});
-module.exports = mongoose.model("Image", imageSchema);
-
-// propertySchema
-const propertySchema = new mongoose.Schema({
-    name: { type: String, required: true },
-    units: { type: Number, required: true },
-    address: { type: String, required: true },
-    totalAmount: { type: Number, required: true },
-    images: [{ type: mongoose.Schema.Types.ObjectId, ref: "Image" }],
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }
-});
-module.exports = mongoose.model("Property", propertySchema);
-
-// tenantSchema
-const tenantSchema = new mongoose.Schema({
-    name: { type: String, required: true },
-    phoneNumber: { type: String, required: true },
-    propertyName: { type: String, required: true },
-    unitAssigned: { type: mongoose.Schema.Types.ObjectId, ref: "Unit", required: true },
-    lease_start: { type: Date, required: true },
-    deposit: { type: Number, required: true },
-    rent_amount: { type: Number, required: true },
-    tenant_id: { type: String, required: true },
-    photo: { type: String },
-    idProof: { type: String },
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }
-});
-module.exports = mongoose.model("Tenant", tenantSchema);
-
-// unitSchema
-const unitSchema = new mongoose.Schema({
-    property: { type: mongoose.Schema.Types.ObjectId, ref: "Property", required: true },
-    unitNumber: { type: String, required: true },
-    rentAmount: { type: Number, required: true },
-    floor: { type: String },
-    size: { type: Number },
-    images: [{ type: mongoose.Schema.Types.ObjectId, ref: "Image" }],
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }
-});
-module.exports = mongoose.model("Unit", unitSchema);
-\`\`\`
-
----
-### INSTRUCTIONS
-
-1. **Role & Behavior**
-   - You will receive queries and tasks from the user (landlord). They may request data retrieval, updates, inserts, etc.
-   - If a **MongoDB query** is needed, respond **only** with the exact query between the lines \`QUERY:\` and \`ENDQUERY\` and **nothing else** (no additional text or explanation).
-   - If **no database query** is needed, provide **no output** at all.
-
-2. **MongoDB Query Format**
-   - Your query must be in this form:
-     \`\`\`
-     QUERY:
-     db.<collection>.<operation>( ... )
-     ENDQUERY
-     \`\`\`
-   - Do **not** include any extra text, comments, or explanations outside this code block.
-
-3. **Examples**
-   - **Find** example:
-     \`\`\`
-     QUERY:
-     db.tenants.find({ "phoneNumber": "123-456-7890" })
-     ENDQUERY
-     \`\`\`
-   - **Insert** example:
-     \`\`\`
-     QUERY:
-     db.properties.insertOne({ "name": "New Building", "units": 10, ... })
-     ENDQUERY
-     \`\`\`
-   - **Update** example:
-     \`\`\`
-     QUERY:
-     db.units.updateOne({ "_id": ObjectId("...") }, { "$set": { "rentAmount": 1200 } })
-     ENDQUERY
-     \`\`\`
-
-4. **Style & Output**
-   - If a query is needed, produce **only** the query in the code block, nothing else.
-   - If no query is needed, produce **no output**.
-
-5. **Security & Edge Cases**
-   - If the user requests a destructive or unusual action (e.g., dropping a collection), you may clarify or warn. However, if you must provide such a query, do so carefully—but still **only** provide the query if the user insists.
-
----
-END OF SYSTEM PROMPT
-`.trim();
-
-// 3. Endpoint to handle user messages
-app.post('/chat', async (req, res) => {
   try {
-    const userMessage = req.body.message; // the message user typed
-
-    // 3A. Send the conversation to Groq/OpenAI
-    const apiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile", // example model
+    // Call Groq API
+    const response = await axios.post(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        model: "llama-3.3-70b-versatile",
         messages: [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: "You are a rental management assistant..." },
           { role: "user", content: userMessage }
         ]
-      })
-    });
-    
-    const data = await apiResponse.json();
-    const assistantReply = data.choices?.[0]?.message?.content || "";
-
-    // 3B. Check if there's a code block with QUERY
-    const queryRegex = /QUERY:\s*(.*?)\s*ENDQUERY/gs;
-    const match = queryRegex.exec(assistantReply);
-    console.log("Assistant Reply:\n", assistantReply);
-
-    if (!match) {
-      return res.json({
-        success: true,
-        message: "No database query was generated. (Nothing to execute.)",
-        assistantReply
-      });
-    }
-
-    // Extract the query text inside "db.<collection>.<operation>( ... )"
-    const rawQuery = match[1]?.trim(); 
-    console.log("Extracted Query:", rawQuery);
-
-    // 3C. Parse out the collection name, operation, and arguments.
-    const afterDb = rawQuery.replace(/^db\./, "");
-    const [collectionAndRest] = afterDb.split('(');
-    console.log("Split for collection/operation:", collectionAndRest.split('.'));
-    const [collectionName, operation] = collectionAndRest.split('.');
-
-    // Attempt to extract the argument string inside the parentheses
-    const argsMatch = /\((.*?)\)/.exec(rawQuery);
-    console.log("Parentheses content:", argsMatch);
-
-    if (!argsMatch) {
-      return res.json({
-        success: false,
-        message: "Unable to parse query arguments from the assistant."
-      });
-    }
-
-    const argString = argsMatch[1].trim();
-    console.log("Argument string:", argString);
-
-    // If the parentheses are empty, let's treat it as an empty object
-    let queryArgs;
-    if (!argString) {
-      queryArgs = {};  // e.g. db.properties.find() means find({})
-    } else {
-      try {
-        queryArgs = JSON.parse(argString);
-      } catch (err) {
-        return res.json({
-          success: false,
-          message: "Failed to parse the JSON arguments. Raw arguments: " + argString
-        });
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.GROQ_API_KEY}`
+        }
       }
-    }
+    );
 
-    // 3D. Execute the query via Mongoose
-    let results;
+    // Extract MongoDB Query
+    const queryText = response.data.choices[0].message.content.match(/QUERY:\n([\s\S]*?)\nENDQUERY/);
+    if (!queryText) return res.json({ response: "No query generated." });
 
-    if (collectionName === 'tenants') {
-      if (operation === 'find') {
-        results = await Tenant.find(queryArgs);
-      } else if (operation === 'insertOne') {
-        results = await Tenant.create(queryArgs);
-      } else {
-        results = { error: `Operation '${operation}' not implemented in this example` };
-      }
-    } 
-    else if (collectionName === 'properties') {
-      if (operation === 'find') {
-        results = await Property.find(queryArgs);
-      } else {
-        results = { error: `Operation '${operation}' not implemented for properties in this example` };
-      }
-    }
-    else if (collectionName === 'units') {
-      results = { error: `Collection 'units' not implemented in this example` };
-    }
-    else {
-      results = { error: `Unknown collection: ${collectionName}` };
-    }
+    const mongoQuery = queryText[1].trim();
+    console.log("Generated MongoDB Query:", mongoQuery);
 
-    // 3E. Return the query + results
-    return res.json({
-      success: true,
-      rawQuery,
-      collectionName,
-      operation,
-      args: queryArgs,
-      results
-    });
+    // Execute MongoDB Query
+    const result = await eval(mongoQuery);
 
+    res.json({ query: mongoQuery, result });
   } catch (error) {
-    console.error("Error in /chat route:", error);
-    return res.status(500).json({ success: false, error: error.message });
+    console.error("Error:", error);
+    res.status(500).json({ error: "Something went wrong." });
   }
 });
 
-// 4. Start the server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+// Real-time Chat with Socket.io
+io.on("connection", (socket) => {
+  console.log("User connected:", socket.id);
+
+  socket.on("sendMessage", async (msg) => {
+    console.log("User Message:", msg);
+
+    const response = await axios.post(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: "You are a rental management assistant for the database. Your main purpose is to help a landlord manage properties, units, tenants, images, and authorizations.\n\n---\n### DATABASE SCHEMAS\n```js\n// authorizeSchema\nconst mongoose = require(\"mongoose\");\nconst authorizeSchema = new mongoose.Schema({\n    phoneNumber: { type: String, required: true },\n    status: { type: String, required: true, default: \"Sent\" }\n});\nconst Authorize = mongoose.model(\"Authorize\", authorizeSchema);\nmodule.exports = Authorize;\n\n// imageSchema\nconst imageSchema = new mongoose.Schema({\n    propertyId: { type: mongoose.Schema.Types.ObjectId, ref: \"Property\" },\n    imageUrl: String,\n    imageName: String,\n    uploadedAt: { type: Date, default: Date.now }\n});\nmodule.exports = mongoose.model(\"Image\", imageSchema);\n\n// propertySchema\nconst propertySchema = new mongoose.Schema({\n    name: { type: String, required: true },\n    units: { type: Number, required: true },\n    address: { type: String, required: true },\n    totalAmount: { type: Number, required: true },\n    images: [{ type: mongoose.Schema.Types.ObjectId, ref: \"Image\" }],\n    userId: { type: mongoose.Schema.Types.ObjectId, ref: \"User\", required: true }\n});\nmodule.exports = mongoose.model(\"Property\", propertySchema);\n\n// tenantSchema\nconst tenantSchema = new mongoose.Schema({\n    name: { type: String, required: true },\n    phoneNumber: { type: String, required: true },\n    propertyName: { type: String, required: true },\n    unitAssigned: { type: mongoose.Schema.Types.ObjectId, ref: \"Unit\", required: true },\n    lease_start: { type: Date, required: true },\n    deposit: { type: Number, required: true },\n    rent_amount: { type: Number, required: true },\n    tenant_id: { type: String, required: true },\n    photo: { type: String },\n    idProof: { type: String },\n    userId: { type: mongoose.Schema.Types.ObjectId, ref: \"User\", required: true }\n});\nmodule.exports = mongoose.model(\"Tenant\", tenantSchema);\n\n// unitSchema\nconst unitSchema = new mongoose.Schema({\n    property: { type: mongoose.Schema.Types.ObjectId, ref: \"Property\", required: true },\n    unitNumber: { type: String, required: true },\n    rentAmount: { type: Number, required: true },\n    floor: { type: String },\n    size: { type: Number },\n    images: [{ type: mongoose.Schema.Types.ObjectId, ref: \"Image\" }],\n    userId: { type: mongoose.Schema.Types.ObjectId, ref: \"User\", required: true }\n});\nmodule.exports = mongoose.model(\"Unit\", unitSchema);\n```\n\n---\n### INSTRUCTIONS\n\n1. **Role & Behavior**\n   - You will receive queries and tasks from the user (landlord). They may request data retrieval, updates, inserts, etc.\n   - If a **MongoDB query** is needed, respond **only** with the exact query between the lines `QUERY:` and `ENDQUERY` and **nothing else** (no additional text or explanation).\n   - If **no database query** is needed, provide **no output** at all.\n\n2. **MongoDB Query Format**\n   - Your query must be in this form:\n     ```\n     QUERY:\n     db.<collection>.<operation>( ... )\n     ENDQUERY\n     ```\n   - Do **not** include any extra text, comments, or explanations outside this code block.\n\n3. **Examples**\n   - **Find** example:\n     ```\n     QUERY:\n     db.tenants.find({ \"phoneNumber\": \"123-456-7890\" })\n     ENDQUERY\n     ```\n   - **Insert** example:\n     ```\n     QUERY:\n     db.properties.insertOne({ \"name\": \"New Building\", \"units\": 10, ... })\n     ENDQUERY\n     ```\n   - **Update** example:\n     ```\n     QUERY:\n     db.units.updateOne({ \"_id\": ObjectId(\"...\") }, { \"$set\": { \"rentAmount\": 1200 } })\n     ENDQUERY\n     ```\n\n4. **Style & Output**\n   - If a query is needed, produce **only** the query in the code block, nothing else.\n   - If no query is needed, produce **no output**.\n\n5. **Security & Edge Cases**\n   - If the user requests a destructive or unusual action (e.g., dropping a collection), you may clarify or warn. However, if you must provide such a query, do so carefully—but still **only** provide the query if the user insists.\n\n---\nEND OF SYSTEM PROMPT" },
+          { role: "user", content: msg }
+        ]
+      },
+      { headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` } }
+    );
+
+    const queryText = response.data.choices[0].message.content.match(/QUERY:\n([\s\S]*?)\nENDQUERY/);
+    if (!queryText) return socket.emit("response", { response: "No query generated." });
+
+    const mongoQuery = queryText[1].trim();
+    console.log("Generated MongoDB Query:", mongoQuery);
+
+    // Execute Query
+    const result = await eval(mongoQuery);
+    socket.emit("response", { query: mongoQuery, result });
+  });
+
+  socket.on("disconnect", () => console.log("User disconnected:", socket.id));
+});
+
+// Start Server
+server.listen(process.env.PORT || 3000, () => {
+  console.log(`Server running on port ${process.env.PORT || 3000}`);
 });
