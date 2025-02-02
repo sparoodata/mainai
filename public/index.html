@@ -1,28 +1,34 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Landlord Chat Assistant</title>
-    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Landlord Chat Assistant</title>
 </head>
 <body>
-    <h1>Landlord Chat Assistant</h1>
-    <input id="message" type="text" placeholder="Ask a question..." />
-    <button onclick="sendMessage()">Send</button>
-    <div id="response"></div>
+  <h1>Landlord Chat Assistant</h1>
+  <form id="chatForm">
+    <input type="text" id="message" placeholder="Enter your query" required>
+    <button type="submit">Send</button>
+  </form>
+  <pre id="response"></pre>
 
-    <script>
-        const socket = io("https://defiant-stone-tail.glitch.me/chat");
+  <script>
+    document.getElementById('chatForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const message = document.getElementById('message').value;
 
-        function sendMessage() {
-            const msg = document.getElementById("message").value;
-            socket.emit("sendMessage", msg);
-        }
+      const response = await fetch('/query', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ message })
+      });
 
-        socket.on("response", (data) => {
-            document.getElementById("response").innerHTML = `<p><strong>Query:</strong> ${data.query}</p><p><strong>Result:</strong> ${JSON.stringify(data.result)}</p>`;
-        });
-    </script>
+      const data = await response.json();
+      document.getElementById('response').textContent = JSON.stringify(data, null, 2);
+    });
+  </script>
 </body>
 </html>
