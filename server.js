@@ -8,16 +8,17 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.use(express.static('public'));
+
 // Middleware
 app.use(bodyParser.json());
+app.use(express.static('public'));
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log('Connected to MongoDB'))
   .catch(err => console.error('Could not connect to MongoDB', err));
 
-// Routes
+// Route to generate MongoDB query
 app.post('/query', async (req, res) => {
   const { message } = req.body;
 
@@ -46,6 +47,30 @@ app.post('/query', async (req, res) => {
   } catch (error) {
     console.error('Error generating query:', error);
     res.status(500).json({ error: 'Failed to generate query' });
+  }
+});
+
+// Route to execute MongoDB query
+app.post('/execute', async (req, res) => {
+  const { query } = req.body;
+
+  try {
+    // Extract the collection name and operation from the query
+    const match = query.match(/db\.(\w+)\.(\w+)\(/);
+    if (!match) {
+      throw new Error('Invalid query format');
+    }
+
+    const collectionName = match[1];
+    const operation = match[2];
+
+    // Dynamically execute the query
+    const result = await mongoose.connection.db.collection(collectionName)[operation](eval(`(${query.split('(')[1]}`));
+
+    res.json({ result });
+  } catch (error) {
+    console.error('Error executing query:', error);
+    res.status(500).json({ error: 'Failed to execute query' });
   }
 });
 
