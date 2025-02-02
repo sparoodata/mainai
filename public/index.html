@@ -1,102 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Landlord Chat Assistant</title>
-  <style>
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-    }
-    table, th, td {
-      border: 1px solid black;
-    }
-    th, td {
-      padding: 10px;
-      text-align: left;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MongoDB Dashboard</title>
+    <script>
+        async function fetchData() {
+            const response = await fetch('/fetch-query');
+            const data = await response.json();
+            document.getElementById('result').innerText = JSON.stringify(data, null, 2);
+        }
+    </script>
 </head>
 <body>
-  <h1>Landlord Chat Assistant</h1>
-  <form id="chatForm">
-    <input type="text" id="message" placeholder="Enter your query" required>
-    <button type="submit">Send</button>
-  </form>
-  <pre id="query"></pre>
-  <table id="resultsTable" style="display: none;">
-    <thead>
-      <tr id="tableHeader"></tr>
-    </thead>
-    <tbody id="tableBody"></tbody>
-  </table>
-
-  <script>
-    document.getElementById('chatForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const message = document.getElementById('message').value;
-
-      // Step 1: Generate the query
-      const queryResponse = await fetch('/query', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ message })
-      });
-
-      const queryData = await queryResponse.json();
-      document.getElementById('query').textContent = queryData.query;
-
-      // Step 2: Execute the query
-      const executeResponse = await fetch('/execute', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ query: queryData.query })
-      });
-
-      const executeData = await executeResponse.json();
-
-      // Step 3: Display the results in a table
-      const table = document.getElementById('resultsTable');
-      const tableHeader = document.getElementById('tableHeader');
-      const tableBody = document.getElementById('tableBody');
-
-      // Clear previous results
-      tableHeader.innerHTML = '';
-      tableBody.innerHTML = '';
-
-      if (executeData.result && executeData.result.length > 0) {
-        // Create table headers
-        const headers = Object.keys(executeData.result[0]);
-        headers.forEach(header => {
-          const th = document.createElement('th');
-          th.textContent = header;
-          tableHeader.appendChild(th);
-        });
-
-        // Create table rows
-        executeData.result.forEach(row => {
-          const tr = document.createElement('tr');
-          headers.forEach(header => {
-            const td = document.createElement('td');
-            td.textContent = row[header];
-            tr.appendChild(td);
-          });
-          tableBody.appendChild(tr);
-        });
-
-        // Show the table
-        table.style.display = 'table';
-      } else {
-        table.style.display = 'none';
-        alert('No results found.');
-      }
-    });
-  </script>
+    <h1>MongoDB Dashboard</h1>
+    <button onclick="fetchData()">Fetch Data</button>
+    <pre id="result"></pre>
 </body>
 </html>
