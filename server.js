@@ -411,6 +411,3 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
 app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
 });
-
-
-
