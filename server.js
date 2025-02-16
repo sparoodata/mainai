@@ -429,6 +429,163 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
 });
 
 
+// GET route to render the edit property form with current data
+app.get('/editproperty/:id', async (req, res) => {
+  try {
+    const property = await Property.findById(req.params.id);
+    if (!property) return res.status(404).send('Property not found.');
+    res.render('editProperty', { property });
+  } catch (error) {
+    console.error('Error retrieving property:', error);
+    res.status(500).send('Error retrieving property.');
+  }
+});
+
+// POST route to update the property
+app.post('/editproperty/:id', async (req, res) => {
+  try {
+    const { property_name, units, address, totalAmount } = req.body;
+    const property = await Property.findByIdAndUpdate(
+      req.params.id,
+      {
+        name: property_name,
+        units,
+        address,
+        totalAmount
+      },
+      { new: true }
+    );
+    res.send('Property updated successfully!');
+  } catch (error) {
+    console.error('Error updating property:', error);
+    res.status(500).send('Error updating property.');
+  }
+});
+
+app.post('/deleteproperty/:id', async (req, res) => {
+  try {
+    await Property.findByIdAndDelete(req.params.id);
+    res.send('Property deleted successfully!');
+  } catch (error) {
+    console.error('Error deleting property:', error);
+    res.status(500).send('Error deleting property.');
+  }
+});
+// GET route to render the edit unit form (with list of properties if needed)
+app.get('/editunit/:id', async (req, res) => {
+  try {
+    const unit = await Unit.findById(req.params.id);
+    if (!unit) return res.status(404).send('Unit not found.');
+    // Fetch properties to allow re‑assigning the unit (if desired)
+    const properties = await Property.find().select('name _id');
+    res.render('editUnit', { unit, properties });
+  } catch (error) {
+    console.error('Error retrieving unit:', error);
+    res.status(500).send('Error retrieving unit.');
+  }
+});
+
+// POST route to update the unit
+app.post('/editunit/:id', async (req, res) => {
+  try {
+    const { property, unit_number, rent_amount, floor, size } = req.body;
+    const unit = await Unit.findByIdAndUpdate(
+      req.params.id,
+      {
+        property,
+        unitNumber: unit_number,
+        rentAmount: rent_amount,
+        floor,
+        size
+      },
+      { new: true }
+    );
+    res.send('Unit updated successfully!');
+  } catch (error) {
+    console.error('Error updating unit:', error);
+    res.status(500).send('Error updating unit.');
+  }
+});
+
+app.post('/deleteunit/:id', async (req, res) => {
+  try {
+    await Unit.findByIdAndDelete(req.params.id);
+    res.send('Unit deleted successfully!');
+  } catch (error) {
+    console.error('Error deleting unit:', error);
+    res.status(500).send('Error deleting unit.');
+  }
+});
+// GET route to render the edit tenant form with current data
+app.get('/edittenant/:id', async (req, res) => {
+  try {
+    const tenant = await Tenant.findById(req.params.id);
+    if (!tenant) return res.status(404).send('Tenant not found.');
+    // Fetch properties and units for dropdowns
+    const properties = await Property.find().select('name _id');
+    const units = await Unit.find().select('unitNumber _id property');
+    res.render('editTenant', { tenant, properties, units });
+  } catch (error) {
+    console.error('Error retrieving tenant:', error);
+    res.status(500).send('Error retrieving tenant.');
+  }
+});
+
+// POST route to update the tenant
+app.post('/edittenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
+  try {
+    const { name, propertyName, unitAssigned, lease_start, deposit, rent_amount } = req.body;
+    const updateData = {
+      name,
+      propertyName,
+      unitAssigned,  // Make sure this is the ObjectId coming from the dropdown
+      lease_start: new Date(lease_start),
+      deposit,
+      rent_amount,
+    };
+
+    // Optionally update photo if provided
+    if (req.files.photo) {
+      const key = 'images/' + Date.now() + '-' + req.files.photo[0].originalname;
+      const uploadParams = {
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: req.files.photo[0].buffer,
+        ContentType: req.files.photo[0].mimetype,
+      };
+      await s3.upload(uploadParams).promise();
+      updateData.photo = process.env.R2_PUBLIC_URL + '/' + key;
+    }
+    // Optionally update ID proof if provided
+    if (req.files.idProof) {
+      const key = 'images/' + Date.now() + '-' + req.files.idProof[0].originalname;
+      const uploadParams = {
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: req.files.idProof[0].buffer,
+        ContentType: req.files.idProof[0].mimetype,
+      };
+      await s3.upload(uploadParams).promise();
+      updateData.idProof = process.env.R2_PUBLIC_URL + '/' + key;
+    }
+
+    await Tenant.findByIdAndUpdate(req.params.id, updateData, { new: true });
+    res.send('Tenant updated successfully!');
+  } catch (error) {
+    console.error('Error updating tenant:', error);
+    res.status(500).send('Error updating tenant.');
+  }
+});
+
+app.post('/deletetenant/:id', async (req, res) => {
+  try {
+    await Tenant.findByIdAndDelete(req.params.id);
+    res.send('Tenant deleted successfully!');
+  } catch (error) {
+    console.error('Error deleting tenant:', error);
+    res.status(500).send('Error deleting tenant.');
+  }
+});
 
 
 // Start the server
