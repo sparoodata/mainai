@@ -117,7 +117,12 @@ app.get('/checkAuthorization/:id', async (req, res) => {
       return res.status(404).send('Authorization record not found.');
     }
 
-    const phoneNumber = authorizeRecord.phoneNumber;
+    // Normalize phone number by removing any leading "+"
+    const rawPhone = authorizeRecord.phoneNumber;
+    const phoneNumber = rawPhone.startsWith('+') ? rawPhone.substring(1) : rawPhone;
+    
+    console.log("Waiting for response from phone:", phoneNumber);
+
     let userResponse;
     try {
       userResponse = await waitForUserResponse(phoneNumber);
@@ -126,8 +131,7 @@ app.get('/checkAuthorization/:id', async (req, res) => {
     }
 
     if (userResponse && userResponse.toLowerCase() === 'yes_authorize') {
-      // Clear stored response
-      delete userResponses[phoneNumber];
+      delete userResponses[phoneNumber]; // Clean up after capture
 
       if (action === 'addproperty') {
         res.render('addProperty', { id });
@@ -137,7 +141,7 @@ app.get('/checkAuthorization/:id', async (req, res) => {
       } else if (action === 'addtenant') {
         const properties = await Property.find().select('name _id');
         const units = await Unit.find().select('unitNumber _id property');
-        const tenantId = generateTenantId(); // see next section
+        const tenantId = generateTenantId();
         res.render('addTenant', { id, properties, units, tenantId });
       }
     } else {
@@ -148,6 +152,7 @@ app.get('/checkAuthorization/:id', async (req, res) => {
     res.status(500).send('An error occurred while checking authorization.');
   }
 });
+
 
 
 
@@ -427,6 +432,150 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
         res.status(500).send('An error occurred while adding the tenant.');
     }
 });
+
+// Render the edit property form with pre-filled data
+app.get('/editproperty/:id', async (req, res) => {
+  try {
+    const property = await Property.findById(req.params.id);
+    if (!property) return res.status(404).send('Property not found.');
+    res.render('editProperty', { property });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Error retrieving property.');
+  }
+});
+
+// Update the property
+app.post('/editproperty/:id', async (req, res) => {
+  try {
+    const { property_name, units, address, totalAmount } = req.body;
+    const property = await Property.findByIdAndUpdate(
+      req.params.id,
+      { name: property_name, units, address, totalAmount },
+      { new: true }
+    );
+    res.send('Property updated successfully!');
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Error updating property.');
+  }
+});
+app.post('/deleteproperty/:id', async (req, res) => {
+  try {
+    await Property.findByIdAndDelete(req.params.id);
+    res.send('Property deleted successfully!');
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Error deleting property.');
+  }
+});
+app.get('/editunit/:id', async (req, res) => {
+  try {
+    const unit = await Unit.findById(req.params.id);
+    if (!unit) return res.status(404).send('Unit not found.');
+    const properties = await Property.find().select('name _id');
+    res.render('editUnit', { unit, properties });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Error retrieving unit.');
+  }
+});
+
+app.post('/editunit/:id', async (req, res) => {
+  try {
+    const { property, unit_number, rent_amount, floor, size } = req.body;
+    const unit = await Unit.findByIdAndUpdate(
+      req.params.id,
+      {
+        property,
+        unitNumber: unit_number,
+        rentAmount: rent_amount,
+        floor,
+        size
+      },
+      { new: true }
+    );
+    res.send('Unit updated successfully!');
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Error updating unit.');
+  }
+});
+app.post('/deleteunit/:id', async (req, res) => {
+  try {
+    await Unit.findByIdAndDelete(req.params.id);
+    res.send('Unit deleted successfully!');
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Error deleting unit.');
+  }
+});
+app.get('/edittenant/:id', async (req, res) => {
+  try {
+    const tenant = await Tenant.findById(req.params.id);
+    if (!tenant) return res.status(404).send('Tenant not found.');
+    const properties = await Property.find().select('name _id');
+    const units = await Unit.find().select('unitNumber _id property');
+    res.render('editTenant', { tenant, properties, units });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Error retrieving tenant.');
+  }
+});
+
+app.post('/edittenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
+  try {
+    const { name, propertyName, unitAssigned, lease_start, deposit, rent_amount } = req.body;
+    const updateData = {
+      name,
+      propertyName,
+      unitAssigned, // Now this should be a valid ObjectId from the dropdown
+      lease_start: new Date(lease_start),
+      deposit,
+      rent_amount,
+    };
+
+    // Optionally update photo and idProof if provided (using your R2 upload code)
+    if (req.files.photo) {
+      const key = 'images/' + Date.now() + '-' + req.files.photo[0].originalname;
+      const uploadParams = {
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: req.files.photo[0].buffer,
+        ContentType: req.files.photo[0].mimetype,
+      };
+      await s3.upload(uploadParams).promise();
+      updateData.photo = process.env.R2_PUBLIC_URL + '/' + key;
+    }
+    if (req.files.idProof) {
+      const key = 'images/' + Date.now() + '-' + req.files.idProof[0].originalname;
+      const uploadParams = {
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: req.files.idProof[0].buffer,
+        ContentType: req.files.idProof[0].mimetype,
+      };
+      await s3.upload(uploadParams).promise();
+      updateData.idProof = process.env.R2_PUBLIC_URL + '/' + key;
+    }
+
+    await Tenant.findByIdAndUpdate(req.params.id, updateData, { new: true });
+    res.send('Tenant updated successfully!');
+  } catch (error) {
+    console.error('Error updating tenant:', error);
+    res.status(500).send('Error updating tenant.');
+  }
+});
+app.post('/removetenant/:id', async (req, res) => {
+  try {
+    await Tenant.findByIdAndDelete(req.params.id);
+    res.send('Tenant deleted successfully!');
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Error deleting tenant.');
+  }
+});
+
 
 
 // Start the server

@@ -28,12 +28,13 @@
       </select>
 
       <!-- Unit Assignment (displaying only unit numbers) -->
-      <label for="unitAssigned">Unit Assigned:</label>
-      <select id="unitAssigned" name="unitAssigned" required>
-        <% units.forEach(function(unit) { %>
-          <option value="<%= unit.unitNumber %>"><%= unit.unitNumber %></option>
-        <% }); %>
-      </select>
+<label for="unitAssigned">Unit Assigned:</label>
+<select id="unitAssigned" name="unitAssigned" required>
+  <% units.forEach(function(unit) { %>
+    <option value="<%= unit._id %>"><%= unit.unitNumber %></option>
+  <% }); %>
+</select>
+
 
       <!-- Lease Start Date -->
       <label for="lease_start">Lease Start:</label>
