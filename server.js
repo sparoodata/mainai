@@ -19,9 +19,16 @@ const fetch = require('isomorphic-fetch');
 
 const app = express();
 const port = process.env.PORT || 3000; // Glitch uses dynamic port
+const AWS = require('aws-sdk');
 
-// Dropbox instance
-const dbx = new Dropbox({ accessToken: process.env.DROPBOX_ACCESS_TOKEN, fetch: fetch });
+// Configure the S3 client to use Cloudflare R2 settings
+const s3 = new AWS.S3({
+  endpoint: process.env.R2_ENDPOINT, // e.g., https://<account-id>.r2.cloudflarestorage.com
+  accessKeyId: process.env.R2_ACCESS_KEY_ID,
+  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  region: 'auto', // R2 doesn’t require a region but "auto" works for S3 compatibility
+  signatureVersion: 'v4',
+});
 
 // Trust the first proxy
 app.set('trust proxy', 1);
