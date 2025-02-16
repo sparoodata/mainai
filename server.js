@@ -26,6 +26,7 @@ const s3 = new AWS.S3({
   endpoint: process.env.R2_ENDPOINT, // e.g., https://<account-id>.r2.cloudflarestorage.com
   accessKeyId: process.env.R2_ACCESS_KEY_ID,
   secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  Bucket: process.env.R2_BUCKET,
   region: 'auto', // R2 doesn’t require a region but "auto" works for S3 compatibility
   signatureVersion: 'v4',
 });
@@ -270,7 +271,19 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
     const id = req.params.id;
 
     try {
-        // (Your existing code to check authorization and find the user)
+        // Retrieve the authorization record
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        const phoneNumber = '+' + authorizeRecord.phoneNumber;
+
+        // Retrieve the user
+        const user = await User.findOne({ phoneNumber });
+        if (!user) {
+            return res.status(404).send('User not found.');
+        }
 
         // Create new unit and reference the user by their ID
         const unit = new Unit({
@@ -336,7 +349,19 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
     const id = req.params.id;
 
     try {
-        // (Your existing code to check authorization and find the user)
+        // Retrieve the authorization record
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        const phoneNumber = '+' + authorizeRecord.phoneNumber;
+
+        // Retrieve the user
+        const user = await User.findOne({ phoneNumber });
+        if (!user) {
+            return res.status(404).send('User not found.');
+        }
 
         // Create new tenant and reference the user by their ID
         const tenant = new Tenant({
@@ -351,7 +376,7 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
             tenant_id,
         });
 
-        // Upload photo to Cloudflare R2 if provided
+        // Upload tenant photo if provided
         if (req.files.photo) {
             const key = 'images/' + Date.now() + '-' + req.files.photo[0].originalname;
             const uploadParams = {
@@ -365,7 +390,7 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
             tenant.photo = process.env.R2_PUBLIC_URL + '/' + key;
         }
 
-        // Upload ID proof to Cloudflare R2 if provided
+        // Upload tenant ID proof if provided
         if (req.files.idProof) {
             const key = 'images/' + Date.now() + '-' + req.files.idProof[0].originalname;
             const uploadParams = {
