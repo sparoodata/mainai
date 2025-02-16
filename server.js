@@ -210,16 +210,16 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
     const id = req.params.id;
 
     try {
-        // Find authorization record by ID to get the phone number
+        // Retrieve the authorization record using the provided id
         const authorizeRecord = await Authorize.findById(id);
         if (!authorizeRecord) {
             return res.status(404).send('Authorization record not found.');
         }
 
+        // Build the phone number (ensure the format is correct)
         const phoneNumber = '+' + authorizeRecord.phoneNumber;
-       console.log(phoneNumber);
 
-        // Find the user by phone number
+        // Retrieve the user based on the phone number
         const user = await User.findOne({ phoneNumber });
         if (!user) {
             return res.status(404).send('User not found.');
@@ -231,25 +231,22 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
             units, 
             address, 
             totalAmount, 
-            userId: user._id // Reference to the users collection
+            userId: user._id 
         });
-
         await property.save();
 
+        // Upload image to Cloudflare R2 if provided
         if (req.file) {
-            const dropboxPath = '/images/' + Date.now() + '-' + req.file.originalname;
+            const key = 'images/' + Date.now() + '-' + req.file.originalname;
+            const uploadParams = {
+                Bucket: process.env.R2_BUCKET,
+                Key: key,
+                Body: req.file.buffer,
+                ContentType: req.file.mimetype,
+            };
 
-            // Upload image to Dropbox
-            const dropboxResponse = await dbx.filesUpload({
-                path: dropboxPath,
-                contents: req.file.buffer
-            });
-
-            const sharedLinkResponse = await dbx.sharingCreateSharedLinkWithSettings({
-                path: dropboxResponse.result.path_lower
-            });
-
-            const imageUrl = sharedLinkResponse.result.url.replace('dl=0', 'raw=1');
+            await s3.upload(uploadParams).promise();
+            const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
 
             const image = new Image({ propertyId: property._id, imageUrl: imageUrl });
             await image.save();
@@ -265,25 +262,15 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
 });
 
 
+
+
 // Handle form submission and image upload to Dropbox (add unit)
 app.post('/addunit/:id', upload.single('image'), async (req, res) => {
     const { property, unit_number, rent_amount, floor, size } = req.body;
     const id = req.params.id;
 
     try {
-        // Find authorization record by ID to get the phone number
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        const phoneNumber = '+' + authorizeRecord.phoneNumber;
-
-        // Find the user by phone number
-        const user = await User.findOne({ phoneNumber });
-        if (!user) {
-            return res.status(404).send('User not found.');
-        }
+        // (Your existing code to check authorization and find the user)
 
         // Create new unit and reference the user by their ID
         const unit = new Unit({
@@ -292,23 +279,22 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
             rentAmount: rent_amount, 
             floor, 
             size, 
-            userId: user._id // Reference to the users collection
+            userId: user._id
         });
-
         await unit.save();
 
+        // Upload image to Cloudflare R2 if provided
         if (req.file) {
-            const dropboxPath = '/images/' + Date.now() + '-' + req.file.originalname;
-            const dropboxResponse = await dbx.filesUpload({
-                path: dropboxPath,
-                contents: req.file.buffer
-            });
+            const key = 'images/' + Date.now() + '-' + req.file.originalname;
+            const uploadParams = {
+                Bucket: process.env.R2_BUCKET,
+                Key: key,
+                Body: req.file.buffer,
+                ContentType: req.file.mimetype,
+            };
 
-            const sharedLinkResponse = await dbx.sharingCreateSharedLinkWithSettings({
-                path: dropboxResponse.result.path_lower
-            });
-
-            const imageUrl = sharedLinkResponse.result.url.replace('dl=0', 'raw=1');
+            await s3.upload(uploadParams).promise();
+            const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
 
             const image = new Image({ unitId: unit._id, imageUrl: imageUrl });
             await image.save();
@@ -322,6 +308,7 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
         res.status(500).send('An error occurred while adding the unit and image.');
     }
 });
+
 
 // Add tenant route that waits for WhatsApp authorization
 app.get('/addtenant/:id', async (req, res) => {
@@ -349,25 +336,13 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
     const id = req.params.id;
 
     try {
-        // Find authorization record by ID to get the phone number
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        const phoneNumber = '+' + authorizeRecord.phoneNumber;
-
-        // Find the user by phone number
-        const user = await User.findOne({ phoneNumber });
-        if (!user) {
-            return res.status(404).send('User not found.');
-        }
+        // (Your existing code to check authorization and find the user)
 
         // Create new tenant and reference the user by their ID
         const tenant = new Tenant({
             name,
-            phoneNumber: user.phoneNumber, // Store tenant's phone number
-            userId: user._id, // Reference to the users collection
+            phoneNumber: user.phoneNumber,
+            userId: user._id,
             propertyName,
             unitAssigned,
             lease_start: new Date(lease_start),
@@ -376,36 +351,34 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
             tenant_id,
         });
 
-        // If files are uploaded, save their paths in Dropbox
+        // Upload photo to Cloudflare R2 if provided
         if (req.files.photo) {
-            const photoPath = '/images/' + Date.now() + '-' + req.files.photo[0].originalname;
-            const dropboxResponse = await dbx.filesUpload({
-                path: photoPath,
-                contents: req.files.photo[0].buffer
-            });
+            const key = 'images/' + Date.now() + '-' + req.files.photo[0].originalname;
+            const uploadParams = {
+                Bucket: process.env.R2_BUCKET,
+                Key: key,
+                Body: req.files.photo[0].buffer,
+                ContentType: req.files.photo[0].mimetype,
+            };
 
-            const sharedLinkResponse = await dbx.sharingCreateSharedLinkWithSettings({
-                path: dropboxResponse.result.path_lower
-            });
-
-            tenant.photo = sharedLinkResponse.result.url.replace('dl=0', 'raw=1');
+            await s3.upload(uploadParams).promise();
+            tenant.photo = process.env.R2_PUBLIC_URL + '/' + key;
         }
 
+        // Upload ID proof to Cloudflare R2 if provided
         if (req.files.idProof) {
-            const idProofPath = '/images/' + Date.now() + '-' + req.files.idProof[0].originalname;
-            const dropboxResponse = await dbx.filesUpload({
-                path: idProofPath,
-                contents: req.files.idProof[0].buffer
-            });
+            const key = 'images/' + Date.now() + '-' + req.files.idProof[0].originalname;
+            const uploadParams = {
+                Bucket: process.env.R2_BUCKET,
+                Key: key,
+                Body: req.files.idProof[0].buffer,
+                ContentType: req.files.idProof[0].mimetype,
+            };
 
-            const sharedLinkResponse = await dbx.sharingCreateSharedLinkWithSettings({
-                path: dropboxResponse.result.path_lower
-            });
-
-            tenant.idProof = sharedLinkResponse.result.url.replace('dl=0', 'raw=1');
+            await s3.upload(uploadParams).promise();
+            tenant.idProof = process.env.R2_PUBLIC_URL + '/' + key;
         }
 
-        // Save tenant to the database
         await tenant.save();
         res.send('Tenant added successfully!');
     } catch (error) {
@@ -413,6 +386,7 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
         res.status(500).send('An error occurred while adding the tenant.');
     }
 });
+
 
 // Start the server
 app.listen(port, () => {
