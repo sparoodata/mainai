@@ -314,17 +314,26 @@ async function sendMessage(phoneNumber, message) {
 }
 
 // Helper function to wait for the user response
-async function waitForUserResponse(phoneNumber) {
-    return new Promise((resolve) => {
-        const intervalId = setInterval(() => {
-            if (userResponses[phoneNumber]) {
-                const response = userResponses[phoneNumber];
-                clearInterval(intervalId);
-                console.log(`Captured user response: ${response}`); // Debugging log
-                resolve(response);
-            }
-        }, 1000); // Poll every second
-    });
+// Wait for a user response for a given number, with a timeout (in ms)
+function waitForUserResponse(phoneNumber, timeout = 60000) {
+  return new Promise((resolve, reject) => {
+    let timePassed = 0;
+    const intervalId = setInterval(() => {
+      if (userResponses[phoneNumber]) {
+        clearInterval(intervalId);
+        const response = userResponses[phoneNumber];
+        delete userResponses[phoneNumber]; // Clean up once captured
+        console.log(`Captured user response: ${response}`);
+        return resolve(response);
+      }
+      timePassed += 1000;
+      if (timePassed >= timeout) {
+        clearInterval(intervalId);
+        console.error("Authorization timed out");
+        return reject(new Error("Authorization timed out"));
+      }
+    }, 1000);
+  });
 }
 
 

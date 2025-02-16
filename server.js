@@ -108,40 +108,47 @@ app.get('/addproperty/:id', async (req, res) => {
 
 // Check authorization and render the appropriate form (Add Property, Add Unit, or Add Tenant)
 app.get('/checkAuthorization/:id', async (req, res) => {
-    const id = req.params.id;
-    const action = req.query.action; // addproperty, addunit, or addtenant
+  const id = req.params.id;
+  const action = req.query.action; // addproperty, addunit, or addtenant
 
-    try {
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        const phoneNumber = authorizeRecord.phoneNumber;
-        const userResponse = await waitForUserResponse(phoneNumber);
-
-        if (userResponse && userResponse.toLowerCase() === 'yes_authorize') {
-            delete userResponses[phoneNumber]; // Clear the stored response
-
-            if (action === 'addproperty') {
-                res.render('addProperty', { id });
-            } else if (action === 'addunit') {
-                const properties = await Property.find().select('name _id');
-                res.render('addUnit', { id, properties });
-            } else if (action === 'addtenant') {
-                const properties = await Property.find().select('name _id');
-                const units = await Unit.find().select('unitNumber _id property');
-                const tenantId = generateTenantId(); // Generate the tenant ID
-                res.render('addTenant', { id, properties, units, tenantId });
-            }
-        } else {
-            return res.json({ status: 'waiting' });
-        }
-    } catch (error) {
-        console.error('Error checking authorization status:', error);
-        res.status(500).send('An error occurred while checking authorization.');
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
     }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    let userResponse;
+    try {
+      userResponse = await waitForUserResponse(phoneNumber);
+    } catch (error) {
+      return res.status(408).send('Authorization timed out. Please try again.');
+    }
+
+    if (userResponse && userResponse.toLowerCase() === 'yes_authorize') {
+      // Clear stored response
+      delete userResponses[phoneNumber];
+
+      if (action === 'addproperty') {
+        res.render('addProperty', { id });
+      } else if (action === 'addunit') {
+        const properties = await Property.find().select('name _id');
+        res.render('addUnit', { id, properties });
+      } else if (action === 'addtenant') {
+        const properties = await Property.find().select('name _id');
+        const units = await Unit.find().select('unitNumber _id property');
+        const tenantId = generateTenantId(); // see next section
+        res.render('addTenant', { id, properties, units, tenantId });
+      }
+    } else {
+      res.json({ status: 'waiting' });
+    }
+  } catch (error) {
+    console.error('Error checking authorization status:', error);
+    res.status(500).send('An error occurred while checking authorization.');
+  }
 });
+
 
 
 // Function to send WhatsApp message for authorization
