@@ -12,7 +12,8 @@ const tenantSchema = new Schema({
     tenant_id: { type: String, required: true },
     photo: { type: String }, // URL to photo stored in Dropbox
     idProof: { type: String }, // URL to ID proof stored in Dropbox
-    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true } // Reference to User
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true } ,// Reference to User
+    email: { type: String, unique: true, sparse: true }  
 });
 
 module.exports = mongoose.model('Tenant', tenantSchema);
