@@ -109,7 +109,7 @@ app.get('/addproperty/:id', async (req, res) => {
 // Check authorization and render the appropriate form (Add Property, Add Unit, or Add Tenant)
 app.get('/checkAuthorization/:id', async (req, res) => {
     const id = req.params.id;
-    const action = req.query.action; // This action can now be addproperty, addunit, or addtenant
+    const action = req.query.action; // addproperty, addunit, or addtenant
 
     try {
         const authorizeRecord = await Authorize.findById(id);
@@ -126,12 +126,13 @@ app.get('/checkAuthorization/:id', async (req, res) => {
             if (action === 'addproperty') {
                 res.render('addProperty', { id });
             } else if (action === 'addunit') {
-                const properties = await Property.find().select('name _id'); // Fetch properties
+                const properties = await Property.find().select('name _id');
                 res.render('addUnit', { id, properties });
             } else if (action === 'addtenant') {
-                const properties = await Property.find().select('name _id'); // Fetch properties for tenant assignment
-                const units = await Unit.find().select('unitNumber _id property'); // Fetch units for tenant assignment
-                res.render('addTenant', { id, properties, units }); // Render a form where users can add a tenant
+                const properties = await Property.find().select('name _id');
+                const units = await Unit.find().select('unitNumber _id property');
+                const tenantId = generateTenantId(); // Generate the tenant ID
+                res.render('addTenant', { id, properties, units, tenantId });
             }
         } else {
             return res.json({ status: 'waiting' });
@@ -141,6 +142,7 @@ app.get('/checkAuthorization/:id', async (req, res) => {
         res.status(500).send('An error occurred while checking authorization.');
     }
 });
+
 
 // Function to send WhatsApp message for authorization
 async function sendWhatsAppAuthMessage(phoneNumber) {
@@ -166,7 +168,6 @@ async function sendWhatsAppAuthMessage(phoneNumber) {
     });
 }
 
-
 app.get('/addunit/:id', async (req, res) => {
     const id = req.params.id;
 
@@ -177,17 +178,25 @@ app.get('/addunit/:id', async (req, res) => {
         }
 
         const phoneNumber = authorizeRecord.phoneNumber;
+        // Send WhatsApp authorization message
+        await sendWhatsAppAuthMessage(phoneNumber);
 
-        // Fetch properties to associate the unit with a property
-        const properties = await Property.find().select('name _id');
-
-        // Render the add unit form and pass properties for selection
-        res.render('addUnit', { id, properties });
+        // Render a waiting page until authorization is confirmed
+        res.render('waitingAuthorization', { id, action: 'addunit' });
     } catch (error) {
         console.error('Error during authorization or fetching properties:', error);
         res.status(500).send('An error occurred while fetching data.');
     }
 });
+
+
+function generateTenantId() {
+    // Generate a random 4-digit number (ensuring it is always 4 digits)
+    const digits = Math.floor(1000 + Math.random() * 9000);
+    // Generate a random uppercase letter (A-Z)
+    const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+    return 'T' + digits + letter;
+}
 
 
 // Route to get units for a selected property
