@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Edit Tenant</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <h2>Edit Tenant</h2>
+    <form action="/edittenant/<%= tenant._id %>" method="POST" enctype="multipart/form-data">
+      <label for="name">Tenant Name:</label>
+      <input type="text" id="name" name="name" value="<%= tenant.name %>" required />
+
+      <label for="propertyName">Property:</label>
+      <select id="propertyName" name="propertyName" required>
+        <% properties.forEach(function(prop) { %>
+          <option value="<%= prop.name %>" <%= tenant.propertyName === prop.name ? "selected" : "" %>>
+            <%= prop.name %>
+          </option>
+        <% }) %>
+      </select>
+
+      <label for="unitAssigned">Unit Assigned:</label>
+      <select id="unitAssigned" name="unitAssigned" required>
+        <% units.forEach(function(unit) { %>
+          <option value="<%= unit._id %>" <%= unit._id.toString() === tenant.unitAssigned.toString() ? "selected" : "" %>>
+            <%= unit.unitNumber %>
+          </option>
+        <% }) %>
+      </select>
+
+      <label for="lease_start">Lease Start Date:</label>
+      <input type="date" id="lease_start" name="lease_start" value="<%= tenant.lease_start ? tenant.lease_start.toISOString().split('T')[0] : '' %>" required />
+
+      <label for="deposit">Deposit:</label>
+      <input type="number" id="deposit" name="deposit" value="<%= tenant.deposit %>" required />
+
+      <label for="rent_amount">Rent Amount:</label>
+      <input type="number" id="rent_amount" name="rent_amount" value="<%= tenant.rent_amount %>" required />
+
+      <!-- Optional: Display current photo and ID proof -->
+      <% if (tenant.photo) { %>
+        <p>Current Photo: <img src="<%= tenant.photo %>" alt="Tenant Photo" width="100" /></p>
+      <% } %>
+      <label for="photo">Change Tenant Photo (Max 5MB):</label>
+      <input type="file" id="photo" name="photo" accept="image/*" />
+
+      <% if (tenant.idProof) { %>
+        <p>Current ID Proof: <img src="<%= tenant.idProof %>" alt="ID Proof" width="100" /></p>
+      <% } %>
+      <label for="idProof">Change ID Proof (Max 5MB):</label>
+      <input type="file" id="idProof" name="idProof" accept="image/*" />
+
+      <button type="submit">Update Tenant</button>
+    </form>
+  </div>
+</body>
+</html>
