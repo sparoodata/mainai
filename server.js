@@ -82,8 +82,9 @@ const upload = multer({
 });
 
 // Routes and webhook handling
-const { router, waitForUserResponse, userResponses } = require('./routes/webhook');
+const { router, waitForUserResponse, userResponses, sendMessage } = require('./routes/webhook');
 app.use('/webhook', router);
+
 
 // Add property route that waits for WhatsApp authorization
 app.get('/addproperty/:id', async (req, res) => {
@@ -227,22 +228,17 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
     const id = req.params.id;
 
     try {
-        // Retrieve the authorization record using the provided id
         const authorizeRecord = await Authorize.findById(id);
         if (!authorizeRecord) {
             return res.status(404).send('Authorization record not found.');
         }
 
-        // Build the phone number (ensure the format is correct)
         const phoneNumber = '+' + authorizeRecord.phoneNumber;
-
-        // Retrieve the user based on the phone number
         const user = await User.findOne({ phoneNumber });
         if (!user) {
             return res.status(404).send('User not found.');
         }
 
-        // Create new property and reference the user by their ID
         const property = new Property({ 
             name: property_name, 
             units, 
@@ -270,6 +266,9 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
             property.images.push(image._id);
             await property.save();
         }
+
+        // Send WhatsApp confirmation message
+        await sendMessage(authorizeRecord.phoneNumber, `Property *${property_name}* has been successfully added.`);
 
         res.send('Property and image added successfully!');
     } catch (error) {
@@ -365,21 +364,17 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
     const id = req.params.id;
 
     try {
-        // Retrieve the authorization record
         const authorizeRecord = await Authorize.findById(id);
         if (!authorizeRecord) {
             return res.status(404).send('Authorization record not found.');
         }
 
         const phoneNumber = '+' + authorizeRecord.phoneNumber;
-
-        // Retrieve the user
         const user = await User.findOne({ phoneNumber });
         if (!user) {
             return res.status(404).send('User not found.');
         }
 
-        // Create new tenant and reference the user by their ID
         const tenant = new Tenant({
             name,
             phoneNumber: user.phoneNumber,
@@ -392,7 +387,7 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
             tenant_id,
         });
 
-        // Upload tenant photo if provided
+        // Upload tenant photo and ID proof
         if (req.files.photo) {
             const key = 'images/' + Date.now() + '-' + req.files.photo[0].originalname;
             const uploadParams = {
@@ -401,12 +396,10 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
                 Body: req.files.photo[0].buffer,
                 ContentType: req.files.photo[0].mimetype,
             };
-
             await s3.upload(uploadParams).promise();
             tenant.photo = process.env.R2_PUBLIC_URL + '/' + key;
         }
 
-        // Upload tenant ID proof if provided
         if (req.files.idProof) {
             const key = 'images/' + Date.now() + '-' + req.files.idProof[0].originalname;
             const uploadParams = {
@@ -415,12 +408,15 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
                 Body: req.files.idProof[0].buffer,
                 ContentType: req.files.idProof[0].mimetype,
             };
-
             await s3.upload(uploadParams).promise();
             tenant.idProof = process.env.R2_PUBLIC_URL + '/' + key;
         }
 
         await tenant.save();
+
+        // Send WhatsApp confirmation message
+        await sendMessage(authorizeRecord.phoneNumber, `Tenant "${name}" has been successfully added.`);
+
         res.send('Tenant added successfully!');
     } catch (error) {
         console.error('Error adding tenant:', error);
@@ -443,33 +439,47 @@ app.get('/editproperty/:id', async (req, res) => {
 
 // POST route to update the property
 app.post('/editproperty/:id', async (req, res) => {
-  try {
-    const { property_name, units, address, totalAmount } = req.body;
-    const property = await Property.findByIdAndUpdate(
-      req.params.id,
-      {
-        name: property_name,
-        units,
-        address,
-        totalAmount
-      },
-      { new: true }
-    );
-    res.send('Property updated successfully!');
-  } catch (error) {
-    console.error('Error updating property:', error);
-    res.status(500).send('Error updating property.');
-  }
+    try {
+        const { property_name, units, address, totalAmount } = req.body;
+        const property = await Property.findByIdAndUpdate(
+            req.params.id,
+            {
+                name: property_name,
+                units,
+                address,
+                totalAmount
+            },
+            { new: true }
+        );
+
+        // Send WhatsApp confirmation message
+        const authorizeRecord = await Authorize.findOne({ _id: req.params.id });
+        if (authorizeRecord) {
+            await sendMessage(authorizeRecord.phoneNumber, `Property "${property_name}" has been successfully updated.`);
+        }
+
+        res.send('Property updated successfully!');
+    } catch (error) {
+        console.error('Error updating property:', error);
+        res.status(500).send('Error updating property.');
+    }
 });
 
 app.post('/deleteproperty/:id', async (req, res) => {
-  try {
-    await Property.findByIdAndDelete(req.params.id);
-    res.send('Property deleted successfully!');
-  } catch (error) {
-    console.error('Error deleting property:', error);
-    res.status(500).send('Error deleting property.');
-  }
+    try {
+        const property = await Property.findByIdAndDelete(req.params.id);
+
+        // Send WhatsApp confirmation message
+        const authorizeRecord = await Authorize.findOne({ _id: req.params.id });
+        if (authorizeRecord && property) {
+            await sendMessage(authorizeRecord.phoneNumber, `Property "${property.name}" has been successfully deleted.`);
+        }
+
+        res.send('Property deleted successfully!');
+    } catch (error) {
+        console.error('Error deleting property:', error);
+        res.status(500).send('Error deleting property.');
+    }
 });
 // GET route to render the edit unit form (with list of properties if needed)
 app.get('/editunit/:id', async (req, res) => {
