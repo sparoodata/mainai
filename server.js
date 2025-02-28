@@ -603,6 +603,65 @@ app.post('/deletetenant/:id', async (req, res) => {
 });
 
 
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////
+
+// Helper function to generate a 6-digit OTP
+function generateOTP() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// Function to send OTP via WhatsApp
+async function sendOTP(phoneNumber, otp) {
+  try {
+    await axios.post(process.env.WHATSAPP_API_URL, {
+      messaging_product: 'whatsapp',
+      to: phoneNumber,
+      type: 'text',
+      text: { body: `Your OTP for authorization is: ${otp}` },
+    }, {
+      headers: {
+        'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    console.log(`OTP sent to ${phoneNumber}: ${otp}`);
+  } catch (error) {
+    console.error('Error sending OTP:', error.response ? error.response.data : error);
+  }
+}
+
+const otpStore = new Map(); // { phoneNumber: { otp: '123456', attempts: 0, lastAttempt: Date } }
+
+// Middleware to generate and send OTP
+app.get('/request-otp/:id', async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const otp = generateOTP();
+
+    // Store OTP and reset attempts
+    otpStore.set(phoneNumber, { otp, attempts: 0, lastAttempt: null });
+
+    // Send OTP via WhatsApp
+    await sendOTP(phoneNumber, otp);
+
+    res.json({ status: 'OTP sent', phoneNumber });
+  } catch (error) {
+    console.error('Error generating or sending OTP:', error);
+    res.status(500).send('An error occurred while generating OTP.');
+  }
+});
+
+
+
 // Start the server
 app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
