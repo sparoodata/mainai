@@ -387,7 +387,7 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
             tenant_id,
         });
 
-        // Upload tenant photo and ID proof
+        // Upload tenant photo if provided
         if (req.files.photo) {
             const key = 'images/' + Date.now() + '-' + req.files.photo[0].originalname;
             const uploadParams = {
@@ -396,10 +396,12 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
                 Body: req.files.photo[0].buffer,
                 ContentType: req.files.photo[0].mimetype,
             };
+
             await s3.upload(uploadParams).promise();
             tenant.photo = process.env.R2_PUBLIC_URL + '/' + key;
         }
 
+        // Upload tenant ID proof if provided
         if (req.files.idProof) {
             const key = 'images/' + Date.now() + '-' + req.files.idProof[0].originalname;
             const uploadParams = {
@@ -408,14 +410,18 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
                 Body: req.files.idProof[0].buffer,
                 ContentType: req.files.idProof[0].mimetype,
             };
+
             await s3.upload(uploadParams).promise();
             tenant.idProof = process.env.R2_PUBLIC_URL + '/' + key;
         }
 
         await tenant.save();
 
-        // Send WhatsApp confirmation message
-        await sendMessage(authorizeRecord.phoneNumber, `Tenant "${name}" has been successfully added.`);
+        // Send WhatsApp confirmation message with property name
+await sendMessage(
+    authorizeRecord.phoneNumber,
+    `Tenant *${name}* has been successfully added to property *${propertyName}* (Unit: *${unitAssigned})*. Lease starts on ${new Date(lease_start).toLocaleDateString()}.`
+);
 
         res.send('Tenant added successfully!');
     } catch (error) {
@@ -423,7 +429,6 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
         res.status(500).send('An error occurred while adding the tenant.');
     }
 });
-
 
 // GET route to render the edit property form with current data
 app.get('/editproperty/:id', async (req, res) => {
