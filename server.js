@@ -87,24 +87,22 @@ app.use('/webhook', router);
 
 
 // Add property route that waits for WhatsApp authorization
-app.get('/addproperty/:id', async (req, res) => {
-    const id = req.params.id;
+app.get('/authorize/:id', async (req, res) => {
+  const id = req.params.id;
+  res.redirect(`/authorize/${id}?redirect=/addproperty/${id}`);
 
-    try {
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        const phoneNumber = authorizeRecord.phoneNumber;
-        await sendWhatsAppAuthMessage(phoneNumber); // Send WhatsApp authorization message
-
-        // Render the waiting page for WhatsApp authorization
-        res.render('waitingAuthorization', { id, action: 'addproperty' });
-    } catch (error) {
-        console.error('Error during authorization or fetching phone number:', error);
-        res.status(500).send('An error occurred during authorization.');
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
     }
+
+    // Render the OTP input page
+    res.sendFile(path.join(__dirname, 'public', 'otp.html'));
+  } catch (error) {
+    console.error('Error rendering OTP page:', error);
+    res.status(500).send('An error occurred while rendering the OTP page.');
+  }
 });
 
 // Check authorization and render the appropriate form (Add Property, Add Unit, or Add Tenant)
@@ -661,7 +659,61 @@ app.get('/request-otp/:id', async (req, res) => {
 });
 
 
+app.post('/validate-otp/:id', async (req, res) => {
+  const id = req.params.id;
+  const { otp } = req.body;
 
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const storedOTPData = otpStore.get(phoneNumber);
+
+    if (!storedOTPData) {
+      return res.status(400).json({ error: 'OTP expired or not requested.' });
+    }
+
+    const { otp: storedOTP, attempts, lastAttempt } = storedOTPData;
+
+    // Check if the user is blocked due to too many attempts
+    if (attempts >= 3 && Date.now() - lastAttempt < 180000) { // 3 minutes
+      return res.status(429).json({ error: 'Too many attempts. Try again after 3 minutes.' });
+    }
+
+    // Validate OTP
+    if (otp === storedOTP) {
+      otpStore.delete(phoneNumber); // Clear OTP after successful validation
+      res.json({ status: 'OTP validated', phoneNumber });
+    } else {
+      // Increment failed attempts
+      otpStore.set(phoneNumber, { ...storedOTPData, attempts: attempts + 1, lastAttempt: Date.now() });
+      res.status(400).json({ error: 'Invalid OTP.' });
+    }
+  } catch (error) {
+    console.error('Error validating OTP:', error);
+    res.status(500).send('An error occurred while validating OTP.');
+  }
+});
+
+app.get('/authorize/:id', async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    // Render the OTP input page
+    res.sendFile(path.join(__dirname, 'public', 'otp.html'));
+  } catch (error) {
+    console.error('Error rendering OTP page:', error);
+    res.status(500).send('An error occurred while rendering the OTP page.');
+  }
+});
 // Start the server
 app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
