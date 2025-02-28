@@ -270,19 +270,24 @@ async function sendMessage(phoneNumber, message) {
 }
 
 // Helper function to wait for the user response (polling every second)
-async function waitForUserResponse(phoneNumber) {
-  return new Promise((resolve) => {
-    const intervalId = setInterval(() => {
-      if (userResponses[phoneNumber]) {
-        const response = userResponses[phoneNumber];
-        clearInterval(intervalId);
-        console.log(`Captured user response: ${response}`);
-        resolve(response);
-      }
-    }, 1000);
-  });
+async function waitForUserResponse(phoneNumber, timeout = 30000) {
+    return new Promise((resolve, reject) => {
+        const startTime = Date.now();
+        const intervalId = setInterval(() => {
+            if (userResponses[phoneNumber]) {
+                const response = userResponses[phoneNumber];
+                clearInterval(intervalId);
+                console.log(`Captured user response: ${response} from ${phoneNumber}`);
+                delete userResponses[phoneNumber]; // Clear the response after use
+                resolve(response);
+            } else if (Date.now() - startTime >= timeout) {
+                clearInterval(intervalId);
+                console.error(`Authorization timed out for ${phoneNumber}`);
+                reject(new Error('Authorization timed out.'));
+            }
+        }, 500); // Poll every 500ms
+    });
 }
-
 // Helper function to send the manage submenu
 async function sendManageSubmenu(phoneNumber) {
   const buttonMenu = {
@@ -416,9 +421,11 @@ async function sendPropertyLink(phoneNumber, action) {
   }
 }
 
+// Export the sendMessage function
 module.exports = {
   router,
   waitForUserResponse,
-  userResponses, // Export userResponses if needed elsewhere
-  sessions,      // Export sessions for potential external use
+  userResponses,
+  sessions,
+  sendMessage, // Add this line
 };
