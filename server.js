@@ -495,7 +495,10 @@ app.get('/request-otp/:id', async (req, res) => {
     const otp = generateOTP();
 
     // Store OTP and reset attempts
-    otpStore.set(phoneNumber, { otp, attempts: 0, lastAttempt: null });
+    otpStore.set(phoneNumber, { otp, attempts: 0, lastAttempt: null, validated: false });
+
+    // Store phoneNumber in session
+    req.session.phoneNumber = phoneNumber;
 
     // Send OTP via WhatsApp
     await sendOTP(phoneNumber, otp);
@@ -506,7 +509,6 @@ app.get('/request-otp/:id', async (req, res) => {
     res.status(500).send('An error occurred while generating OTP.');
   }
 });
-
 // Route to validate OTP
 app.post('/validate-otp/:id', async (req, res) => {
   const id = req.params.id;
@@ -534,7 +536,7 @@ app.post('/validate-otp/:id', async (req, res) => {
 
     // Validate OTP
     if (otp === storedOTP) {
-      otpStore.delete(phoneNumber); // Clear OTP after successful validation
+      otpStore.set(phoneNumber, { ...storedOTPData, validated: true }); // Mark OTP as validated
       res.json({ status: 'OTP validated', phoneNumber });
     } else {
       // Increment failed attempts
@@ -546,6 +548,7 @@ app.post('/validate-otp/:id', async (req, res) => {
     res.status(500).send('An error occurred while validating OTP.');
   }
 });
+
 
 // Route to render the OTP input page
 app.get('/authorize/:id', async (req, res) => {
@@ -564,7 +567,25 @@ app.get('/authorize/:id', async (req, res) => {
     res.status(500).send('An error occurred while rendering the OTP page.');
   }
 });
-app.get('/addproperty/:id', async (req, res) => {
+
+// Middleware to check if OTP is validated
+function checkOTPValidation(req, res, next) {
+  const id = req.params.id;
+  const phoneNumber = req.session.phoneNumber; // Store phoneNumber in session during OTP request
+
+  if (!phoneNumber) {
+    return res.status(401).send('OTP not requested. Please request an OTP first.');
+  }
+
+  const storedOTPData = otpStore.get(phoneNumber);
+  if (!storedOTPData || !storedOTPData.validated) {
+    return res.status(401).send('OTP not validated. Please validate the OTP first.');
+  }
+
+  next();
+}
+
+app.get('/addproperty/:id', checkOTPValidation, async (req, res) => {
   const id = req.params.id;
 
   try {
