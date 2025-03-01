@@ -86,68 +86,6 @@ const { router, waitForUserResponse, userResponses, sendMessage } = require('./r
 app.use('/webhook', router);
 
 
-// Add property route that waits for WhatsApp authorization
-app.get('/authorize/:id', async (req, res) => {
-  const id = req.params.id;
-  res.redirect(`/authorize/${id}?redirect=/addproperty/${id}`);
-
-  try {
-    const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
-    }
-
-    // Render the OTP input page
-    res.sendFile(path.join(__dirname, 'public', 'otp.html'));
-  } catch (error) {
-    console.error('Error rendering OTP page:', error);
-    res.status(500).send('An error occurred while rendering the OTP page.');
-  }
-});
-
-// Check authorization and render the appropriate form (Add Property, Add Unit, or Add Tenant)
-app.get('/checkAuthorization/:id', async (req, res) => {
-  const id = req.params.id;
-  const action = req.query.action; // addproperty, addunit, or addtenant
-
-  try {
-    const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
-    }
-
-    const phoneNumber = authorizeRecord.phoneNumber;
-    let userResponse;
-    try {
-      userResponse = await waitForUserResponse(phoneNumber);
-    } catch (error) {
-      return res.status(408).send('Authorization timed out. Please try again.');
-    }
-
-    if (userResponse && userResponse.toLowerCase() === 'yes_authorize') {
-      // Clear stored response
-      delete userResponses[phoneNumber];
-
-      if (action === 'addproperty') {
-        res.render('addProperty', { id });
-      } else if (action === 'addunit') {
-        const properties = await Property.find().select('name _id');
-        res.render('addUnit', { id, properties });
-      } else if (action === 'addtenant') {
-        const properties = await Property.find().select('name _id');
-        const units = await Unit.find().select('unitNumber _id property');
-        const tenantId = generateTenantId(); // see next section
-        res.render('addTenant', { id, properties, units, tenantId });
-      }
-    } else {
-      res.json({ status: 'waiting' });
-    }
-  } catch (error) {
-    console.error('Error checking authorization status:', error);
-    res.status(500).send('An error occurred while checking authorization.');
-  }
-});
-
 
 
 // Function to send WhatsApp message for authorization
@@ -174,26 +112,6 @@ async function sendWhatsAppAuthMessage(phoneNumber) {
     });
 }
 
-app.get('/addunit/:id', async (req, res) => {
-    const id = req.params.id;
-
-    try {
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        const phoneNumber = authorizeRecord.phoneNumber;
-        // Send WhatsApp authorization message
-        await sendWhatsAppAuthMessage(phoneNumber);
-
-        // Render a waiting page until authorization is confirmed
-        res.render('waitingAuthorization', { id, action: 'addunit' });
-    } catch (error) {
-        console.error('Error during authorization or fetching properties:', error);
-        res.status(500).send('An error occurred while fetching data.');
-    }
-});
 
 
 function generateTenantId() {
@@ -206,19 +124,6 @@ function generateTenantId() {
 
 
 // Route to get units for a selected property
-app.get('/getUnits/:propertyId', async (req, res) => {
-    const propertyId = req.params.propertyId;
-
-    try {
-        // Fetch units from the database based on the selected property
-        const units = await Unit.find({ property: propertyId }).select('unitNumber _id');
-        res.json(units); // Return the list of units in JSON format
-    } catch (error) {
-        console.error('Error fetching units:', error);
-        res.status(500).send('An error occurred while fetching units.');
-    }
-});
-
 
 // Handle form submission and image upload to Dropbox (add property)
 app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
@@ -337,26 +242,6 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
 
 
 // Add tenant route that waits for WhatsApp authorization
-app.get('/addtenant/:id', async (req, res) => {
-    const id = req.params.id;
-
-    try {
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        const phoneNumber = authorizeRecord.phoneNumber;
-        await sendWhatsAppAuthMessage(phoneNumber); // Send WhatsApp authorization message
-
-        // Render the waiting page for WhatsApp authorization
-        res.render('waitingAuthorization', { id, action: 'addtenant' });
-    } catch (error) {
-        console.error('Error during authorization or fetching phone number:', error);
-        res.status(500).send('An error occurred during authorization.');
-    }
-});
-
 app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
     const { name, propertyName, unitAssigned, lease_start, deposit, rent_amount, tenant_id } = req.body;
     const id = req.params.id;
@@ -429,17 +314,6 @@ await sendMessage(
 });
 
 // GET route to render the edit property form with current data
-app.get('/editproperty/:id', async (req, res) => {
-  try {
-    const property = await Property.findById(req.params.id);
-    if (!property) return res.status(404).send('Property not found.');
-    res.render('editProperty', { property });
-  } catch (error) {
-    console.error('Error retrieving property:', error);
-    res.status(500).send('Error retrieving property.');
-  }
-});
-
 // POST route to update the property
 app.post('/editproperty/:id', async (req, res) => {
     try {
@@ -485,19 +359,6 @@ app.post('/deleteproperty/:id', async (req, res) => {
     }
 });
 // GET route to render the edit unit form (with list of properties if needed)
-app.get('/editunit/:id', async (req, res) => {
-  try {
-    const unit = await Unit.findById(req.params.id);
-    if (!unit) return res.status(404).send('Unit not found.');
-    // Fetch properties to allow re‑assigning the unit (if desired)
-    const properties = await Property.find().select('name _id');
-    res.render('editUnit', { unit, properties });
-  } catch (error) {
-    console.error('Error retrieving unit:', error);
-    res.status(500).send('Error retrieving unit.');
-  }
-});
-
 // POST route to update the unit
 app.post('/editunit/:id', async (req, res) => {
   try {
@@ -530,20 +391,6 @@ app.post('/deleteunit/:id', async (req, res) => {
   }
 });
 // GET route to render the edit tenant form with current data
-app.get('/edittenant/:id', async (req, res) => {
-  try {
-    const tenant = await Tenant.findById(req.params.id);
-    if (!tenant) return res.status(404).send('Tenant not found.');
-    // Fetch properties and units for dropdowns
-    const properties = await Property.find().select('name _id');
-    const units = await Unit.find().select('unitNumber _id property');
-    res.render('editTenant', { tenant, properties, units });
-  } catch (error) {
-    console.error('Error retrieving tenant:', error);
-    res.status(500).send('Error retrieving tenant.');
-  }
-});
-
 // POST route to update the tenant
 app.post('/edittenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
   try {
@@ -606,6 +453,7 @@ app.post('/deletetenant/:id', async (req, res) => {
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 // Helper function to generate a 6-digit OTP
+// Helper function to generate a 6-digit OTP
 function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -630,9 +478,10 @@ async function sendOTP(phoneNumber, otp) {
   }
 }
 
+// In-memory store for OTPs and attempts
 const otpStore = new Map(); // { phoneNumber: { otp: '123456', attempts: 0, lastAttempt: Date } }
 
-// Middleware to generate and send OTP
+// Route to request OTP
 app.get('/request-otp/:id', async (req, res) => {
   const id = req.params.id;
 
@@ -646,7 +495,10 @@ app.get('/request-otp/:id', async (req, res) => {
     const otp = generateOTP();
 
     // Store OTP and reset attempts
-    otpStore.set(phoneNumber, { otp, attempts: 0, lastAttempt: null });
+    otpStore.set(phoneNumber, { otp, attempts: 0, lastAttempt: null, validated: false });
+
+    // Store phoneNumber in session
+    req.session.phoneNumber = phoneNumber;
 
     // Send OTP via WhatsApp
     await sendOTP(phoneNumber, otp);
@@ -657,8 +509,7 @@ app.get('/request-otp/:id', async (req, res) => {
     res.status(500).send('An error occurred while generating OTP.');
   }
 });
-
-
+// Route to validate OTP
 app.post('/validate-otp/:id', async (req, res) => {
   const id = req.params.id;
   const { otp } = req.body;
@@ -685,7 +536,7 @@ app.post('/validate-otp/:id', async (req, res) => {
 
     // Validate OTP
     if (otp === storedOTP) {
-      otpStore.delete(phoneNumber); // Clear OTP after successful validation
+      otpStore.set(phoneNumber, { ...storedOTPData, validated: true }); // Mark OTP as validated
       res.json({ status: 'OTP validated', phoneNumber });
     } else {
       // Increment failed attempts
@@ -698,6 +549,8 @@ app.post('/validate-otp/:id', async (req, res) => {
   }
 });
 
+
+// Route to render the OTP input page
 app.get('/authorize/:id', async (req, res) => {
   const id = req.params.id;
 
@@ -712,6 +565,40 @@ app.get('/authorize/:id', async (req, res) => {
   } catch (error) {
     console.error('Error rendering OTP page:', error);
     res.status(500).send('An error occurred while rendering the OTP page.');
+  }
+});
+
+// Middleware to check if OTP is validated
+function checkOTPValidation(req, res, next) {
+  const id = req.params.id;
+  const phoneNumber = req.session.phoneNumber; // Store phoneNumber in session during OTP request
+
+  if (!phoneNumber) {
+    return res.status(401).send('OTP not requested. Please request an OTP first.');
+  }
+
+  const storedOTPData = otpStore.get(phoneNumber);
+  if (!storedOTPData || !storedOTPData.validated) {
+    return res.status(401).send('OTP not validated. Please validate the OTP first.');
+  }
+
+  next();
+}
+
+app.get('/addproperty/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    // Render the add property form
+    res.render('addProperty', { id });
+  } catch (error) {
+    console.error('Error rendering add property form:', error);
+    res.status(500).send('An error occurred while rendering the form.');
   }
 });
 // Start the server
