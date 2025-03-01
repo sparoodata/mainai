@@ -85,12 +85,7 @@
     }
 
     .keypad button.zero {
-      grid-column: span 1; /* Make 0 button take one column */
-    }
-
-    .keypad button.backspace {
-      grid-column: span 1; /* Make backspace button take one column */
-      font-size: 1.5rem; /* Larger icon */
+      grid-column: span 2;
     }
 
     .keypad button.submit {
@@ -100,6 +95,15 @@
 
     .keypad button.submit:active {
       background-color: #0056b3;
+    }
+
+    .keypad button.backspace {
+      background-color: #ff4444;
+      color: #fff;
+    }
+
+    .keypad button.backspace:active {
+      background-color: #cc0000;
     }
 
     .message {
@@ -135,10 +139,6 @@
       .keypad button {
         height: 45px;
         font-size: 1rem;
-      }
-
-      .keypad button.backspace {
-        font-size: 1.3rem; /* Adjust icon size for mobile */
       }
 
       .message {

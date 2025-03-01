@@ -435,6 +435,7 @@ async function sendPropertyLink(phoneNumber, action) {
 }
 
 
+
 // Export the sendMessage function
 module.exports = {
   router,
