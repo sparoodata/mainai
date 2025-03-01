@@ -525,6 +525,7 @@ app.get('/request-otp/:id', async (req, res) => {
   }
 });
 // Route to validate OTP
+// Route to validate OTP
 app.post('/validate-otp/:id', async (req, res) => {
   const id = req.params.id;
   const { otp } = req.body;
@@ -532,7 +533,7 @@ app.post('/validate-otp/:id', async (req, res) => {
   try {
     const authorizeRecord = await Authorize.findById(id);
     if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
+      return res.status(404).json({ error: 'Authorization record not found.' });
     }
 
     const phoneNumber = authorizeRecord.phoneNumber;
@@ -551,7 +552,12 @@ app.post('/validate-otp/:id', async (req, res) => {
 
     // Validate OTP
     if (otp === storedOTP) {
-      otpStore.set(phoneNumber, { ...storedOTPData, validated: true }); // Mark OTP as validated
+      // Invalidate the link by deleting the Authorize record
+      await Authorize.findByIdAndDelete(id);
+
+      // Clear OTP from the store
+      otpStore.delete(phoneNumber);
+
       res.json({ status: 'OTP validated', phoneNumber });
     } else {
       // Increment failed attempts
@@ -560,7 +566,7 @@ app.post('/validate-otp/:id', async (req, res) => {
     }
   } catch (error) {
     console.error('Error validating OTP:', error);
-    res.status(500).send('An error occurred while validating OTP.');
+    res.status(500).json({ error: 'An error occurred while validating OTP.' });
   }
 });
 
@@ -603,13 +609,15 @@ function checkOTPValidation(req, res, next) {
   next();
 }
 
-app.get('/addproperty/:id', checkOTPValidation, async (req, res) => {
+// Route to render the add property form (with ID)
+app.get('/addproperty/:id', async (req, res) => {
   const id = req.params.id;
 
   try {
+    // Check if the Authorize record exists
     const authorizeRecord = await Authorize.findById(id);
     if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
+      return res.status(404).send('This link has expired or is invalid.');
     }
 
     // Render the add property form
@@ -618,6 +626,12 @@ app.get('/addproperty/:id', checkOTPValidation, async (req, res) => {
     console.error('Error rendering add property form:', error);
     res.status(500).send('An error occurred while rendering the form.');
   }
+});
+
+// Route to render the add property form (without ID)
+app.get('/addproperty', (req, res) => {
+  // Render a success page or the add property form without the ID
+  res.render('addPropertySuccess'); // Replace with your desired view
 });
 // Start the server
 app.listen(port, () => {
