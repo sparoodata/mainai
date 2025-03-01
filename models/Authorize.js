@@ -1,15 +1,10 @@
 const mongoose = require('mongoose');
 
 const authorizeSchema = new mongoose.Schema({
-  phoneNumber: {
-    type: String,
-    required: true,
-    unique: true, // Ensure phone numbers are unique
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
+    phoneNumber: { type: String, required: true },
+    status: { type: String, required: true, default: 'Sent' }
 });
 
-module.exports = mongoose.model('Authorize', authorizeSchema);
+const Authorize = mongoose.model('Authorize', authorizeSchema);
+
+module.exports = Authorize;

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>OTP Verification</title>
- <style>
+  <style>
     body {
       font-family: Arial, sans-serif;
       display: flex;
@@ -85,12 +85,7 @@
     }
 
     .keypad button.zero {
-      grid-column: span 1; /* Make 0 button take one column */
-    }
-
-    .keypad button.backspace {
-      grid-column: span 1; /* Make backspace button take one column */
-      font-size: 1.5rem; /* Larger icon */
+      grid-column: span 2;
     }
 
     .keypad button.submit {
@@ -100,6 +95,15 @@
 
     .keypad button.submit:active {
       background-color: #0056b3;
+    }
+
+    .keypad button.backspace {
+      background-color: #ff4444;
+      color: #fff;
+    }
+
+    .keypad button.backspace:active {
+      background-color: #cc0000;
     }
 
     .message {
@@ -135,10 +139,6 @@
       .keypad button {
         height: 45px;
         font-size: 1rem;
-      }
-
-      .keypad button.backspace {
-        font-size: 1.3rem; /* Adjust icon size for mobile */
       }
 
       .message {
@@ -179,12 +179,6 @@
     const otpInputs = document.querySelectorAll('.otp-input');
     const keypadButtons = document.querySelectorAll('.keypad button');
     const message = document.getElementById('message');
-
-    // Check if the form has already been submitted
-    if (sessionStorage.getItem('otpSubmitted')) {
-      // Redirect to a success page or home page
-      window.location.href = '/success'; // Replace with your desired URL
-    }
 
     // Automatically request OTP when the page loads
     window.addEventListener('load', async () => {
@@ -233,42 +227,36 @@
     });
 
     // Validate OTP
-   // Validate OTP
-// Validate OTP
-async function validateOTP() {
-  const otp = Array.from(otpInputs).map(input => input.value).join('');
-  const id = window.location.pathname.split('/')[2]; // Extract ID from URL
+    async function validateOTP() {
+      const otp = Array.from(otpInputs).map(input => input.value).join('');
+      const id = window.location.pathname.split('/')[2]; // Extract ID from URL
 
-  try {
-    const response = await fetch(`/validate-otp/${id}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ otp }),
-    });
+      try {
+        const response = await fetch(`/validate-otp/${id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ otp }),
+        });
 
-    const data = await response.json();
-    if (response.ok) {
-      // Mark the form as submitted in sessionStorage
-      sessionStorage.setItem('otpSubmitted', 'true');
-
-      message.textContent = 'OTP validated! Redirecting...';
-      message.classList.add('success');
-      message.classList.remove('error');
-      setTimeout(() => {
-        // Redirect to /addproperty (without the :id parameter)
-        window.location.href = '/addproperty'; // Replace with your desired URL
-      }, 1000);
-    } else {
-      message.textContent = data.error || 'OTP validation failed.';
-      message.classList.add('error');
-      message.classList.remove('success');
+        const data = await response.json();
+        if (response.ok) {
+          message.textContent = 'OTP validated! Redirecting...';
+          message.classList.add('success');
+          message.classList.remove('error');
+          setTimeout(() => {
+            window.location.href = `/addproperty/${id}`; // Redirect to the protected page
+          }, 1000);
+        } else {
+          message.textContent = data.error || 'OTP validation failed.';
+          message.classList.add('error');
+          message.classList.remove('success');
+        }
+      } catch (error) {
+        message.textContent = 'An error occurred. Please try again.';
+        message.classList.add('error');
+        message.classList.remove('success');
+      }
     }
-  } catch (error) {
-    message.textContent = 'An error occurred. Please try again.';
-    message.classList.add('error');
-    message.classList.remove('success');
-  }
-}
   </script>
 </body>
 </html>

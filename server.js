@@ -30,11 +30,7 @@ const s3 = new AWS.S3({
   region: 'auto', // R2 doesn’t require a region but "auto" works for S3 compatibility
   signatureVersion: 'v4',
 });
-// Example middleware
-app.use((req, res, next) => {
-  console.log(`Request received for: ${req.url}`);
-  next(); // Ensure the request is passed to the next middleware/route
-});
+
 // Trust the first proxy
 app.set('trust proxy', 1);
 
@@ -493,39 +489,6 @@ async function sendOTP(phoneNumber, otp) {
 const otpStore = new Map(); // { phoneNumber: { otp: '123456', attempts: 0, lastAttempt: Date } }
 
 // Route to request OTP
-
-app.get('/request-otp/:phoneNumber', async (req, res) => {
-  const phoneNumber = req.params.phoneNumber;
-  console.log(`Requesting OTP for phoneNumber: ${phoneNumber}`);
-
-  try {
-    // Check if an Authorize record already exists for this phone number
-    let authorizeRecord = await Authorize.findOne({ phoneNumber });
-    console.log(`Existing Authorize record:`, authorizeRecord);
-
-    if (!authorizeRecord) {
-      // Create a new Authorize record
-      authorizeRecord = new Authorize({ phoneNumber });
-      console.log(`New Authorize record to be saved:`, authorizeRecord);
-
-      await authorizeRecord.save();
-      console.log(`Authorize record saved successfully:`, authorizeRecord);
-    }
-
-    // Generate and send OTP
-    const otp = generateOTP();
-    console.log(`Generated OTP: ${otp}`);
-    await sendOTP(phoneNumber, otp);
-
-    res.json({ status: 'OTP sent', id: authorizeRecord._id });
-  } catch (error) {
-    console.error('Error generating or sending OTP:', error);
-    res.status(500).send('An error occurred while generating OTP.');
-  }
-});
-
-
-// Route to request OTP
 app.get('/request-otp/:id', async (req, res) => {
   const id = req.params.id;
   console.log(`/request-otp/:id route called with ID: ${id}`); // Debug log
@@ -562,7 +525,6 @@ app.get('/request-otp/:id', async (req, res) => {
   }
 });
 // Route to validate OTP
-// Route to validate OTP
 app.post('/validate-otp/:id', async (req, res) => {
   const id = req.params.id;
   const { otp } = req.body;
@@ -570,7 +532,7 @@ app.post('/validate-otp/:id', async (req, res) => {
   try {
     const authorizeRecord = await Authorize.findById(id);
     if (!authorizeRecord) {
-      return res.status(404).json({ error: 'Authorization record not found.' });
+      return res.status(404).send('Authorization record not found.');
     }
 
     const phoneNumber = authorizeRecord.phoneNumber;
@@ -589,12 +551,7 @@ app.post('/validate-otp/:id', async (req, res) => {
 
     // Validate OTP
     if (otp === storedOTP) {
-      // Invalidate the link by deleting the Authorize record
-      await Authorize.findByIdAndDelete(id);
-
-      // Clear OTP from the store
-      otpStore.delete(phoneNumber);
-
+      otpStore.set(phoneNumber, { ...storedOTPData, validated: true }); // Mark OTP as validated
       res.json({ status: 'OTP validated', phoneNumber });
     } else {
       // Increment failed attempts
@@ -603,7 +560,7 @@ app.post('/validate-otp/:id', async (req, res) => {
     }
   } catch (error) {
     console.error('Error validating OTP:', error);
-    res.status(500).json({ error: 'An error occurred while validating OTP.' });
+    res.status(500).send('An error occurred while validating OTP.');
   }
 });
 
@@ -646,15 +603,13 @@ function checkOTPValidation(req, res, next) {
   next();
 }
 
-// Route to render the add property form (with ID)
-app.get('/addproperty/:id', async (req, res) => {
+app.get('/addproperty/:id', checkOTPValidation, async (req, res) => {
   const id = req.params.id;
 
   try {
-    // Check if the Authorize record exists
     const authorizeRecord = await Authorize.findById(id);
     if (!authorizeRecord) {
-      return res.status(404).send('This link has expired or is invalid.');
+      return res.status(404).send('Authorization record not found.');
     }
 
     // Render the add property form
@@ -663,12 +618,6 @@ app.get('/addproperty/:id', async (req, res) => {
     console.error('Error rendering add property form:', error);
     res.status(500).send('An error occurred while rendering the form.');
   }
-});
-
-// Route to render the add property form (without ID)
-app.get('/addproperty', (req, res) => {
-  // Render a success page or the add property form without the ID
-  res.render('addPropertySuccess'); // Replace with your desired view
 });
 // Start the server
 app.listen(port, () => {
