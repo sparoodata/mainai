@@ -489,21 +489,28 @@ async function sendOTP(phoneNumber, otp) {
 const otpStore = new Map(); // { phoneNumber: { otp: '123456', attempts: 0, lastAttempt: Date } }
 
 // Route to request OTP
+
 app.get('/request-otp/:phoneNumber', async (req, res) => {
   const phoneNumber = req.params.phoneNumber;
+  console.log(`Requesting OTP for phoneNumber: ${phoneNumber}`);
 
   try {
     // Check if an Authorize record already exists for this phone number
     let authorizeRecord = await Authorize.findOne({ phoneNumber });
+    console.log(`Existing Authorize record:`, authorizeRecord);
 
     if (!authorizeRecord) {
       // Create a new Authorize record
       authorizeRecord = new Authorize({ phoneNumber });
+      console.log(`New Authorize record to be saved:`, authorizeRecord);
+
       await authorizeRecord.save();
+      console.log(`Authorize record saved successfully:`, authorizeRecord);
     }
 
     // Generate and send OTP
     const otp = generateOTP();
+    console.log(`Generated OTP: ${otp}`);
     await sendOTP(phoneNumber, otp);
 
     res.json({ status: 'OTP sent', id: authorizeRecord._id });
