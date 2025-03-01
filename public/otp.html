@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>OTP Verification</title>
   <style>
     body {
@@ -37,15 +37,16 @@
       justify-content: center;
       gap: 10px;
       margin-bottom: 1.5rem;
+      padding: 0 10px; /* Add padding to match keypad indentation */
     }
 
     .otp-input {
-      width: 40px;
+      width: 30px;
       height: 40px;
       text-align: center;
-      font-size: 1.2rem;
-      border: 2px solid #ccc;
-      border-radius: 5px;
+      font-size: 1.5rem;
+      border: none;
+      border-bottom: 2px solid #ccc; /* Line instead of box */
       outline: none;
       transition: border-color 0.3s ease;
       pointer-events: none; /* Disable manual input */
@@ -63,6 +64,7 @@
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 10px;
+      padding: 0 10px; /* Add padding to match OTP input boxes indentation */
     }
 
     .keypad button {
@@ -119,9 +121,9 @@
       }
 
       .otp-input {
-        width: 35px;
+        width: 25px;
         height: 35px;
-        font-size: 1rem;
+        font-size: 1.2rem;
       }
 
       .keypad button {
