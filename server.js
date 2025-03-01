@@ -489,6 +489,31 @@ async function sendOTP(phoneNumber, otp) {
 const otpStore = new Map(); // { phoneNumber: { otp: '123456', attempts: 0, lastAttempt: Date } }
 
 // Route to request OTP
+app.get('/request-otp/:phoneNumber', async (req, res) => {
+  const phoneNumber = req.params.phoneNumber;
+
+  try {
+    // Check if an Authorize record already exists for this phone number
+    let authorizeRecord = await Authorize.findOne({ phoneNumber });
+
+    if (!authorizeRecord) {
+      // Create a new Authorize record
+      authorizeRecord = new Authorize({ phoneNumber });
+      await authorizeRecord.save();
+    }
+
+    // Generate and send OTP
+    const otp = generateOTP();
+    await sendOTP(phoneNumber, otp);
+
+    res.json({ status: 'OTP sent', id: authorizeRecord._id });
+  } catch (error) {
+    console.error('Error generating or sending OTP:', error);
+    res.status(500).send('An error occurred while generating OTP.');
+  }
+});
+
+// Route to request OTP
 app.get('/request-otp/:id', async (req, res) => {
   const id = req.params.id;
   console.log(`/request-otp/:id route called with ID: ${id}`); // Debug log

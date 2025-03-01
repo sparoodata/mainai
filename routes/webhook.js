@@ -403,38 +403,31 @@ async function sendTenantOptions(phoneNumber) {
 
 
 async function sendPropertyLink(phoneNumber, action) {
-  console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}`); // Debug log
+  console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}`);
 
   try {
+    // Ensure the phone number has the + prefix
+    if (!phoneNumber.startsWith('+')) {
+      phoneNumber = `+${phoneNumber}`;
+    }
+
     // Find the document in the 'authorizes' collection based on the phone number
-    const authorizeRecord = await Authorize.findOne({ phoneNumber: phoneNumber });
+    const authorizeRecord = await Authorize.findOne({ phoneNumber });
     if (!authorizeRecord) {
       console.error(`No authorization record found for phone number: ${phoneNumber}`);
       await sendMessage(phoneNumber, 'Authorization record not found. Please contact support.');
       return;
     }
 
-    // Log the authorizeRecord ID
-    console.log(`Authorize record found with ID: ${authorizeRecord._id}`); // Debug log
-
-    // Construct the long URL for OTP verification
-    const longUrl = `${GLITCH_HOST}/authorize/${authorizeRecord._id}`;
-    console.log(`Long URL generated: ${longUrl}`); // Debug log
-
-    // Shorten the URL
-    const shortUrl = await shortenUrl(longUrl);
-    console.log(`Short URL generated: ${shortUrl}`); // Debug log
-
-    // Send the OTP verification link to the user
+    // Construct the long URL using the authorize record's _id
+    const longUrl = `${GLITCH_HOST}/${action}/${authorizeRecord._id}`;
+    const shortUrl = await shortenUrl(longUrl); // Shorten the URL
     await sendMessage(phoneNumber, `Proceed: ${shortUrl}`);
-    console.log(`OTP verification link sent to ${phoneNumber}`); // Debug log
   } catch (error) {
-    console.error('Error in sendPropertyLink:', error); // Debug log
+    console.error('Error fetching authorization record:', error);
     await sendMessage(phoneNumber, 'Failed to retrieve authorization record. Please try again.');
   }
 }
-
-
 
 // Export the sendMessage function
 module.exports = {
