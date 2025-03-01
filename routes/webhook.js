@@ -407,11 +407,12 @@ async function sendPropertyLink(phoneNumber, action) {
 
   try {
     // Ensure the phone number has the + prefix
-    if (!phoneNumber.startsWith('+')) {
+   if (!phoneNumber.startsWith('+')) {
       phoneNumber = `+${phoneNumber}`;
-    }
+   }
 
     // Find the document in the 'authorizes' collection based on the phone number
+    console.log(phoneNumber);
     const authorizeRecord = await Authorize.findOne({ phoneNumber });
     if (!authorizeRecord) {
       console.error(`No authorization record found for phone number: ${phoneNumber}`);
