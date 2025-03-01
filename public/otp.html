@@ -14,6 +14,7 @@
       background-color: #f4f4f9;
       margin: 0;
       padding: 0;
+      touch-action: manipulation; /* Disable double-tap zoom */
     }
 
     .otp-container {
@@ -84,7 +85,12 @@
     }
 
     .keypad button.zero {
-      grid-column: span 2;
+      grid-column: span 1; /* Make 0 button take one column */
+    }
+
+    .keypad button.backspace {
+      grid-column: span 1; /* Make backspace button take one column */
+      font-size: 1.5rem; /* Larger icon */
     }
 
     .keypad button.submit {
@@ -131,6 +137,10 @@
         font-size: 1rem;
       }
 
+      .keypad button.backspace {
+        font-size: 1.3rem; /* Adjust icon size for mobile */
+      }
+
       .message {
         font-size: 0.8rem;
       }
@@ -159,6 +169,7 @@
       <button data-value="8">8</button>
       <button data-value="9">9</button>
       <button class="zero" data-value="0">0</button>
+      <button class="backspace">⌫</button>
       <button class="submit">✔</button>
     </div>
     <div class="message" id="message"></div>
@@ -196,6 +207,17 @@
             emptyInput.classList.add('filled');
             if (emptyInput.dataset.index < otpInputs.length) {
               otpInputs[emptyInput.dataset.index].focus();
+            }
+          }
+        } else if (button.classList.contains('backspace')) {
+          // Handle backspace
+          const filledInputs = Array.from(otpInputs).filter(input => input.value);
+          if (filledInputs.length > 0) {
+            const lastFilledInput = filledInputs[filledInputs.length - 1];
+            lastFilledInput.value = '';
+            lastFilledInput.classList.remove('filled');
+            if (lastFilledInput.dataset.index > 1) {
+              otpInputs[lastFilledInput.dataset.index - 2].focus();
             }
           }
         } else if (button.classList.contains('submit')) {
