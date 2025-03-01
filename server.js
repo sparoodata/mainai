@@ -135,7 +135,7 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
         if (!authorizeRecord) {
             return res.status(404).send('Authorization record not found.');
         }
-
+        console.log(phoneNumber);
         const phoneNumber = '+' + authorizeRecord.phoneNumber;
         const user = await User.findOne({ phoneNumber });
         if (!user) {

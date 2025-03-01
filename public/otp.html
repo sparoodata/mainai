@@ -85,7 +85,11 @@
     }
 
     .keypad button.zero {
-      grid-column: span 2;
+      grid-column: span 1; /* Make 0 button take one column */
+    }
+
+    .keypad button.backspace {
+      grid-column: span 1; /* Make backspace button take one column */
     }
 
     .keypad button.submit {
@@ -95,15 +99,6 @@
 
     .keypad button.submit:active {
       background-color: #0056b3;
-    }
-
-    .keypad button.backspace {
-      background-color: #ff4444;
-      color: #fff;
-    }
-
-    .keypad button.backspace:active {
-      background-color: #cc0000;
     }
 
     .message {
