@@ -460,8 +460,10 @@ function generateOTP() {
 
 // Function to send OTP via WhatsApp
 async function sendOTP(phoneNumber, otp) {
+  console.log(`sendOTP function called for phone number: ${phoneNumber}`); // Debug log
+
   try {
-    await axios.post(process.env.WHATSAPP_API_URL, {
+    const response = await axios.post(process.env.WHATSAPP_API_URL, {
       messaging_product: 'whatsapp',
       to: phoneNumber,
       type: 'text',
@@ -472,12 +474,17 @@ async function sendOTP(phoneNumber, otp) {
         'Content-Type': 'application/json',
       },
     });
-    console.log(`OTP sent to ${phoneNumber}: ${otp}`);
+
+    console.log(`OTP sent to ${phoneNumber}: ${otp}`); // Debug log
+    console.log('WhatsApp API response:', response.data); // Debug log
   } catch (error) {
-    console.error('Error sending OTP:', error.response ? error.response.data : error);
+    console.error('Error sending OTP:', error.response ? {
+      status: error.response.status,
+      data: error.response.data,
+      headers: error.response.headers,
+    } : error.message); // Debug log
   }
 }
-
 // In-memory store for OTPs and attempts
 const otpStore = new Map(); // { phoneNumber: { otp: '123456', attempts: 0, lastAttempt: Date } }
 
@@ -601,52 +608,62 @@ function checkOTPValidation(req, res, next) {
   next();
 }
 
-app.get('/addproperty/:id', checkOTPValidation, async (req, res) => {
+
+app.get('/authorize/:id', async (req, res) => {
   const id = req.params.id;
+  console.log(`/authorize/:id route called with ID: ${id}`); // Debug log
 
   try {
     const authorizeRecord = await Authorize.findById(id);
     if (!authorizeRecord) {
+      console.error('Authorization record not found for ID:', id); // Debug log
       return res.status(404).send('Authorization record not found.');
     }
 
-    // Render the add property form
-    res.render('addProperty', { id });
+    // Render the OTP input page
+    console.log(`Rendering OTP input page for phone number: ${authorizeRecord.phoneNumber}`); // Debug log
+    res.sendFile(path.join(__dirname, 'public', 'otp.html'));
   } catch (error) {
-    console.error('Error rendering add property form:', error);
-    res.status(500).send('An error occurred while rendering the form.');
+    console.error('Error in /authorize/:id route:', error); // Debug log
+    res.status(500).send('An error occurred while rendering the OTP page.');
   }
 });
 
 app.get('/request-otp/:id', async (req, res) => {
   const id = req.params.id;
+  console.log(`/request-otp/:id route called with ID: ${id}`); // Debug log
 
   try {
     const authorizeRecord = await Authorize.findById(id);
     if (!authorizeRecord) {
+      console.error('Authorization record not found for ID:', id); // Debug log
       return res.status(404).send('Authorization record not found.');
     }
 
     const phoneNumber = authorizeRecord.phoneNumber;
+    console.log(`Phone number extracted from authorizeRecord: ${phoneNumber}`); // Debug log
+
     const otp = generateOTP();
+    console.log(`Generated OTP: ${otp}`); // Debug log
 
     // Store OTP and reset attempts
     otpStore.set(phoneNumber, { otp, attempts: 0, lastAttempt: null, validated: false });
+    console.log(`OTP stored for phone number: ${phoneNumber}`); // Debug log
 
     // Store phoneNumber in session
     req.session.phoneNumber = phoneNumber;
+    console.log(`Phone number stored in session: ${phoneNumber}`); // Debug log
 
     // Send OTP via WhatsApp
+    console.log(`Attempting to send OTP to ${phoneNumber}`); // Debug log
     await sendOTP(phoneNumber, otp);
 
     res.json({ status: 'OTP sent', phoneNumber });
   } catch (error) {
-    console.error('Error generating or sending OTP:', error);
+    console.error('Error in /request-otp/:id route:', error); // Debug log
     res.status(500).send('An error occurred while generating OTP.');
   }
 });
-
-
 
 app.post('/validate-otp/:id', async (req, res) => {
   const id = req.params.id;

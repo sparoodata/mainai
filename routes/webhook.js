@@ -402,7 +402,10 @@ async function sendTenantOptions(phoneNumber) {
 
 // Helper function to send the property/unit/tenant link using the _id from the 'authorizes' collection
 async function sendPropertyLink(phoneNumber, action) {
+  console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}`); // Debug log
+
   try {
+    // Find the document in the 'authorizes' collection based on the phone number
     const authorizeRecord = await Authorize.findOne({ phoneNumber: phoneNumber });
     if (!authorizeRecord) {
       console.error(`No authorization record found for phone number: ${phoneNumber}`);
@@ -410,16 +413,25 @@ async function sendPropertyLink(phoneNumber, action) {
       return;
     }
 
+    // Log the authorizeRecord ID
+    console.log(`Authorize record found with ID: ${authorizeRecord._id}`); // Debug log
+
     // Construct the long URL for OTP verification
     const longUrl = `${GLITCH_HOST}/authorize/${authorizeRecord._id}`;
-    const shortUrl = await shortenUrl(longUrl); // Shorten the URL
+    console.log(`Long URL generated: ${longUrl}`); // Debug log
+
+    // Shorten the URL
+    const shortUrl = await shortenUrl(longUrl);
+    console.log(`Short URL generated: ${shortUrl}`); // Debug log
+
+    // Send the OTP verification link to the user
     await sendMessage(phoneNumber, `Proceed: ${shortUrl}`);
+    console.log(`OTP verification link sent to ${phoneNumber}`); // Debug log
   } catch (error) {
-    console.error('Error fetching authorization record:', error);
+    console.error('Error in sendPropertyLink:', error); // Debug log
     await sendMessage(phoneNumber, 'Failed to retrieve authorization record. Please try again.');
   }
 }
-
 // Export the sendMessage function
 module.exports = {
   router,
