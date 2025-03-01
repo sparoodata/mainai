@@ -400,7 +400,8 @@ async function sendTenantOptions(phoneNumber) {
   });
 }
 
-// Helper function to send the property/unit/tenant link using the _id from the 'authorizes' collection
+
+
 async function sendPropertyLink(phoneNumber, action) {
   console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}`); // Debug log
 
@@ -432,6 +433,9 @@ async function sendPropertyLink(phoneNumber, action) {
     await sendMessage(phoneNumber, 'Failed to retrieve authorization record. Please try again.');
   }
 }
+
+
+
 // Export the sendMessage function
 module.exports = {
   router,
