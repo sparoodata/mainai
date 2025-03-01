@@ -1,8 +1,9 @@
+// webhook.js
 const express = require('express');
 const axios = require('axios');
-const User = require('../models/User');
-const Tenant = require('../models/Tenant');
-const Authorize = require('../models/Authorize');
+const User = require('../models/User');       // Assuming you have a User model
+const Tenant = require('../models/Tenant');   // Assuming you have a Tenant model
+const Authorize = require('../models/Authorize'); // Assuming you have an Authorize model
 
 const router = express.Router();
 
@@ -12,8 +13,8 @@ const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const GLITCH_HOST = process.env.GLITCH_HOST; // Your Glitch project URL
 
 // Session management to track user interactions
-const sessions = {}; // e.g., { "918885305097": { action: "rent_paid" } }
-let userResponses = {}; // e.g., { "918885305097": "Yes_authorize" }
+const sessions = {};      // e.g., { "918885305097": { action: "rent_paid" } }
+let userResponses = {};   // e.g., { "918885305097": "Yes_authorize" }
 
 // Helper function to shorten URLs
 async function shortenUrl(longUrl) {
@@ -79,8 +80,8 @@ router.post('/', async (req, res) => {
 
     if (value.messages) {
       const message = value.messages[0];
-      const fromNumber = message.from; // e.g., "918885305097"
-      const phoneNumber = `+${fromNumber}`; // e.g., "+918885305097"
+      const fromNumber = message.from;         // e.g., "918885305097"
+      const phoneNumber = `+${fromNumber}`;      // e.g., "+918885305097"
       const text = message.text ? message.text.body.trim() : null;
       const interactive = message.interactive || null;
 
@@ -91,36 +92,6 @@ router.post('/', async (req, res) => {
 
         // Store the response for later use
         userResponses[fromNumber] = buttonReplyId;
-
-        // Handle "Add Property" button
-        if (buttonReplyId === 'add_property') {
-          try {
-            // Check if an Authorize record already exists for this phone number
-            let authorizeRecord = await Authorize.findOne({ phoneNumber });
-            console.log(`Existing Authorize record:`, authorizeRecord);
-
-            if (!authorizeRecord) {
-              // Create a new Authorize record
-              authorizeRecord = new Authorize({ phoneNumber });
-              console.log(`New Authorize record to be saved:`, authorizeRecord);
-
-              await authorizeRecord.save();
-              console.log(`Authorize record saved successfully:`, authorizeRecord);
-            }
-
-            // Generate and send OTP
-            const otp = generateOTP();
-            console.log(`Generated OTP: ${otp}`);
-            await sendOTP(phoneNumber, otp);
-
-            // Send the OTP link to the user
-            const otpLink = `${GLITCH_HOST}/authorize/${authorizeRecord._id}`;
-            await sendMessage(fromNumber, `Proceed: ${otpLink}`);
-          } catch (error) {
-            console.error('Error generating or sending OTP:', error);
-            await sendMessage(fromNumber, 'Failed to request OTP. Please try again.');
-          }
-        }
       }
 
       // Initialize session for this number if it doesn't exist
@@ -228,6 +199,24 @@ router.post('/', async (req, res) => {
           await sendUnitOptions(fromNumber);
         } else if (selectedOption === 'manage_tenants') {
           await sendTenantOptions(fromNumber);
+        } else if (selectedOption === 'add_property') {
+          await sendPropertyLink(fromNumber, 'addproperty');
+        } else if (selectedOption === 'edit_property') {
+          await sendPropertyLink(fromNumber, 'editproperty');
+        } else if (selectedOption === 'remove_property') {
+          await sendPropertyLink(fromNumber, 'removeproperty');
+        } else if (selectedOption === 'add_unit') {
+          await sendPropertyLink(fromNumber, 'addunit');
+        } else if (selectedOption === 'edit_unit') {
+          await sendPropertyLink(fromNumber, 'editunit');
+        } else if (selectedOption === 'remove_unit') {
+          await sendPropertyLink(fromNumber, 'removeunit');
+        } else if (selectedOption === 'add_tenant') {
+          await sendPropertyLink(fromNumber, 'addtenant');
+        } else if (selectedOption === 'edit_tenant') {
+          await sendPropertyLink(fromNumber, 'edittenant');
+        } else if (selectedOption === 'remove_tenant') {
+          await sendPropertyLink(fromNumber, 'removetenant');
         }
       }
       // Handle text input when expecting tenant ID for rent payment
@@ -261,26 +250,6 @@ router.post('/', async (req, res) => {
   res.sendStatus(200);
 });
 
-
-async function waitForUserResponse(phoneNumber, timeout = 30000) {
-    return new Promise((resolve, reject) => {
-        const startTime = Date.now();
-        const intervalId = setInterval(() => {
-            if (userResponses[phoneNumber]) {
-                const response = userResponses[phoneNumber];
-                clearInterval(intervalId);
-                console.log(`Captured user response: ${response} from ${phoneNumber}`);
-                delete userResponses[phoneNumber]; // Clear the response after use
-                resolve(response);
-            } else if (Date.now() - startTime >= timeout) {
-                clearInterval(intervalId);
-                console.error(`Authorization timed out for ${phoneNumber}`);
-                reject(new Error('Authorization timed out.'));
-            }
-        }, 500); // Poll every 500ms
-    });
-}
-
 // Helper function to send a WhatsApp message
 async function sendMessage(phoneNumber, message) {
   try {
@@ -300,31 +269,25 @@ async function sendMessage(phoneNumber, message) {
   }
 }
 
-// Helper function to generate a 6-digit OTP
-function generateOTP() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
-// Helper function to send OTP via WhatsApp
-async function sendOTP(phoneNumber, otp) {
-  try {
-    await axios.post(WHATSAPP_API_URL, {
-      messaging_product: 'whatsapp',
-      to: phoneNumber,
-      type: 'text',
-      text: { body: `Your OTP for authorization is: ${otp}` }
-    }, {
-      headers: {
-        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json'
-      }
+// Helper function to wait for the user response (polling every second)
+async function waitForUserResponse(phoneNumber, timeout = 30000) {
+    return new Promise((resolve, reject) => {
+        const startTime = Date.now();
+        const intervalId = setInterval(() => {
+            if (userResponses[phoneNumber]) {
+                const response = userResponses[phoneNumber];
+                clearInterval(intervalId);
+                console.log(`Captured user response: ${response} from ${phoneNumber}`);
+                delete userResponses[phoneNumber]; // Clear the response after use
+                resolve(response);
+            } else if (Date.now() - startTime >= timeout) {
+                clearInterval(intervalId);
+                console.error(`Authorization timed out for ${phoneNumber}`);
+                reject(new Error('Authorization timed out.'));
+            }
+        }, 500); // Poll every 500ms
     });
-    console.log(`OTP sent to ${phoneNumber}: ${otp}`);
-  } catch (error) {
-    console.error('Error sending OTP:', error.response ? error.response.data : error);
-  }
 }
-
 // Helper function to send the manage submenu
 async function sendManageSubmenu(phoneNumber) {
   const buttonMenu = {
@@ -437,11 +400,47 @@ async function sendTenantOptions(phoneNumber) {
   });
 }
 
-// Export the router and other functions
+
+
+async function sendPropertyLink(phoneNumber, action) {
+  console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}`); // Debug log
+
+  try {
+    // Find the document in the 'authorizes' collection based on the phone number
+    const authorizeRecord = await Authorize.findOne({ phoneNumber: phoneNumber });
+    if (!authorizeRecord) {
+      console.error(`No authorization record found for phone number: ${phoneNumber}`);
+      await sendMessage(phoneNumber, 'Authorization record not found. Please contact support.');
+      return;
+    }
+
+    // Log the authorizeRecord ID
+    console.log(`Authorize record found with ID: ${authorizeRecord._id}`); // Debug log
+
+    // Construct the long URL for OTP verification
+    const longUrl = `${GLITCH_HOST}/authorize/${authorizeRecord._id}`;
+    console.log(`Long URL generated: ${longUrl}`); // Debug log
+
+    // Shorten the URL
+    const shortUrl = await shortenUrl(longUrl);
+    console.log(`Short URL generated: ${shortUrl}`); // Debug log
+
+    // Send the OTP verification link to the user
+    await sendMessage(phoneNumber, `Proceed: ${shortUrl}`);
+    console.log(`OTP verification link sent to ${phoneNumber}`); // Debug log
+  } catch (error) {
+    console.error('Error in sendPropertyLink:', error); // Debug log
+    await sendMessage(phoneNumber, 'Failed to retrieve authorization record. Please try again.');
+  }
+}
+
+
+
+// Export the sendMessage function
 module.exports = {
   router,
   waitForUserResponse,
   userResponses,
   sessions,
-  sendMessage,
+  sendMessage, // Add this line
 };
