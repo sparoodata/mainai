@@ -464,8 +464,19 @@ async function sendOTP(phoneNumber, otp) {
     await axios.post(process.env.WHATSAPP_API_URL, {
       messaging_product: 'whatsapp',
       to: phoneNumber,
-      type: 'text',
-      text: { body: `Your OTP for authorization is: ${otp}` },
+      type: 'template',
+      template: {
+        name: 'onboard_otp', // Replace with your approved template name
+        language: { code: 'en' },
+        components: [
+          {
+            type: 'body',
+            parameters: [
+              { type: 'text', text: otp }, // OTP value
+            ],
+          },
+        ],
+      },
     }, {
       headers: {
         'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
@@ -474,10 +485,13 @@ async function sendOTP(phoneNumber, otp) {
     });
     console.log(`OTP sent to ${phoneNumber}: ${otp}`);
   } catch (error) {
-    console.error('Error sending OTP:', error.response ? error.response.data : error);
+    console.error('Error sending OTP:', error.response ? {
+      status: error.response.status,
+      data: error.response.data,
+      headers: error.response.headers,
+    } : error.message);
   }
 }
-
 // In-memory store for OTPs and attempts
 const otpStore = new Map(); // { phoneNumber: { otp: '123456', attempts: 0, lastAttempt: Date } }
 
