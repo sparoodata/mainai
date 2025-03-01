@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OTP Verification</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OTP Authorization</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -11,225 +11,59 @@
       justify-content: center;
       align-items: center;
       height: 100vh;
-      background-color: #f4f4f9;
       margin: 0;
-      padding: 0;
-      touch-action: manipulation; /* Disable double-tap zoom */
+      background-color: #f4f4f4;
     }
-
-    .otp-container {
+    .container {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
       text-align: center;
-      background: #fff;
-      padding: 2rem;
-      border-radius: 10px;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-      width: 90%;
-      max-width: 300px;
     }
-
-    .otp-heading {
-      font-size: 1.5rem;
-      margin-bottom: 1.5rem;
-      color: #333;
+    input {
+      padding: 10px;
+      margin: 10px 0;
+      width: 80%;
+      border: 1px solid #ccc;
+      border-radius: 4px;
     }
-
-    .otp-inputs {
-      display: flex;
-      justify-content: center;
-      gap: 10px;
-      margin-bottom: 1.5rem;
-      padding: 0 10px; /* Add padding to match keypad indentation */
-    }
-
-    .otp-input {
-      width: 30px;
-      height: 40px;
-      text-align: center;
-      font-size: 1.5rem;
-      border: none;
-      border-bottom: 2px solid #ccc; /* Line instead of box */
-      outline: none;
-      transition: border-color 0.3s ease;
-      pointer-events: none; /* Disable manual input */
-    }
-
-    .otp-input:focus {
-      border-color: #007bff;
-    }
-
-    .otp-input.filled {
-      border-color: #007bff;
-    }
-
-    .keypad {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-      padding: 0 10px; /* Add padding to match OTP input boxes indentation */
-    }
-
-    .keypad button {
-      width: 100%;
-      height: 50px;
-      font-size: 1.2rem;
-      border: none;
-      border-radius: 5px;
-      background-color: #f0f0f0;
-      color: #333;
-      cursor: pointer;
-      transition: background-color 0.3s ease;
-    }
-
-    .keypad button:active {
-      background-color: #ddd;
-    }
-
-    .keypad button.zero {
-      grid-column: span 2;
-    }
-
-    .keypad button.submit {
+    button {
+      padding: 10px 20px;
       background-color: #007bff;
-      color: #fff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
     }
-
-    .keypad button.submit:active {
-      background-color: #0056b3;
-    }
-
-    .keypad button.backspace {
-      background-color: #ff4444;
-      color: #fff;
-    }
-
-    .keypad button.backspace:active {
-      background-color: #cc0000;
-    }
-
-    .message {
-      margin-top: 1rem;
-      font-size: 0.9rem;
-      color: #333;
-    }
-
-    .error {
-      color: #ff0000;
-    }
-
-    .success {
-      color: #28a745;
-    }
-
-    /* Responsive Styles */
-    @media (max-width: 480px) {
-      .otp-container {
-        padding: 1.5rem;
-      }
-
-      .otp-heading {
-        font-size: 1.2rem;
-      }
-
-      .otp-input {
-        width: 25px;
-        height: 35px;
-        font-size: 1.2rem;
-      }
-
-      .keypad button {
-        height: 45px;
-        font-size: 1rem;
-      }
-
-      .message {
-        font-size: 0.8rem;
-      }
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
     }
   </style>
 </head>
 <body>
-  <div class="otp-container">
-    <div class="otp-heading">Enter Passcode</div>
-    <div class="otp-inputs">
-      <input type="text" class="otp-input" maxlength="1" data-index="1" readonly />
-      <input type="text" class="otp-input" maxlength="1" data-index="2" readonly />
-      <input type="text" class="otp-input" maxlength="1" data-index="3" readonly />
-      <input type="text" class="otp-input" maxlength="1" data-index="4" readonly />
-      <input type="text" class="otp-input" maxlength="1" data-index="5" readonly />
-      <input type="text" class="otp-input" maxlength="1" data-index="6" readonly />
-    </div>
-    <div class="keypad">
-      <button data-value="1">1</button>
-      <button data-value="2">2</button>
-      <button data-value="3">3</button>
-      <button data-value="4">4</button>
-      <button data-value="5">5</button>
-      <button data-value="6">6</button>
-      <button data-value="7">7</button>
-      <button data-value="8">8</button>
-      <button data-value="9">9</button>
-      <button class="zero" data-value="0">0</button>
-      <button class="backspace">⌫</button>
-      <button class="submit">✔</button>
-    </div>
-    <div class="message" id="message"></div>
+  <div class="container">
+    <h1>OTP Authorization</h1>
+    <p>Enter the 6-digit OTP sent to your WhatsApp.</p>
+    <input type="text" id="otp" placeholder="Enter OTP" maxlength="6">
+    <button id="submit">Submit</button>
+    <p id="error" style="color: red; display: none;"></p>
   </div>
 
   <script>
-    const otpInputs = document.querySelectorAll('.otp-input');
-    const keypadButtons = document.querySelectorAll('.keypad button');
-    const message = document.getElementById('message');
+    const urlParams = new URLSearchParams(window.location.search);
+    const id = urlParams.get('id'); // Get the authorization ID from the URL
 
-    // Automatically request OTP when the page loads
-    window.addEventListener('load', async () => {
-      const id = window.location.pathname.split('/')[2]; // Extract ID from URL
-      try {
-        const response = await fetch(`/request-otp/${id}`);
-        const data = await response.json();
-        if (response.ok) {
-          console.log('OTP requested successfully:', data);
-        } else {
-          console.error('Failed to request OTP:', data);
-        }
-      } catch (error) {
-        console.error('Error requesting OTP:', error);
+    document.getElementById('submit').addEventListener('click', async () => {
+      const otp = document.getElementById('otp').value;
+      const errorElement = document.getElementById('error');
+
+      if (!otp || otp.length !== 6) {
+        errorElement.textContent = 'Please enter a valid 6-digit OTP.';
+        errorElement.style.display = 'block';
+        return;
       }
-    });
-
-    // Handle keypad button clicks
-    keypadButtons.forEach(button => {
-      button.addEventListener('click', () => {
-        const value = button.getAttribute('data-value');
-        if (value !== null) {
-          const emptyInput = Array.from(otpInputs).find(input => !input.value);
-          if (emptyInput) {
-            emptyInput.value = value;
-            emptyInput.classList.add('filled');
-            if (emptyInput.dataset.index < otpInputs.length) {
-              otpInputs[emptyInput.dataset.index].focus();
-            }
-          }
-        } else if (button.classList.contains('backspace')) {
-          // Handle backspace
-          const filledInputs = Array.from(otpInputs).filter(input => input.value);
-          if (filledInputs.length > 0) {
-            const lastFilledInput = filledInputs[filledInputs.length - 1];
-            lastFilledInput.value = '';
-            lastFilledInput.classList.remove('filled');
-            if (lastFilledInput.dataset.index > 1) {
-              otpInputs[lastFilledInput.dataset.index - 2].focus();
-            }
-          }
-        } else if (button.classList.contains('submit')) {
-          validateOTP();
-        }
-      });
-    });
-
-    // Validate OTP
-    async function validateOTP() {
-      const otp = Array.from(otpInputs).map(input => input.value).join('');
-      const id = window.location.pathname.split('/')[2]; // Extract ID from URL
 
       try {
         const response = await fetch(`/validate-otp/${id}`, {
@@ -239,24 +73,19 @@
         });
 
         const data = await response.json();
+
         if (response.ok) {
-          message.textContent = 'OTP validated! Redirecting...';
-          message.classList.add('success');
-          message.classList.remove('error');
-          setTimeout(() => {
-            window.location.href = `/addproperty/${id}`; // Redirect to the protected page
-          }, 1000);
+          window.location.href = `/addproperty/${id}`; // Redirect to the desired page
         } else {
-          message.textContent = data.error || 'OTP validation failed.';
-          message.classList.add('error');
-          message.classList.remove('success');
+          errorElement.textContent = data.error || 'Invalid OTP.';
+          errorElement.style.display = 'block';
         }
-      } catch (error) {
-        message.textContent = 'An error occurred. Please try again.';
-        message.classList.add('error');
-        message.classList.remove('success');
+      } catch (err) {
+        console.error('Error validating OTP:', err);
+        errorElement.textContent = 'An error occurred. Please try again.';
+        errorElement.style.display = 'block';
       }
-    }
+    });
   </script>
 </body>
 </html>
