@@ -714,6 +714,10 @@ app.get('/authorize/:id', async (req, res) => {
     res.status(500).send('An error occurred while rendering the OTP page.');
   }
 });
+app.get('/addproperty/:id', async (req, res) => {
+  const id = req.params.id;
+  res.redirect(`/authorize/${id}?redirect=/addproperty/${id}`);
+});
 // Start the server
 app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
