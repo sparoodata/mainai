@@ -4,6 +4,23 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OTP Verification</title>
+  <script>
+    // Automatically request OTP when the page loads
+    window.addEventListener('load', async () => {
+      const id = window.location.pathname.split('/')[2]; // Extract ID from URL
+      try {
+        const response = await fetch(`/request-otp/${id}`);
+        const data = await response.json();
+        if (response.ok) {
+          console.log('OTP requested successfully:', data);
+        } else {
+          console.error('Failed to request OTP:', data);
+        }
+      } catch (error) {
+        console.error('Error requesting OTP:', error);
+      }
+    });
+  </script>
 </head>
 <body>
   <h1>OTP Verification</h1>
