@@ -30,7 +30,11 @@ const s3 = new AWS.S3({
   region: 'auto', // R2 doesn’t require a region but "auto" works for S3 compatibility
   signatureVersion: 'v4',
 });
-
+// Example middleware
+app.use((req, res, next) => {
+  console.log(`Request received for: ${req.url}`);
+  next(); // Ensure the request is passed to the next middleware/route
+});
 // Trust the first proxy
 app.set('trust proxy', 1);
 
@@ -519,6 +523,7 @@ app.get('/request-otp/:phoneNumber', async (req, res) => {
     res.status(500).send('An error occurred while generating OTP.');
   }
 });
+
 
 // Route to request OTP
 app.get('/request-otp/:id', async (req, res) => {

@@ -402,6 +402,9 @@ async function sendTenantOptions(phoneNumber) {
 
 
 
+
+
+
 async function sendPropertyLink(phoneNumber, action) {
   console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}`);
 
