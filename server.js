@@ -606,6 +606,7 @@ app.post('/deletetenant/:id', async (req, res) => {
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 // Helper function to generate a 6-digit OTP
+// Helper function to generate a 6-digit OTP
 function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -630,9 +631,10 @@ async function sendOTP(phoneNumber, otp) {
   }
 }
 
+// In-memory store for OTPs and attempts
 const otpStore = new Map(); // { phoneNumber: { otp: '123456', attempts: 0, lastAttempt: Date } }
 
-// Middleware to generate and send OTP
+// Route to request OTP
 app.get('/request-otp/:id', async (req, res) => {
   const id = req.params.id;
 
@@ -658,7 +660,7 @@ app.get('/request-otp/:id', async (req, res) => {
   }
 });
 
-
+// Route to validate OTP
 app.post('/validate-otp/:id', async (req, res) => {
   const id = req.params.id;
   const { otp } = req.body;
@@ -698,6 +700,7 @@ app.post('/validate-otp/:id', async (req, res) => {
   }
 });
 
+// Route to render the OTP input page
 app.get('/authorize/:id', async (req, res) => {
   const id = req.params.id;
 
@@ -716,7 +719,19 @@ app.get('/authorize/:id', async (req, res) => {
 });
 app.get('/addproperty/:id', async (req, res) => {
   const id = req.params.id;
-  res.redirect(`/authorize/${id}?redirect=/addproperty/${id}`);
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    // Render the add property form
+    res.render('addProperty', { id });
+  } catch (error) {
+    console.error('Error rendering add property form:', error);
+    res.status(500).send('An error occurred while rendering the form.');
+  }
 });
 // Start the server
 app.listen(port, () => {
