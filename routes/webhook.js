@@ -406,10 +406,13 @@ async function sendPropertyLink(phoneNumber, action) {
   console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}`); // Debug log
 
   try {
+    // Log the phone number being queried
+    console.log(`Querying Authorize collection for phoneNumber: +${phoneNumber}`);
+
     // Find the document in the 'authorizes' collection based on the phone number
-    const authorizeRecord = await Authorize.findOne({ phoneNumber: phoneNumber });
+    const authorizeRecord = await Authorize.findOne({ phoneNumber: `+${phoneNumber}` });
     if (!authorizeRecord) {
-      console.error(`No authorization record found for phone number: ${phoneNumber}`);
+      console.error(`No authorization record found for phone number: +${phoneNumber}`);
       await sendMessage(phoneNumber, 'Authorization record not found. Please contact support.');
       return;
     }
@@ -433,8 +436,6 @@ async function sendPropertyLink(phoneNumber, action) {
     await sendMessage(phoneNumber, 'Failed to retrieve authorization record. Please try again.');
   }
 }
-
-
 
 // Export the sendMessage function
 module.exports = {
