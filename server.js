@@ -485,17 +485,15 @@ const otpStore = new Map(); // { phoneNumber: { otp: '123456', attempts: 0, last
 
 // Route to request OTP
 app.get('/request-otp/:id', async (req, res) => {
-    const id = req.params.id; // Assuming `id` is the phone number
+    const id = req.params.id; // Assuming `id` is the user ID
     console.log(`/request-otp/:id route called with ID: ${id}`); // Debug log
 
     try {
-        // Find the user by phone number
-        let user = await User.findOne({ phoneNumber: id });
-        console.log('User record before OTP generation:', user); // Debug log
-
+        // Find the user by ID
+        const user = await User.findById(id);
         if (!user) {
-            console.error('User not found for phoneNumber:', id); // Debug log
-            return res.status(404).send('User not found. Please register first.');
+            console.error('User not found for ID:', id); // Debug log
+            return res.status(404).send('User not found.');
         }
 
         // Generate OTP
@@ -509,34 +507,35 @@ app.get('/request-otp/:id', async (req, res) => {
         console.log('OTP saved to user record:', user); // Debug log
 
         // Store OTP in memory (optional, for quick validation)
-        otpStore.set(id, { otp, attempts: 0, lastAttempt: null, validated: false });
+        otpStore.set(user.phoneNumber, { otp, attempts: 0, lastAttempt: null, validated: false });
 
         // Send OTP via WhatsApp
-        console.log(`Attempting to send OTP to ${id}`); // Debug log
-        await sendOTP(id, otp);
+        console.log(`Attempting to send OTP to ${user.phoneNumber}`); // Debug log
+        await sendOTP(user.phoneNumber, otp);
 
-        res.json({ status: 'OTP sent', phoneNumber: id });
+        res.json({ status: 'OTP sent', phoneNumber: user.phoneNumber });
     } catch (error) {
         console.error('Error in /request-otp/:id route:', error); // Debug log
         res.status(500).send('An error occurred while generating OTP.');
     }
 });
+
 // Route to validate OTP
 app.post('/validate-otp/:id', async (req, res) => {
-    const id = req.params.id; // Assuming `id` is the phone number
+    const id = req.params.id; // Assuming `id` is the user ID
     const { otp } = req.body;
 
     try {
-        // Find the user by phone number
-        const user = await User.findOne({ phoneNumber: id });
+        // Find the user by ID
+        const user = await User.findById(id);
         if (!user) {
-            console.error('User not found for phoneNumber:', id); // Debug log
+            console.error('User not found for ID:', id); // Debug log
             return res.status(404).send('User not found.');
         }
 
         // Check if OTP matches and is not expired
         if (user.otp !== otp || user.otpExpiresAt < new Date()) {
-            console.error('Invalid or expired OTP for phoneNumber:', id); // Debug log
+            console.error('Invalid or expired OTP for user ID:', id); // Debug log
             return res.status(400).json({ error: 'Invalid or expired OTP.' });
         }
 
@@ -545,34 +544,13 @@ app.post('/validate-otp/:id', async (req, res) => {
         user.otpExpiresAt = null;
         await user.save();
 
-        res.json({ status: 'OTP validated', phoneNumber: id });
+        res.json({ status: 'OTP validated', phoneNumber: user.phoneNumber });
     } catch (error) {
         console.error('Error validating OTP:', error); // Debug log
         res.status(500).send('An error occurred while validating OTP.');
     }
 });
 
-
-// Route to render the OTP input page
-app.get('/authorize/:id', async (req, res) => {
-  const id = req.params.id;
-  console.log(`/authorize/:id route called with ID: ${id}`); // Debug log
-
-  try {
-    const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      console.error('Authorization record not found for ID:', id); // Debug log
-      return res.status(404).send('Authorization record not found.');
-    }
-
-    // Render the OTP input page
-    console.log(`Rendering OTP input page for phone number: ${authorizeRecord.phoneNumber}`); // Debug log
-    res.sendFile(path.join(__dirname, 'public', 'otp.html'));
-  } catch (error) {
-    console.error('Error in /authorize/:id route:', error); // Debug log
-    res.status(500).send('An error occurred while rendering the OTP page.');
-  }
-});
 
 // Middleware to check if OTP is validated
 function checkOTPValidation(req, res, next) {
@@ -620,14 +598,15 @@ app.get('/authorize/:id', async (req, res) => {
     console.log(`/authorize/:id route called with ID: ${id}`); // Debug log
 
     try {
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            console.error('Authorization record not found for ID:', id); // Debug log
-            return res.status(404).send('Authorization record not found.');
+        // Find the user by ID
+        const user = await User.findById(id);
+        if (!user) {
+            console.error('User not found for ID:', id); // Debug log
+            return res.status(404).send('User not found.');
         }
 
         // Render the OTP input page
-        console.log(`Rendering OTP input page for phone number: ${authorizeRecord.phoneNumber}`); // Debug log
+        console.log(`Rendering OTP input page for phone number: ${user.phoneNumber}`); // Debug log
         res.sendFile(path.join(__dirname, 'public', 'otp.html'));
     } catch (error) {
         console.error('Error in /authorize/:id route:', error); // Debug log
