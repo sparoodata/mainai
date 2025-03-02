@@ -55,7 +55,7 @@ mongoose.connect(process.env.MONGODB_URI, {
 
 // Session setup with MongoDB storage
 app.use(session({
-    secret: process.env.SESSION_SECRET, // Ensure this is a strong, unique key
+    secret: process.env.SESSION_SECRET, // Ensure this is set in .env
     resave: false,
     saveUninitialized: true,
     store: MongoStore.create({
@@ -585,7 +585,7 @@ app.get('/request-otp/:id', async (req, res) => {
         if (!authorizeRecord) {
             return res.status(404).send('Authorization record not found.');
         }
-
+ console.log( authorizeRecord.phoneNumber);
         const phoneNumber = authorizeRecord.phoneNumber;
         const otp = generateOTP();
 
@@ -598,6 +598,9 @@ app.get('/request-otp/:id', async (req, res) => {
 
         // Store phoneNumber in session
         req.session.phoneNumber = phoneNumber;
+        await req.session.save(); // Explicitly save the session
+
+        console.log(`Session after OTP request:`, req.session); // Debug log
 
         // Send OTP via WhatsApp
         await sendOTP(phoneNumber, otp);
@@ -608,6 +611,7 @@ app.get('/request-otp/:id', async (req, res) => {
         res.status(500).send('An error occurred while generating OTP.');
     }
 });
+
 // Route to validate OTP
 app.post('/validate-otp/:id', async (req, res) => {
     const id = req.params.id;
@@ -635,6 +639,13 @@ app.post('/validate-otp/:id', async (req, res) => {
         if (otp === otpRecord.otp) {
             otpRecord.validated = true;
             await otpRecord.save();
+
+            // Ensure the session is updated
+            req.session.phoneNumber = phoneNumber;
+            await req.session.save(); // Explicitly save the session
+
+            console.log(`Session after OTP validation:`, req.session); // Debug log
+
             res.json({ status: 'OTP validated', phoneNumber });
         } else {
             // Increment failed attempts
@@ -648,7 +659,6 @@ app.post('/validate-otp/:id', async (req, res) => {
         res.status(500).send('An error occurred while validating OTP.');
     }
 });
-
 // Route to render the OTP input page
 app.get('/authorize/:id', async (req, res) => {
   const id = req.params.id;
@@ -675,6 +685,8 @@ async function checkOTPValidation(req, res, next) {
     const id = req.params.id;
     const phoneNumber = req.session.phoneNumber;
 
+    console.log(`Session in checkOTPValidation:`, req.session); // Debug log
+
     if (!phoneNumber) {
         return res.status(401).send('OTP not requested. Please request an OTP first.');
     }
@@ -686,8 +698,6 @@ async function checkOTPValidation(req, res, next) {
 
     next();
 }
-
-
 app.get('/addproperty/:id', checkOTPValidation, async (req, res) => {
     const id = req.params.id;
 
