@@ -317,33 +317,33 @@ async function sendManageSubmenu(phoneNumber) {
 }
 
 // Helper function for Property Options (Add, Edit, Remove)
-// Helper function for Property Options (Add, Edit, Remove)
 async function sendPropertyOptions(phoneNumber) {
-    const buttonMenu = {
-        messaging_product: 'whatsapp',
-        to: phoneNumber,
-        type: 'interactive',
-        interactive: {
-            type: 'button',
-            header: { type: 'text', text: 'Property Options' },
-            body: { text: 'Please select an option:' },
-            action: {
-                buttons: [
-                    { type: 'reply', reply: { id: 'add_property', title: 'Add Property' } },
-                    { type: 'reply', reply: { id: 'edit_property', title: 'Edit Property' } },
-                    { type: 'reply', reply: { id: 'remove_property', title: 'Remove Property' } }
-                ]
-            }
-        }
-    };
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: 'Property Options' },
+      body: { text: 'Please select an option:' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'add_property', title: 'Add Property' } },
+          { type: 'reply', reply: { id: 'edit_property', title: 'Edit Property' } },
+          { type: 'reply', reply: { id: 'remove_property', title: 'Remove Property' } }
+        ]
+      }
+    }
+  };
 
-    await axios.post(WHATSAPP_API_URL, buttonMenu, {
-        headers: {
-            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json'
-        }
-    });
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: {
+      'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
 }
+
 // Helper function for Unit Options (Add, Edit, Remove)
 async function sendUnitOptions(phoneNumber) {
   const buttonMenu = {
@@ -402,43 +402,48 @@ async function sendTenantOptions(phoneNumber) {
 
 
 
-// Helper function to send the property link
+
 async function sendPropertyLink(phoneNumber, action) {
-    console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}`); // Debug log
+  console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}`); // Debug log
 
-    try {
-        // Find or create the document in the 'authorizes' collection based on the phone number
-        let authorizeRecord = await Authorize.findOne({ phoneNumber: `+${phoneNumber}` });
+  try {
+    // Log the phone number being queried
+    console.log(`Querying Authorize collection for phoneNumber: +${phoneNumber}`);
 
-        if (!authorizeRecord) {
-            // If no record exists, create a new one
-            authorizeRecord = new Authorize({
-                phoneNumber: `+${phoneNumber}`,
-                used: false, // Mark as unused initially
-                createdAt: new Date(),
-            });
-            await authorizeRecord.save();
-            console.log(`New authorization record created with ID: ${authorizeRecord._id}`); // Debug log
-        } else {
-            console.log(`Existing authorization record found with ID: ${authorizeRecord._id}`); // Debug log
-        }
+    // Find or create the document in the 'authorizes' collection based on the phone number
+    let authorizeRecord = await Authorize.findOne({ phoneNumber: `+${phoneNumber}` });
 
-        // Construct the long URL for OTP verification
-        const longUrl = `${GLITCH_HOST}/${action}/${authorizeRecord._id}`;
-        console.log(`Long URL generated: ${longUrl}`); // Debug log
-
-        // Shorten the URL
-        const shortUrl = await shortenUrl(longUrl);
-        console.log(`Short URL generated: ${shortUrl}`); // Debug log
-
-        // Send the OTP verification link to the user
-        await sendMessage(phoneNumber, `Proceed: ${shortUrl}`);
-        console.log(`OTP verification link sent to ${phoneNumber}`); // Debug log
-    } catch (error) {
-        console.error('Error in sendPropertyLink:', error); // Debug log
-        await sendMessage(phoneNumber, 'Failed to retrieve authorization record. Please try again.');
+    if (!authorizeRecord) {
+      // If no record exists, create a new one
+      authorizeRecord = new Authorize({
+        phoneNumber: `+${phoneNumber}`,
+        used: false, // Mark as unused initially
+        createdAt: new Date(),
+      });
+      await authorizeRecord.save();
+      console.log(`New authorization record created with ID: ${authorizeRecord._id}`); // Debug log
+    } else {
+      console.log(`Existing authorization record found with ID: ${authorizeRecord._id}`); // Debug log
     }
+
+    // Construct the long URL for OTP verification
+    const longUrl = `${GLITCH_HOST}/${action}/${authorizeRecord._id}`;
+    console.log(`Long URL generated: ${longUrl}`); // Debug log
+
+    // Shorten the URL
+    const shortUrl = await shortenUrl(longUrl);
+    console.log(`Short URL generated: ${shortUrl}`); // Debug log
+
+    // Send the OTP verification link to the user
+    await sendMessage(phoneNumber, `Proceed: ${shortUrl}`);
+    console.log(`OTP verification link sent to ${phoneNumber}`); // Debug log
+  } catch (error) {
+    console.error('Error in sendPropertyLink:', error); // Debug log
+    await sendMessage(phoneNumber, 'Failed to retrieve authorization record. Please try again.');
+  }
 }
+
+
 // Export the sendMessage function
 module.exports = {
   router,
