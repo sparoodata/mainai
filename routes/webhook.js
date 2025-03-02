@@ -317,6 +317,7 @@ async function sendManageSubmenu(phoneNumber) {
 }
 
 // Helper function for Property Options (Add, Edit, Remove)
+// Helper function for Property Options (Add, Edit, Remove)
 async function sendPropertyOptions(phoneNumber) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -330,7 +331,7 @@ async function sendPropertyOptions(phoneNumber) {
         buttons: [
           { type: 'reply', reply: { id: 'add_property', title: 'Add Property' } },
           { type: 'reply', reply: { id: 'edit_property', title: 'Edit Property' } },
-          { type: 'reply', reply: { id: 'remove_property', title: 'Remove Property' } }
+          { type: 'reply', reply: { id: 'remove_property', title: 'Remove Property' } }, // Added Remove Property
         ]
       }
     }
@@ -343,6 +344,8 @@ async function sendPropertyOptions(phoneNumber) {
     }
   });
 }
+
+
 
 // Helper function for Unit Options (Add, Edit, Remove)
 async function sendUnitOptions(phoneNumber) {

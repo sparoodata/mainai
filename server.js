@@ -455,21 +455,52 @@ app.get('/editproperty/:id', checkOTPValidation, async (req, res) => {
 });
 
 
-app.post('/deleteproperty/:id', async (req, res) => {
-    try {
-        const property = await Property.findByIdAndDelete(req.params.id);
+app.post('/deleteproperty/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+  const { propertyId } = req.body; // Expect propertyId from the form
 
-        // Send WhatsApp confirmation message
-        const authorizeRecord = await Authorize.findOne({ _id: req.params.id });
-        if (authorizeRecord && property) {
-            await sendMessage(authorizeRecord.phoneNumber, `Property "${property.name}" has been successfully deleted.`);
-        }
-
-        res.send('Property deleted successfully!');
-    } catch (error) {
-        console.error('Error deleting property:', error);
-        res.status(500).send('Error deleting property.');
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
     }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    // Find and delete the property
+    const property = await Property.findOneAndDelete({
+      _id: propertyId,
+      userId: user._id,
+    });
+
+    if (!property) {
+      return res.status(404).send('Property not found or you do not have permission to delete it.');
+    }
+
+    // Send WhatsApp confirmation message
+    await sendMessage(
+      phoneNumber,
+      `Property "${property.name}" has been successfully deleted.`
+    );
+
+    // Mark authorization as used and delete it
+    authorizeRecord.used = true;
+    await authorizeRecord.save();
+    await Authorize.findByIdAndDelete(id);
+
+    res.send('Property deleted successfully!');
+  } catch (error) {
+    console.error('Error deleting property:', error);
+    res.status(500).send('Error deleting property.');
+  }
 });
 // GET route to render the edit unit form (with list of properties if needed)
 // POST route to update the unit
@@ -684,7 +715,9 @@ app.post('/validate-otp/:id', async (req, res) => {
         case 'edittenant':
           redirectUrl = `/edittenant/${id}`;
           break;
-        // Add other cases as needed (e.g., 'removeproperty', 'removeunit', etc.)
+        case 'removeproperty': // Added Remove Property
+          redirectUrl = `/removeproperty/${id}`;
+          break;
         default:
           redirectUrl = `/editproperty/${id}`; // Fallback
       }
@@ -700,6 +733,7 @@ app.post('/validate-otp/:id', async (req, res) => {
     res.status(500).send('An error occurred while validating OTP.');
   }
 });
+
 
 // Route to render the OTP input page
 app.get('/authorize/:id', async (req, res) => {
@@ -769,6 +803,38 @@ app.get('/addproperty/:id', checkOTPValidation, async (req, res) => {
         console.error('Error rendering add property form:', error);
         res.status(500).send('An error occurred while rendering the form.');
     }
+});
+
+app.get('/removeproperty/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const properties = await Property.find({ userId: user._id });
+    if (!properties.length) {
+      return res.status(404).send('No properties found to remove.');
+    }
+
+    // Render the remove property form with properties list
+    res.render('removeProperty', { id, properties });
+  } catch (error) {
+    console.error('Error rendering remove property form:', error);
+    res.status(500).send('An error occurred while rendering the form.');
+  }
 });
 
 // Start the server

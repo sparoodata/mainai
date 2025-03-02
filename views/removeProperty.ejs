@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Remove Property</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    h1 {
+      color: #333;
+    }
+    form {
+      margin-top: 20px;
+    }
+    select, button {
+      padding: 10px;
+      margin: 5px 0;
+      font-size: 16px;
+    }
+    button {
+      background-color: #ff4444;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #cc0000;
+    }
+  </style>
+</head>
+<body>
+  <h1>Remove Property</h1>
+  <form action="/deleteproperty/<%= id %>" method="POST">
+    <label for="propertyId">Select Property to Remove:</label><br>
+    <select name="propertyId" id="propertyId" required>
+      <option value="">-- Select a Property --</option>
+      <% properties.forEach(property => { %>
+        <option value="<%= property._id %>"><%= property.name %> - <%= property.address %></option>
+      <% }) %>
+    </select><br>
+    <button type="submit">Remove Property</button>
+  </form>
+</body>
+</html>
