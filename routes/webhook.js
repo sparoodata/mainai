@@ -409,16 +409,21 @@ async function sendPropertyLink(phoneNumber, action) {
     // Log the phone number being queried
     console.log(`Querying Authorize collection for phoneNumber: +${phoneNumber}`);
 
-    // Find the document in the 'authorizes' collection based on the phone number
-    const authorizeRecord = await Authorize.findOne({ phoneNumber: `+${phoneNumber}` });
-    if (!authorizeRecord) {
-      console.error(`No authorization record found for phone number: +${phoneNumber}`);
-      await sendMessage(phoneNumber, 'Authorization record not found. Please contact support.');
-      return;
-    }
+    // Find or create the document in the 'authorizes' collection based on the phone number
+    let authorizeRecord = await Authorize.findOne({ phoneNumber: `+${phoneNumber}` });
 
-    // Log the authorizeRecord ID
-    console.log(`Authorize record found with ID: ${authorizeRecord._id}`); // Debug log
+    if (!authorizeRecord) {
+      // If no record exists, create a new one
+      authorizeRecord = new Authorize({
+        phoneNumber: `+${phoneNumber}`,
+        used: false, // Mark as unused initially
+        createdAt: new Date(),
+      });
+      await authorizeRecord.save();
+      console.log(`New authorization record created with ID: ${authorizeRecord._id}`); // Debug log
+    } else {
+      console.log(`Existing authorization record found with ID: ${authorizeRecord._id}`); // Debug log
+    }
 
     // Construct the long URL for OTP verification
     const longUrl = `${GLITCH_HOST}/authorize/${authorizeRecord._id}`;

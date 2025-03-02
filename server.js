@@ -144,64 +144,16 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
             return res.status(403).send('This link has already been used.');
         }
 
-        // Use the phone number directly (no need to add '+')
-        const phoneNumber = authorizeRecord.phoneNumber;
-        console.log(`Querying User collection for phoneNumber: ${phoneNumber}`);
-
-        // Find the user
-        const user = await User.findOne({ phoneNumber });
-        if (!user) {
-            console.error('User not found for phoneNumber:', phoneNumber);
-            return res.status(404).send('User not found.');
-        }
-
-        // Log the user ID
-        console.log(`User found with ID: ${user._id}`);
-
-        // Create the property
-        const property = new Property({
-            name: property_name,
-            units,
-            address,
-            totalAmount,
-            userId: user._id,
-        });
-        await property.save();
-
-        // Upload image to Cloudflare R2 if provided
-        if (req.file) {
-            const key = 'images/' + Date.now() + '-' + req.file.originalname;
-            const uploadParams = {
-                Bucket: process.env.R2_BUCKET,
-                Key: key,
-                Body: req.file.buffer,
-                ContentType: req.file.mimetype,
-            };
-
-            await s3.upload(uploadParams).promise();
-            const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
-
-            const image = new Image({ propertyId: property._id, imageUrl: imageUrl });
-            await image.save();
-            property.images.push(image._id);
-            await property.save();
-        }
-
         // Mark the authorization as used
         authorizeRecord.used = true;
         await authorizeRecord.save();
 
-        // Send WhatsApp confirmation message
-        await sendMessage(authorizeRecord.phoneNumber, `Property *${property_name}* has been successfully added.`);
-
-        res.send('Property and image added successfully!');
+        // Rest of your logic for adding the property...
     } catch (error) {
         console.error('Error adding property and image:', error);
         res.status(500).send('An error occurred while adding the property and image.');
     }
 });
-
-
 
 
 // Handle form submission and image upload to Dropbox (add unit)
