@@ -14,6 +14,7 @@ const Property = require('./models/Property');
 const User = require('./models/User');
 const Authorize = require('./models/Authorize');
 const Unit = require('./models/Unit');
+const Otp = require('./models/Otp');
 const Dropbox = require('dropbox').Dropbox;
 const fetch = require('isomorphic-fetch');
 
@@ -51,15 +52,20 @@ mongoose.connect(process.env.MONGODB_URI, {
 .then(() => console.log('MongoDB connected'))
 .catch(error => console.error('MongoDB connection error:', error));
 
-// Session setup
+
+// Session setup with MongoDB storage
 app.use(session({
-    secret: process.env.SESSION_SECRET,
+    secret: process.env.SESSION_SECRET, // Ensure this is a strong, unique key
     resave: false,
     saveUninitialized: true,
-    store: MongoStore.create({ mongoUrl: process.env.MONGODB_URI }),
+    store: MongoStore.create({
+        mongoUrl: process.env.MONGODB_URI, // Ensure this is correct
+        collectionName: 'sessions', // Optional: Name of the collection to store sessions
+        ttl: 3600, // Session TTL (time to live) in seconds (1 hour)
+    }),
     cookie: {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: process.env.NODE_ENV === 'production', // Ensure cookies are only sent over HTTPS in production
         maxAge: 3600000, // 1 hour
     },
 }));
@@ -572,80 +578,76 @@ const otpStore = new Map(); // { phoneNumber: { otp: '123456', attempts: 0, last
 
 // Route to request OTP
 app.get('/request-otp/:id', async (req, res) => {
-  const id = req.params.id;
-  console.log(`/request-otp/:id route called with ID: ${id}`); // Debug log
+    const id = req.params.id;
 
-  try {
-    const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      console.error('Authorization record not found for ID:', id); // Debug log
-      return res.status(404).send('Authorization record not found.');
+    try {
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        const phoneNumber = authorizeRecord.phoneNumber;
+        const otp = generateOTP();
+
+        // Store OTP in MongoDB
+        await Otp.findOneAndUpdate(
+            { phoneNumber },
+            { otp, attempts: 0, lastAttempt: null, validated: false },
+            { upsert: true, new: true }
+        );
+
+        // Store phoneNumber in session
+        req.session.phoneNumber = phoneNumber;
+
+        // Send OTP via WhatsApp
+        await sendOTP(phoneNumber, otp);
+
+        res.json({ status: 'OTP sent', phoneNumber });
+    } catch (error) {
+        console.error('Error in /request-otp/:id route:', error);
+        res.status(500).send('An error occurred while generating OTP.');
     }
-
-    const phoneNumber = authorizeRecord.phoneNumber;
-    console.log(`Phone number extracted from authorizeRecord: ${phoneNumber}`); // Debug log
-
-    const otp = generateOTP();
-    console.log(`Generated OTP: ${otp}`); // Debug log
-
-    // Store OTP and reset attempts
-    otpStore.set(phoneNumber, { otp, attempts: 0, lastAttempt: null, validated: false });
-    console.log(`OTP stored for phone number: ${phoneNumber}`); // Debug log
-
-    // Store phoneNumber in session
-    req.session.phoneNumber = phoneNumber;
-    console.log(`Phone number stored in session: ${phoneNumber}`); // Debug log
-
-    // Send OTP via WhatsApp
-    console.log(`Attempting to send OTP to ${phoneNumber}`); // Debug log
-    await sendOTP(phoneNumber, otp);
-
-    res.json({ status: 'OTP sent', phoneNumber });
-  } catch (error) {
-    console.error('Error in /request-otp/:id route:', error); // Debug log
-    res.status(500).send('An error occurred while generating OTP.');
-  }
 });
 // Route to validate OTP
 app.post('/validate-otp/:id', async (req, res) => {
-  const id = req.params.id;
-  const { otp } = req.body;
+    const id = req.params.id;
+    const { otp } = req.body;
 
-  try {
-    const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
+    try {
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        const phoneNumber = authorizeRecord.phoneNumber;
+        const otpRecord = await Otp.findOne({ phoneNumber });
+
+        if (!otpRecord) {
+            return res.status(400).json({ error: 'OTP expired or not requested.' });
+        }
+
+        // Check if the user is blocked due to too many attempts
+        if (otpRecord.attempts >= 3 && Date.now() - otpRecord.lastAttempt < 180000) { // 3 minutes
+            return res.status(429).json({ error: 'Too many attempts. Try again after 3 minutes.' });
+        }
+
+        // Validate OTP
+        if (otp === otpRecord.otp) {
+            otpRecord.validated = true;
+            await otpRecord.save();
+            res.json({ status: 'OTP validated', phoneNumber });
+        } else {
+            // Increment failed attempts
+            otpRecord.attempts += 1;
+            otpRecord.lastAttempt = Date.now();
+            await otpRecord.save();
+            res.status(400).json({ error: 'Invalid OTP.' });
+        }
+    } catch (error) {
+        console.error('Error validating OTP:', error);
+        res.status(500).send('An error occurred while validating OTP.');
     }
-
-    const phoneNumber = authorizeRecord.phoneNumber;
-    const storedOTPData = otpStore.get(phoneNumber);
-
-    if (!storedOTPData) {
-      return res.status(400).json({ error: 'OTP expired or not requested.' });
-    }
-
-    const { otp: storedOTP, attempts, lastAttempt } = storedOTPData;
-
-    // Check if the user is blocked due to too many attempts
-    if (attempts >= 3 && Date.now() - lastAttempt < 180000) { // 3 minutes
-      return res.status(429).json({ error: 'Too many attempts. Try again after 3 minutes.' });
-    }
-
-    // Validate OTP
-    if (otp === storedOTP) {
-      otpStore.set(phoneNumber, { ...storedOTPData, validated: true }); // Mark OTP as validated
-      res.json({ status: 'OTP validated', phoneNumber });
-    } else {
-      // Increment failed attempts
-      otpStore.set(phoneNumber, { ...storedOTPData, attempts: attempts + 1, lastAttempt: Date.now() });
-      res.status(400).json({ error: 'Invalid OTP.' });
-    }
-  } catch (error) {
-    console.error('Error validating OTP:', error);
-    res.status(500).send('An error occurred while validating OTP.');
-  }
 });
-
 
 // Route to render the OTP input page
 app.get('/authorize/:id', async (req, res) => {
@@ -669,20 +671,20 @@ app.get('/authorize/:id', async (req, res) => {
 });
 
 // Middleware to check if OTP is validated
-function checkOTPValidation(req, res, next) {
-  const id = req.params.id;
-  const phoneNumber = req.session.phoneNumber; // Store phoneNumber in session during OTP request
+async function checkOTPValidation(req, res, next) {
+    const id = req.params.id;
+    const phoneNumber = req.session.phoneNumber;
 
-  if (!phoneNumber) {
-    return res.status(401).send('OTP not requested. Please request an OTP first.');
-  }
+    if (!phoneNumber) {
+        return res.status(401).send('OTP not requested. Please request an OTP first.');
+    }
 
-  const storedOTPData = otpStore.get(phoneNumber);
-  if (!storedOTPData || !storedOTPData.validated) {
-    return res.status(401).send('OTP not validated. Please validate the OTP first.');
-  }
+    const otpRecord = await Otp.findOne({ phoneNumber });
+    if (!otpRecord || !otpRecord.validated) {
+        return res.status(401).send('OTP not validated. Please validate the OTP first.');
+    }
 
-  next();
+    next();
 }
 
 

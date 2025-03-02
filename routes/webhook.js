@@ -404,45 +404,31 @@ async function sendTenantOptions(phoneNumber) {
 
 
 async function sendPropertyLink(phoneNumber, action) {
-  console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}`); // Debug log
+    console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}`);
 
-  try {
-    // Log the phone number being queried
-    console.log(`Querying Authorize collection for phoneNumber: +${phoneNumber}`);
+    try {
+        let authorizeRecord = await Authorize.findOne({ phoneNumber: `+${phoneNumber}` });
 
-    // Find or create the document in the 'authorizes' collection based on the phone number
-    let authorizeRecord = await Authorize.findOne({ phoneNumber: `+${phoneNumber}` });
+        if (!authorizeRecord) {
+            authorizeRecord = new Authorize({
+                phoneNumber: `+${phoneNumber}`,
+                used: false,
+                createdAt: new Date(),
+            });
+            await authorizeRecord.save();
+        }
 
-    if (!authorizeRecord) {
-      // If no record exists, create a new one
-      authorizeRecord = new Authorize({
-        phoneNumber: `+${phoneNumber}`,
-        used: false, // Mark as unused initially
-        createdAt: new Date(),
-      });
-      await authorizeRecord.save();
-      console.log(`New authorization record created with ID: ${authorizeRecord._id}`); // Debug log
-    } else {
-      console.log(`Existing authorization record found with ID: ${authorizeRecord._id}`); // Debug log
+        // Construct the long URL for OTP verification
+        const longUrl = `${GLITCH_HOST}/${action}/${authorizeRecord._id}`;
+        const shortUrl = await shortenUrl(longUrl);
+
+        // Send the OTP verification link to the user
+        await sendMessage(phoneNumber, `Proceed: ${shortUrl}`);
+    } catch (error) {
+        console.error('Error in sendPropertyLink:', error);
+        await sendMessage(phoneNumber, 'Failed to retrieve authorization record. Please try again.');
     }
-
-    // Construct the long URL for OTP verification
-    const longUrl = `${GLITCH_HOST}/${action}/${authorizeRecord._id}`;
-    console.log(`Long URL generated: ${longUrl}`); // Debug log
-
-    // Shorten the URL
-    const shortUrl = await shortenUrl(longUrl);
-    console.log(`Short URL generated: ${shortUrl}`); // Debug log
-
-    // Send the OTP verification link to the user
-    await sendMessage(phoneNumber, `Proceed: ${shortUrl}`);
-    console.log(`OTP verification link sent to ${phoneNumber}`); // Debug log
-  } catch (error) {
-    console.error('Error in sendPropertyLink:', error); // Debug log
-    await sendMessage(phoneNumber, 'Failed to retrieve authorization record. Please try again.');
-  }
 }
-
 
 // Export the sendMessage function
 module.exports = {
