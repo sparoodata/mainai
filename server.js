@@ -661,8 +661,36 @@ app.post('/validate-otp/:id', async (req, res) => {
 
     if (otp === storedOTP) {
       otpStore.set(phoneNumber, { ...storedOTPData, validated: true });
-      console.log(`OTP validated for ${phoneNumber}. Redirecting to /editproperty/${id}`); // Debug log
-      res.json({ status: 'OTP validated', redirect: `/editproperty/${id}` }); // Return redirect URL
+      console.log(`OTP validated for ${phoneNumber}. Determining redirect...`);
+
+      // Determine the redirect based on the stored action
+      let redirectUrl;
+      switch (authorizeRecord.action) {
+        case 'addproperty':
+          redirectUrl = `/addproperty/${id}`;
+          break;
+        case 'editproperty':
+          redirectUrl = `/editproperty/${id}`;
+          break;
+        case 'addunit':
+          redirectUrl = `/addunit/${id}`;
+          break;
+        case 'editunit':
+          redirectUrl = `/editunit/${id}`;
+          break;
+        case 'addtenant':
+          redirectUrl = `/addtenant/${id}`;
+          break;
+        case 'edittenant':
+          redirectUrl = `/edittenant/${id}`;
+          break;
+        // Add other cases as needed (e.g., 'removeproperty', 'removeunit', etc.)
+        default:
+          redirectUrl = `/editproperty/${id}`; // Fallback
+      }
+
+      console.log(`Redirecting to: ${redirectUrl}`);
+      res.json({ status: 'OTP validated', redirect: redirectUrl });
     } else {
       otpStore.set(phoneNumber, { ...storedOTPData, attempts: attempts + 1, lastAttempt: Date.now() });
       res.status(400).json({ error: 'Invalid OTP.' });
@@ -672,6 +700,7 @@ app.post('/validate-otp/:id', async (req, res) => {
     res.status(500).send('An error occurred while validating OTP.');
   }
 });
+
 // Route to render the OTP input page
 app.get('/authorize/:id', async (req, res) => {
   const id = req.params.id;

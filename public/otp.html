@@ -251,7 +251,7 @@
           message.classList.add('success');
           message.classList.remove('error');
           setTimeout(() => {
-            window.location.href = `/editproperty/${id}`; // Redirect to edit property page
+            window.location.href = data.redirect; // Use dynamic redirect from server response
           }, 1000);
         } else {
           message.textContent = data.error || 'Invalid OTP. Please try again.';

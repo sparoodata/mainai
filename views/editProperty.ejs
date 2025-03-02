@@ -4,50 +4,126 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Edit Property</title>
-    <link rel="stylesheet" href="/styles.css"> <!-- Assuming you have a CSS file -->
+    <link rel="stylesheet" type="text/css" href="/styles.css"> <!-- Assuming you have a CSS file -->
 </head>
 <body>
-    <h1>Edit Property</h1>
-    <form action="/editproperty/<%= id %>" method="POST" enctype="multipart/form-data">
-        <label for="propertyId">Select Property:</label>
-        <select name="propertyId" id="propertyId" required>
-            <option value="">-- Select a Property --</option>
-            <% properties.forEach(property => { %>
-                <option value="<%= property._id %>">
-                    <%= property.name %> (Units: <%= property.units %>)
-                </option>
-            <% }) %>
-        </select><br><br>
+    <!-- Form Container -->
+    <div class="container">
+        <h2>Edit Property</h2>
+        <form action="/editproperty/<%= id %>" method="POST" enctype="multipart/form-data" onsubmit="return validateForm()">
+            
+            <!-- Property Selection -->
+            <label for="propertyId">Select Property:</label>
+            <select name="propertyId" id="propertyId" required>
+                <option value="">-- Select a Property --</option>
+                <% properties.forEach(property => { %>
+                    <option value="<%= property._id %>">
+                        <%= property.name %> (Units: <%= property.units %>)
+                    </option>
+                <% }) %>
+            </select>
+            <small id="propertyIdError" class="error-message"></small>
 
-        <label for="property_name">Property Name:</label>
-        <input type="text" id="property_name" name="property_name" required><br><br>
+            <!-- Property Name -->
+            <label for="property_name">Property Name:</label>
+            <input type="text" id="property_name" name="property_name" maxlength="50" required>
+            <small id="propertyNameError" class="error-message"></small>
 
-        <label for="units">Number of Units:</label>
-        <input type="number" id="units" name="units" required><br><br>
+            <!-- Number of Units -->
+            <label for="units">Number of Units:</label>
+            <input type="number" id="units" name="units" required min="1">
+            <small id="unitsError" class="error-message"></small>
 
-        <label for="address">Address:</label>
-        <input type="text" id="address" name="address" required><br><br>
+            <!-- Address -->
+            <label for="address">Address:</label>
+            <input type="text" id="address" name="address" maxlength="80" required>
+            <small id="addressError" class="error-message"></small>
 
-        <label for="totalAmount">Total Amount:</label>
-        <input type="number" id="totalAmount" name="totalAmount" step="0.01" required><br><br>
+            <!-- Total Amount -->
+            <label for="totalAmount">Total Amount:</label>
+            <input type="number" id="totalAmount" name="totalAmount" required min="0" step="0.01">
+            <small id="totalAmountError" class="error-message"></small>
 
-        <label for="image">Upload New Image (optional):</label>
-        <input type="file" id="image" name="image" accept="image/*"><br><br>
+            <!-- Property Image -->
+            <label for="image">Upload New Image (Max 5MB, Optional):</label>
+            <input type="file" id="image" name="image" accept="image/*">
+            <small id="imageError" class="error-message"></small>
 
-        <button type="submit">Update Property</button>
-    </form>
+            <!-- Submit Button -->
+            <button type="submit">Update Property</button>
+        </form>
+    </div>
 
+    <!-- Script for Validation and Pre-filling -->
     <script>
-        // Optional: Pre-fill form fields when a property is selected
+        // Form Validation
+        function validateForm() {
+            const propertyId = document.getElementById('propertyId').value;
+            const propertyName = document.getElementById('property_name').value;
+            const units = document.getElementById('units').value;
+            const address = document.getElementById('address').value;
+            const totalAmount = document.getElementById('totalAmount').value;
+            const image = document.getElementById('image').files[0];
+
+            let valid = true;
+
+            // Clear previous error messages
+            document.getElementById('propertyIdError').innerHTML = "";
+            document.getElementById('propertyNameError').innerHTML = "";
+            document.getElementById('unitsError').innerHTML = "";
+            document.getElementById('addressError').innerHTML = "";
+            document.getElementById('totalAmountError').innerHTML = "";
+            document.getElementById('imageError').innerHTML = "";
+
+            // Property ID validation
+            if (!propertyId) {
+                document.getElementById('propertyIdError').innerHTML = "Please select a property.";
+                valid = false;
+            }
+
+            // Property Name validation
+            if (propertyName.length > 50) {
+                document.getElementById('propertyNameError').innerHTML = "Property name cannot exceed 50 characters.";
+                valid = false;
+            }
+
+            // Number of Units validation
+            if (isNaN(units) || units <= 0) {
+                document.getElementById('unitsError').innerHTML = "Please enter a valid number of units.";
+                valid = false;
+            }
+
+            // Address validation
+            if (address.length > 80) {
+                document.getElementById('addressError').innerHTML = "Address cannot exceed 80 characters.";
+                valid = false;
+            }
+
+            // Total Amount validation
+            if (isNaN(totalAmount) || totalAmount < 0) {
+                document.getElementById('totalAmountError').innerHTML = "Please enter a valid total amount.";
+                valid = false;
+            }
+
+            // Image validation (Max size 5MB, if provided)
+            if (image && image.size > 5 * 1024 * 1024) {
+                document.getElementById('imageError').innerHTML = "Image size cannot exceed 5MB.";
+                valid = false;
+            }
+
+            return valid;
+        }
+
+        // Pre-fill form fields when a property is selected
         const properties = <%- JSON.stringify(properties) %>;
         const select = document.getElementById('propertyId');
         select.addEventListener('change', function() {
             const selectedProperty = properties.find(p => p._id === this.value);
             if (selectedProperty) {
-                document.getElementById('property_name').value = selectedProperty.name;
-                document.getElementById('units').value = selectedProperty.units;
-                document.getElementById('address').value = selectedProperty.address;
-                document.getElementById('totalAmount').value = selectedProperty.totalAmount;
+                document.getElementById('property_name').value = selectedProperty.name || '';
+                document.getElementById('units').value = selectedProperty.units || '';
+                document.getElementById('address').value = selectedProperty.address || '';
+                document.getElementById('totalAmount').value = selectedProperty.totalAmount || '';
             }
         });
     </script>

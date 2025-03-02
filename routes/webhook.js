@@ -413,12 +413,17 @@ async function sendPropertyLink(phoneNumber, action) {
       authorizeRecord = new Authorize({
         phoneNumber: `+${phoneNumber}`,
         used: false,
+        action: action, // Store the action here
         createdAt: new Date(),
       });
       await authorizeRecord.save();
-      console.log(`New authorization record created with ID: ${authorizeRecord._id}`);
+      console.log(`New authorization record created with ID: ${authorizeRecord._id}, action: ${action}`);
     } else {
-      console.log(`Existing authorization record found with ID: ${authorizeRecord._id}`);
+      // Update the existing record with the new action
+      authorizeRecord.action = action;
+      authorizeRecord.used = false; // Reset used flag if reusing the record
+      await authorizeRecord.save();
+      console.log(`Updated authorization record with ID: ${authorizeRecord._id}, action: ${action}`);
     }
 
     const longUrl = `${GLITCH_HOST}/authorize/${authorizeRecord._id}`;
@@ -428,13 +433,12 @@ async function sendPropertyLink(phoneNumber, action) {
     console.log(`Short URL generated: ${shortUrl}`);
 
     await sendMessage(phoneNumber, `Proceed: ${shortUrl}`);
-    console.log(`OTP verification link sent to ${phoneNumber}`);
+    console.log(`OTP verification link sent to ${phoneNumber} for action: ${action}`);
   } catch (error) {
     console.error('Error in sendPropertyLink:', error);
     await sendMessage(phoneNumber, 'Failed to retrieve authorization record. Please try again.');
   }
 }
-
 // Export the sendMessage function
 module.exports = {
   router,

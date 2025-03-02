@@ -1,11 +1,11 @@
+// models/Authorize.js
 const mongoose = require('mongoose');
 
 const authorizeSchema = new mongoose.Schema({
-    phoneNumber: { type: String, required: true },
-    status: { type: String, default: 'Sent' },
-    used: { type: Boolean, default: false }, // Add this field
-}, { timestamps: true });
+  phoneNumber: { type: String, required: true },
+  used: { type: Boolean, default: false },
+  action: { type: String }, // Add this field to store the action (e.g., 'addproperty', 'editproperty')
+  createdAt: { type: Date, default: Date.now },
+});
 
-const Authorize = mongoose.model('Authorize', authorizeSchema);
-
-module.exports = Authorize;
+module.exports = mongoose.model('Authorize', authorizeSchema);
