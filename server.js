@@ -23,14 +23,13 @@ const AWS = require('aws-sdk');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
 // Configure the S3 client to use Cloudflare R2 settings
-
-const s3 = new S3Client({
-    endpoint: process.env.R2_ENDPOINT, // Cloudflare R2 endpoint
-    region: 'auto', // Required for S3 compatibility
-    credentials: {
-        accessKeyId: process.env.R2_ACCESS_KEY_ID,
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-    },
+const s3 = new AWS.S3({
+  endpoint: process.env.R2_ENDPOINT, // e.g., https://<account-id>.r2.cloudflarestorage.com
+  accessKeyId: process.env.R2_ACCESS_KEY_ID,
+  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  Bucket: process.env.R2_BUCKET,
+  region: 'auto', // R2 doesn’t require a region but "auto" works for S3 compatibility
+  signatureVersion: 'v4',
 });
 
 // Trust the first proxy
@@ -160,10 +159,8 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
                 ContentType: req.file.mimetype,
             };
 
-            // Use PutObjectCommand to upload the file
             const command = new PutObjectCommand(uploadParams);
             await s3.send(command);
-
             const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
 
             const image = new Image({ propertyId: property._id, imageUrl: imageUrl });
@@ -181,7 +178,6 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
         res.status(500).send('Failed to add property.');
     }
 });
-
 
 // Handle form submission and image upload to Dropbox (add unit)
 app.post('/addunit/:id', upload.single('image'), async (req, res) => {
