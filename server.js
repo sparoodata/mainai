@@ -131,23 +131,40 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
     const id = req.params.id;
 
     try {
+        // Find the authorization record
         const authorizeRecord = await Authorize.findById(id);
         if (!authorizeRecord) {
+            console.error('Authorization record not found for ID:', id);
             return res.status(404).send('Authorization record not found.');
         }
-        const phoneNumber = authorizeRecord.phoneNumber;
 
+        // Check if the authorization has already been used
+        if (authorizeRecord.used) {
+            console.error('Authorization already used for ID:', id);
+            return res.status(403).send('This link has already been used.');
+        }
+
+        // Use the phone number directly (no need to add '+')
+        const phoneNumber = authorizeRecord.phoneNumber;
+        console.log(`Querying User collection for phoneNumber: ${phoneNumber}`);
+
+        // Find the user
         const user = await User.findOne({ phoneNumber });
         if (!user) {
+            console.error('User not found for phoneNumber:', phoneNumber);
             return res.status(404).send('User not found.');
         }
 
-        const property = new Property({ 
-            name: property_name, 
-            units, 
-            address, 
-            totalAmount, 
-            userId: user._id 
+        // Log the user ID
+        console.log(`User found with ID: ${user._id}`);
+
+        // Create the property
+        const property = new Property({
+            name: property_name,
+            units,
+            address,
+            totalAmount,
+            userId: user._id,
         });
         await property.save();
 
@@ -169,6 +186,10 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
             property.images.push(image._id);
             await property.save();
         }
+
+        // Mark the authorization as used
+        authorizeRecord.used = true;
+        await authorizeRecord.save();
 
         // Send WhatsApp confirmation message
         await sendMessage(authorizeRecord.phoneNumber, `Property *${property_name}* has been successfully added.`);
@@ -603,22 +624,29 @@ function checkOTPValidation(req, res, next) {
   next();
 }
 
+
 app.get('/addproperty/:id', checkOTPValidation, async (req, res) => {
-  const id = req.params.id;
+    const id = req.params.id;
 
-  try {
-    const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
+    try {
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        // Check if the authorization has already been used
+        if (authorizeRecord.used) {
+            return res.status(403).send('This link has already been used.');
+        }
+
+        // Render the add property form
+        res.render('addProperty', { id });
+    } catch (error) {
+        console.error('Error rendering add property form:', error);
+        res.status(500).send('An error occurred while rendering the form.');
     }
-
-    // Render the add property form
-    res.render('addProperty', { id });
-  } catch (error) {
-    console.error('Error rendering add property form:', error);
-    res.status(500).send('An error occurred while rendering the form.');
-  }
 });
+
 // Start the server
 app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
