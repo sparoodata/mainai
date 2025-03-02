@@ -4,23 +4,52 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Edit Property</title>
+    <link rel="stylesheet" href="/styles.css"> <!-- Assuming you have a CSS file -->
 </head>
 <body>
     <h1>Edit Property</h1>
-    <form action="/editproperty/<%= property._id %>" method="POST">
-        <label for="property_name">Property Name:</label>
-        <input type="text" id="property_name" name="property_name" value="<%= property.name %>" required><br><br>
+    <form action="/editproperty/<%= id %>" method="POST" enctype="multipart/form-data">
+        <label for="propertyId">Select Property:</label>
+        <select name="propertyId" id="propertyId" required>
+            <option value="">-- Select a Property --</option>
+            <% properties.forEach(property => { %>
+                <option value="<%= property._id %>">
+                    <%= property.name %> (Units: <%= property.units %>)
+                </option>
+            <% }) %>
+        </select><br><br>
 
-        <label for="units">Units:</label>
-        <input type="number" id="units" name="units" value="<%= property.units %>" required><br><br>
+        <label for="property_name">Property Name:</label>
+        <input type="text" id="property_name" name="property_name" required><br><br>
+
+        <label for="units">Number of Units:</label>
+        <input type="number" id="units" name="units" required><br><br>
 
         <label for="address">Address:</label>
-        <input type="text" id="address" name="address" value="<%= property.address %>" required><br><br>
+        <input type="text" id="address" name="address" required><br><br>
 
         <label for="totalAmount">Total Amount:</label>
-        <input type="number" id="totalAmount" name="totalAmount" value="<%= property.totalAmount %>" required><br><br>
+        <input type="number" id="totalAmount" name="totalAmount" step="0.01" required><br><br>
+
+        <label for="image">Upload New Image (optional):</label>
+        <input type="file" id="image" name="image" accept="image/*"><br><br>
 
         <button type="submit">Update Property</button>
     </form>
+
+    <script>
+        // Optional: Pre-fill form fields when a property is selected
+        const properties = <%- JSON.stringify(properties) %>;
+        const select = document.getElementById('propertyId');
+        select.addEventListener('change', function() {
+            const selectedProperty = properties.find(p => p._id === this.value);
+            if (selectedProperty) {
+                document.getElementById('property_name').value = selectedProperty.name;
+                document.getElementById('units').value = selectedProperty.units;
+                document.getElementById('address').value = selectedProperty.address;
+                document.getElementById('totalAmount').value = selectedProperty.totalAmount;
+            }
+        });
+    </script>
 </body>
 </html>

@@ -52,7 +52,11 @@ mongoose.connect(process.env.MONGODB_URI, {
 .then(() => console.log('MongoDB connected'))
 .catch(error => console.error('MongoDB connection error:', error));
 
-
+const cors = require('cors');
+app.use(cors({
+    origin: 'http://your-frontend-domain.com', // Replace with your frontend domain
+    credentials: true, // Allow cookies to be sent
+}));
 // Session setup with MongoDB storage
 app.use(session({
     secret: process.env.SESSION_SECRET, // Ensure this is set in .env
@@ -339,34 +343,42 @@ await sendMessage(
 
 // GET route to render the edit property form with current data
 // POST route to update the property
+// POST route to update the property
 app.post('/editproperty/:id', upload.single('image'), async (req, res) => {
-    const { property_name, units, address, totalAmount } = req.body;
+    const { propertyId, property_name, units, address, totalAmount } = req.body;
     const id = req.params.id;
 
     try {
         const authorizeRecord = await Authorize.findById(id);
         if (!authorizeRecord) {
+            console.error('Authorization record not found for ID:', id);
             return res.status(404).send('Authorization record not found.');
         }
 
-        // Check if the authorization has already been used
         if (authorizeRecord.used) {
+            console.error('Authorization already used for ID:', id);
             return res.status(403).send('This link has already been used.');
         }
 
-        // Fetch the property details
-        const property = await Property.findById(authorizeRecord.propertyId);
-        if (!property) {
-            return res.status(404).send('Property not found.');
+        const phoneNumber = authorizeRecord.phoneNumber;
+        const user = await User.findOne({ phoneNumber });
+        if (!user) {
+            console.error('User not found for phoneNumber:', phoneNumber);
+            return res.status(404).send('User not found.');
         }
 
-        // Update the property details
+        // Update the property
+        const property = await Property.findOne({ _id: propertyId, userId: user._id });
+        if (!property) {
+            return res.status(404).send('Property not found or you do not have permission to edit it.');
+        }
+
         property.name = property_name;
         property.units = units;
         property.address = address;
         property.totalAmount = totalAmount;
 
-        // Upload new image to Cloudflare R2 if provided
+        // Handle image upload if provided
         if (req.file) {
             const key = 'images/' + Date.now() + '-' + req.file.originalname;
             const uploadParams = {
@@ -379,28 +391,35 @@ app.post('/editproperty/:id', upload.single('image'), async (req, res) => {
             await s3.upload(uploadParams).promise();
             const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
 
-            const image = new Image({ propertyId: property._id, imageUrl: imageUrl });
-            await image.save();
-            property.images.push(image._id);
+            // If property already has an image, update it; otherwise, create a new one
+            if (property.images.length > 0) {
+                const image = await Image.findById(property.images[0]);
+                image.imageUrl = imageUrl;
+                await image.save();
+            } else {
+                const image = new Image({ propertyId: property._id, imageUrl });
+                await image.save();
+                property.images.push(image._id);
+            }
         }
 
         await property.save();
 
         // Send WhatsApp confirmation message
-        await sendMessage(authorizeRecord.phoneNumber, `Property *${property_name}* has been successfully updated.`);
+        await sendMessage(phoneNumber, `Property "${property_name}" has been successfully updated.`);
 
-        // Mark the authorization record as used
+        // Mark authorization as used and delete it
         authorizeRecord.used = true;
         await authorizeRecord.save();
+        await Authorize.findByIdAndDelete(id);
 
         res.send('Property updated successfully!');
     } catch (error) {
         console.error('Error updating property:', error);
-        res.status(500).send('An error occurred while updating the property.');
+        res.status(500).send('Error updating property.');
     }
 });
-
-
+// GET route to render the edit property form with current data
 app.get('/editproperty/:id', checkOTPValidation, async (req, res) => {
     const id = req.params.id;
 
@@ -415,14 +434,20 @@ app.get('/editproperty/:id', checkOTPValidation, async (req, res) => {
             return res.status(403).send('This link has already been used.');
         }
 
-        // Fetch the property details
-        const property = await Property.findById(authorizeRecord.propertyId);
-        if (!property) {
-            return res.status(404).send('Property not found.');
+        // Fetch all properties for the user
+        const phoneNumber = authorizeRecord.phoneNumber;
+        const user = await User.findOne({ phoneNumber });
+        if (!user) {
+            return res.status(404).send('User not found.');
         }
 
-        // Render the edit property form with current data
-        res.render('editProperty', { id, property });
+        const properties = await Property.find({ userId: user._id });
+        if (!properties.length) {
+            return res.status(404).send('No properties found to edit.');
+        }
+
+        // Render the edit property form with properties list
+        res.render('editProperty', { id, properties });
     } catch (error) {
         console.error('Error rendering edit property form:', error);
         res.status(500).send('An error occurred while rendering the form.');
