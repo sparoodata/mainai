@@ -542,6 +542,7 @@ app.get('/request-otp/:id', async (req, res) => {
     res.status(500).send('An error occurred while generating OTP.');
   }
 });
+
 // Route to validate OTP
 app.post('/validate-otp/:id', async (req, res) => {
   const id = req.params.id;
@@ -643,6 +644,149 @@ app.get('/addproperty/:id', checkOTPValidation, async (req, res) => {
         res.status(500).send('An error occurred while rendering the form.');
     }
 });
+
+// GET route to render the edit property form
+app.get('/editproperty/:id', checkOTPValidation, async (req, res) => {
+    const id = req.params.id;
+
+    try {
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        // Check if the authorization has already been used
+        if (authorizeRecord.used) {
+            return res.status(403).send('This link has already been used.');
+        }
+
+        // Find the property to edit
+        const property = await Property.findById(authorizeRecord.propertyId);
+        if (!property) {
+            return res.status(404).send('Property not found.');
+        }
+
+        // Render the edit property form with the current property data
+        res.render('editProperty', { property });
+    } catch (error) {
+        console.error('Error rendering edit property form:', error);
+        res.status(500).send('An error occurred while rendering the form.');
+    }
+});
+
+// POST route to update the property
+app.post('/editproperty/:id', async (req, res) => {
+    const { property_name, units, address, totalAmount } = req.body;
+    const id = req.params.id;
+
+    try {
+        // Find the authorization record
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        // Check if the authorization has already been used
+        if (authorizeRecord.used) {
+            return res.status(403).send('This link has already been used.');
+        }
+
+        // Find the property to update
+        const property = await Property.findByIdAndUpdate(
+            authorizeRecord.propertyId,
+            {
+                name: property_name,
+                units,
+                address,
+                totalAmount,
+            },
+            { new: true }
+        );
+
+        if (!property) {
+            return res.status(404).send('Property not found.');
+        }
+
+        // Send WhatsApp confirmation message
+        await sendMessage(authorizeRecord.phoneNumber, `Property *${property_name}* has been successfully updated.`);
+
+        // Delete the authorization record after successful update
+        await Authorize.findByIdAndDelete(id);
+        console.log(`Authorization record deleted for ID: ${id}`);
+
+        res.send('Property updated successfully!');
+    } catch (error) {
+        console.error('Error updating property:', error);
+        res.status(500).send('Error updating property.');
+    }
+});
+
+
+// GET route to confirm property deletion
+app.get('/deleteproperty/:id', checkOTPValidation, async (req, res) => {
+    const id = req.params.id;
+
+    try {
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        // Check if the authorization has already been used
+        if (authorizeRecord.used) {
+            return res.status(403).send('This link has already been used.');
+        }
+
+        // Find the property to delete
+        const property = await Property.findById(authorizeRecord.propertyId);
+        if (!property) {
+            return res.status(404).send('Property not found.');
+        }
+
+        // Render the delete confirmation page
+        res.render('deleteProperty', { property });
+    } catch (error) {
+        console.error('Error rendering delete property form:', error);
+        res.status(500).send('An error occurred while rendering the form.');
+    }
+});
+
+// POST route to delete the property
+app.post('/deleteproperty/:id', async (req, res) => {
+    const id = req.params.id;
+
+    try {
+        // Find the authorization record
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        // Check if the authorization has already been used
+        if (authorizeRecord.used) {
+            return res.status(403).send('This link has already been used.');
+        }
+
+        // Find and delete the property
+        const property = await Property.findByIdAndDelete(authorizeRecord.propertyId);
+        if (!property) {
+            return res.status(404).send('Property not found.');
+        }
+
+        // Send WhatsApp confirmation message
+        await sendMessage(authorizeRecord.phoneNumber, `Property *${property.name}* has been successfully deleted.`);
+
+        // Delete the authorization record after successful deletion
+        await Authorize.findByIdAndDelete(id);
+        console.log(`Authorization record deleted for ID: ${id}`);
+
+        res.send('Property deleted successfully!');
+    } catch (error) {
+        console.error('Error deleting property:', error);
+        res.status(500).send('Error deleting property.');
+    }
+});
+
 
 // Start the server
 app.listen(port, () => {

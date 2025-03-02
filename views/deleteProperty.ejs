@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Delete Property</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <h2>Delete Property</h2>
+    <p>Are you sure you want to delete the property: <strong><%= property.name %></strong>?</p>
+    <form action="/deleteproperty/<%= property._id %>" method="POST">
+      <button type="submit">Delete Property</button>
+    </form>
+  </div>
+</body>
+</html>

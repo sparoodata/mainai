@@ -426,7 +426,7 @@ async function sendPropertyLink(phoneNumber, action) {
     }
 
     // Construct the long URL for OTP verification
-    const longUrl = `${GLITCH_HOST}/authorize/${authorizeRecord._id}`;
+    const longUrl = `${GLITCH_HOST}/${action}/${authorizeRecord._id}`;
     console.log(`Long URL generated: ${longUrl}`); // Debug log
 
     // Shorten the URL
@@ -441,7 +441,6 @@ async function sendPropertyLink(phoneNumber, action) {
     await sendMessage(phoneNumber, 'Failed to retrieve authorization record. Please try again.');
   }
 }
-
 // Export the sendMessage function
 module.exports = {
   router,
