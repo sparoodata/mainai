@@ -20,15 +20,17 @@ const fetch = require('isomorphic-fetch');
 const app = express();
 const port = process.env.PORT || 3000; // Glitch uses dynamic port
 const AWS = require('aws-sdk');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
 // Configure the S3 client to use Cloudflare R2 settings
-const s3 = new AWS.S3({
-  endpoint: process.env.R2_ENDPOINT, // e.g., https://<account-id>.r2.cloudflarestorage.com
-  accessKeyId: process.env.R2_ACCESS_KEY_ID,
-  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-  Bucket: process.env.R2_BUCKET,
-  region: 'auto', // R2 doesn’t require a region but "auto" works for S3 compatibility
-  signatureVersion: 'v4',
+
+const s3 = new S3Client({
+    endpoint: process.env.R2_ENDPOINT, // Cloudflare R2 endpoint
+    region: 'auto', // Required for S3 compatibility
+    credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    },
 });
 
 // Trust the first proxy
@@ -129,13 +131,12 @@ function generateTenantId() {
 
 app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
     const { property_name, units, address, totalAmount } = req.body;
-    const id = req.params.id; // Assuming `id` is the phone number
+    const id = req.params.id;
 
     try {
-        // Find the user by phone number
-        const user = await User.findOne({ phoneNumber: id });
+        // Find the user by ID
+        const user = await User.findById(id);
         if (!user) {
-            console.error('User not found for phoneNumber:', id); // Debug log
             return res.status(404).send('User not found.');
         }
 
@@ -159,7 +160,10 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
                 ContentType: req.file.mimetype,
             };
 
-            await s3.upload(uploadParams).promise();
+            // Use PutObjectCommand to upload the file
+            const command = new PutObjectCommand(uploadParams);
+            await s3.send(command);
+
             const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
 
             const image = new Image({ propertyId: property._id, imageUrl: imageUrl });
@@ -168,15 +172,16 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
             await property.save();
         }
 
-        // Send WhatsApp confirmation message
-        await sendMessage(id, `Property *${property_name}* has been successfully added.`);
+        // Send WhatsApp confirmation
+        await sendMessage(user.phoneNumber, `Property *${property_name}* has been added successfully.`);
 
         res.send('Property and image added successfully!');
     } catch (error) {
-        console.error('Error adding property and image:', error); // Debug log
-        res.status(500).send('An error occurred while adding the property and image.');
+        console.error('Error adding property:', error);
+        res.status(500).send('Failed to add property.');
     }
 });
+
 
 // Handle form submission and image upload to Dropbox (add unit)
 app.post('/addunit/:id', upload.single('image'), async (req, res) => {
@@ -593,6 +598,24 @@ async function requestOTP(phoneNumber) {
     }
 }
 
+app.get('/addproperty/:id', checkOTPValidation, async (req, res) => {
+    const id = req.params.id;
+
+    try {
+        // Find the user by ID
+        const user = await User.findById(id);
+        if (!user) {
+            return res.status(404).send('User not found.');
+        }
+
+        // Render the "Add Property" form
+        res.render('addProperty', { id }); // Ensure `addProperty.ejs` exists
+    } catch (error) {
+        console.error('Error rendering add property form:', error);
+        res.status(500).send('An error occurred while rendering the form.');
+    }
+});
+
 app.get('/authorize/:id', async (req, res) => {
     const id = req.params.id;
     console.log(`/authorize/:id route called with ID: ${id}`); // Debug log
@@ -612,9 +635,4 @@ app.get('/authorize/:id', async (req, res) => {
         console.error('Error in /authorize/:id route:', error); // Debug log
         res.status(500).send('An error occurred while rendering the OTP page.');
     }
-});
-
-// Start the server
-app.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}`);
 });
