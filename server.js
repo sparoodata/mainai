@@ -52,6 +52,7 @@ mongoose.connect(process.env.MONGODB_URI, {
 .catch(error => console.error('MongoDB connection error:', error));
 
 // Session setup
+
 app.use(session({
     secret: process.env.SESSION_SECRET,
     resave: false,
@@ -63,7 +64,6 @@ app.use(session({
         maxAge: 3600000, // 1 hour
     },
 }));
-
 // Serve static files (public directory)
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -187,17 +187,39 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
             await property.save();
         }
 
+        // Mark the authorization as used
+        authorizeRecord.used = true;
+        await authorizeRecord.save();
+
         // Send WhatsApp confirmation message
         await sendMessage(authorizeRecord.phoneNumber, `Property *${property_name}* has been successfully added.`);
-
-        // Delete the authorization record after successful property addition
-        await Authorize.findByIdAndDelete(id);
-        console.log(`Authorization record deleted for ID: ${id}`);
 
         res.send('Property and image added successfully!');
     } catch (error) {
         console.error('Error adding property and image:', error);
         res.status(500).send('An error occurred while adding the property and image.');
+    }
+});
+
+app.get('/addproperty/:id', checkOTPValidation, async (req, res) => {
+    const id = req.params.id;
+
+    try {
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        // Check if the authorization has already been used
+        if (authorizeRecord.used) {
+            return res.status(403).send('This link has already been used.');
+        }
+
+        // Render the add property form
+        res.render('addProperty', { id });
+    } catch (error) {
+        console.error('Error rendering add property form:', error);
+        res.status(500).send('An error occurred while rendering the form.');
     }
 });
 
@@ -583,7 +605,6 @@ app.post('/validate-otp/:id', async (req, res) => {
   }
 });
 
-
 // Route to render the OTP input page
 app.get('/authorize/:id', async (req, res) => {
   const id = req.params.id;
@@ -609,7 +630,7 @@ app.get('/authorize/:id', async (req, res) => {
 function checkOTPValidation(req, res, next) {
   const id = req.params.id;
   const phoneNumber = req.session.phoneNumber; // Store phoneNumber in session during OTP request
-
+   console.log('Session data:', req.session);
   if (!phoneNumber) {
     return res.status(401).send('OTP not requested. Please request an OTP first.');
   }
@@ -621,29 +642,6 @@ function checkOTPValidation(req, res, next) {
 
   next();
 }
-
-
-app.get('/addproperty/:id', checkOTPValidation, async (req, res) => {
-    const id = req.params.id;
-
-    try {
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        // Check if the authorization has already been used
-        if (authorizeRecord.used) {
-            return res.status(403).send('This link has already been used.');
-        }
-
-        // Render the add property form
-        res.render('addProperty', { id });
-    } catch (error) {
-        console.error('Error rendering add property form:', error);
-        res.status(500).send('An error occurred while rendering the form.');
-    }
-});
 
 // GET route to render the edit property form
 app.get('/editproperty/:id', checkOTPValidation, async (req, res) => {
@@ -720,8 +718,6 @@ app.post('/editproperty/:id', async (req, res) => {
         res.status(500).send('Error updating property.');
     }
 });
-
-
 // GET route to confirm property deletion
 app.get('/deleteproperty/:id', checkOTPValidation, async (req, res) => {
     const id = req.params.id;
