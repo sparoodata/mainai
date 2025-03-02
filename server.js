@@ -213,132 +213,147 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
 
 // Handle form submission and image upload to Dropbox (add unit)
 app.post('/addunit/:id', upload.single('image'), async (req, res) => {
-    const { property, unit_number, rent_amount, floor, size } = req.body;
-    const id = req.params.id;
+  const { property, unit_number, rent_amount, floor, size } = req.body;
+  const id = req.params.id;
 
-    try {
-        // Retrieve the authorization record
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        const phoneNumber = '+' + authorizeRecord.phoneNumber;
-
-        // Retrieve the user
-        const user = await User.findOne({ phoneNumber });
-        if (!user) {
-            return res.status(404).send('User not found.');
-        }
-
-        // Create new unit and reference the user by their ID
-        const unit = new Unit({
-            property, 
-            unitNumber: unit_number, 
-            rentAmount: rent_amount, 
-            floor, 
-            size, 
-            userId: user._id
-        });
-        await unit.save();
-
-        // Upload image to Cloudflare R2 if provided
-        if (req.file) {
-            const key = 'images/' + Date.now() + '-' + req.file.originalname;
-            const uploadParams = {
-                Bucket: process.env.R2_BUCKET,
-                Key: key,
-                Body: req.file.buffer,
-                ContentType: req.file.mimetype,
-            };
-
-            await s3.upload(uploadParams).promise();
-            const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
-
-            const image = new Image({ unitId: unit._id, imageUrl: imageUrl });
-            await image.save();
-            unit.images.push(image._id);
-            await unit.save();
-        }
-
-        res.send('Unit and image added successfully!');
-    } catch (error) {
-        console.error('Error adding unit and image:', error);
-        res.status(500).send('An error occurred while adding the unit and image.');
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
     }
-});
 
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const unit = new Unit({
+      property,
+      unitNumber: unit_number,
+      rentAmount: rent_amount,
+      floor,
+      size,
+      userId: user._id,
+    });
+    await unit.save();
+
+    if (req.file) {
+      const key = 'images/' + Date.now() + '-' + req.file.originalname;
+      const uploadParams = {
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype,
+      };
+
+      await s3.upload(uploadParams).promise();
+      const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
+
+      const image = new Image({ unitId: unit._id, imageUrl: imageUrl });
+      await image.save();
+      unit.images.push(image._id);
+      await unit.save();
+    }
+
+    // Send WhatsApp confirmation
+    const propertyDoc = await Property.findById(property);
+    await sendMessage(
+      phoneNumber,
+      `Unit "${unit_number}" has been added to property "${propertyDoc ? propertyDoc.name : 'Unknown'}".`
+    );
+
+    // Mark authorization as used and delete it
+    authorizeRecord.used = true;
+    await authorizeRecord.save();
+    await Authorize.findByIdAndDelete(id);
+
+    res.send('Unit and image added successfully!');
+  } catch (error) {
+    console.error('Error adding unit and image:', error);
+    res.status(500).send('An error occurred while adding the unit and image.');
+  }
+});
 
 // Add tenant route that waits for WhatsApp authorization
 app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
-    const { name, propertyName, unitAssigned, lease_start, deposit, rent_amount, tenant_id } = req.body;
-    const id = req.params.id;
+  const { name, propertyName, unitAssigned, lease_start, deposit, rent_amount, tenant_id } = req.body;
+  const id = req.params.id;
 
-    try {
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        const phoneNumber = '+' + authorizeRecord.phoneNumber;
-        const user = await User.findOne({ phoneNumber });
-        if (!user) {
-            return res.status(404).send('User not found.');
-        }
-
-        const tenant = new Tenant({
-            name,
-            phoneNumber: user.phoneNumber,
-            userId: user._id,
-            propertyName,
-            unitAssigned,
-            lease_start: new Date(lease_start),
-            deposit,
-            rent_amount,
-            tenant_id,
-        });
-
-        // Upload tenant photo if provided
-        if (req.files.photo) {
-            const key = 'images/' + Date.now() + '-' + req.files.photo[0].originalname;
-            const uploadParams = {
-                Bucket: process.env.R2_BUCKET,
-                Key: key,
-                Body: req.files.photo[0].buffer,
-                ContentType: req.files.photo[0].mimetype,
-            };
-
-            await s3.upload(uploadParams).promise();
-            tenant.photo = process.env.R2_PUBLIC_URL + '/' + key;
-        }
-
-        // Upload tenant ID proof if provided
-        if (req.files.idProof) {
-            const key = 'images/' + Date.now() + '-' + req.files.idProof[0].originalname;
-            const uploadParams = {
-                Bucket: process.env.R2_BUCKET,
-                Key: key,
-                Body: req.files.idProof[0].buffer,
-                ContentType: req.files.idProof[0].mimetype,
-            };
-
-            await s3.upload(uploadParams).promise();
-            tenant.idProof = process.env.R2_PUBLIC_URL + '/' + key;
-        }
-
-        await tenant.save();
-
-        // Send WhatsApp confirmation message with property name
-await sendMessage(
-    authorizeRecord.phoneNumber,
-    `Tenant *${name}* has been successfully added to property *${propertyName}* (Unit: *${unitAssigned})*. Lease starts on ${new Date(lease_start).toLocaleDateString()}.`
-);
-
-        res.send('Tenant added successfully!');
-    } catch (error) {
-        console.error('Error adding tenant:', error);
-        res.status(500).send('An error occurred while adding the tenant.');
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
     }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const tenant = new Tenant({
+      name,
+      phoneNumber: user.phoneNumber,
+      userId: user._id,
+      propertyName,
+      unitAssigned,
+      lease_start: new Date(lease_start),
+      deposit,
+      rent_amount,
+      tenant_id: tenant_id || generateTenantId(), // Use provided ID or generate one
+    });
+
+    if (req.files.photo) {
+      const key = 'images/' + Date.now() + '-' + req.files.photo[0].originalname;
+      const uploadParams = {
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: req.files.photo[0].buffer,
+        ContentType: req.files.photo[0].mimetype,
+      };
+      await s3.upload(uploadParams).promise();
+      tenant.photo = process.env.R2_PUBLIC_URL + '/' + key;
+    }
+
+    if (req.files.idProof) {
+      const key = 'images/' + Date.now() + '-' + req.files.idProof[0].originalname;
+      const uploadParams = {
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: req.files.idProof[0].buffer,
+        ContentType: req.files.idProof[0].mimetype,
+      };
+      await s3.upload(uploadParams).promise();
+      tenant.idProof = process.env.R2_PUBLIC_URL + '/' + key;
+    }
+
+    await tenant.save();
+
+    // Send WhatsApp confirmation
+    await sendMessage(
+      phoneNumber,
+      `Tenant "${name}" has been added to unit "${unitAssigned}" at property "${propertyName}".`
+    );
+
+    // Mark authorization as used and delete it
+    authorizeRecord.used = true;
+    await authorizeRecord.save();
+    await Authorize.findByIdAndDelete(id);
+
+    res.send('Tenant added successfully!');
+  } catch (error) {
+    console.error('Error adding tenant:', error);
+    res.status(500).send('An error occurred while adding the tenant.');
+  }
 });
 
 // GET route to render the edit property form with current data
@@ -504,20 +519,74 @@ app.post('/deleteproperty/:id', checkOTPValidation, async (req, res) => {
 });
 // GET route to render the edit unit form (with list of properties if needed)
 // POST route to update the unit
-app.post('/editunit/:id', async (req, res) => {
+app.post('/editunit/:id', upload.single('image'), async (req, res) => {
+  const { unitId, property, unit_number, rent_amount, floor, size } = req.body;
+  const id = req.params.id;
+
   try {
-    const { property, unit_number, rent_amount, floor, size } = req.body;
-    const unit = await Unit.findByIdAndUpdate(
-      req.params.id,
-      {
-        property,
-        unitNumber: unit_number,
-        rentAmount: rent_amount,
-        floor,
-        size
-      },
-      { new: true }
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const unit = await Unit.findOne({ _id: unitId, userId: user._id });
+    if (!unit) {
+      return res.status(404).send('Unit not found or you do not have permission to edit it.');
+    }
+
+    unit.property = property;
+    unit.unitNumber = unit_number;
+    unit.rentAmount = rent_amount;
+    unit.floor = floor;
+    unit.size = size;
+
+    if (req.file) {
+      const key = 'images/' + Date.now() + '-' + req.file.originalname;
+      const uploadParams = {
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype,
+      };
+
+      await s3.upload(uploadParams).promise();
+      const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
+
+      if (unit.images.length > 0) {
+        const image = await Image.findById(unit.images[0]);
+        image.imageUrl = imageUrl;
+        await image.save();
+      } else {
+        const image = new Image({ unitId: unit._id, imageUrl });
+        await image.save();
+        unit.images.push(image._id);
+      }
+    }
+
+    await unit.save();
+
+    // Send WhatsApp confirmation
+    const propertyDoc = await Property.findById(property);
+    await sendMessage(
+      phoneNumber,
+      `Unit "${unit_number}" in property "${propertyDoc ? propertyDoc.name : 'Unknown'}" has been updated.`
     );
+
+    // Mark authorization as used and delete it
+    authorizeRecord.used = true;
+    await authorizeRecord.save();
+    await Authorize.findByIdAndDelete(id);
+
     res.send('Unit updated successfully!');
   } catch (error) {
     console.error('Error updating unit:', error);
@@ -525,9 +594,42 @@ app.post('/editunit/:id', async (req, res) => {
   }
 });
 
-app.post('/deleteunit/:id', async (req, res) => {
+app.post('/deleteunit/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+  const { unitId } = req.body; // Expect unitId from the form
+
   try {
-    await Unit.findByIdAndDelete(req.params.id);
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const unit = await Unit.findOneAndDelete({ _id: unitId, userId: user._id });
+    if (!unit) {
+      return res.status(404).send('Unit not found or you do not have permission to delete it.');
+    }
+
+    // Send WhatsApp confirmation message
+    await sendMessage(
+      phoneNumber,
+      `Unit "${unit.unitNumber}" has been successfully deleted.`
+    );
+
+    // Mark authorization as used and delete it
+    authorizeRecord.used = true;
+    await authorizeRecord.save();
+    await Authorize.findByIdAndDelete(id);
+
     res.send('Unit deleted successfully!');
   } catch (error) {
     console.error('Error deleting unit:', error);
@@ -537,18 +639,37 @@ app.post('/deleteunit/:id', async (req, res) => {
 // GET route to render the edit tenant form with current data
 // POST route to update the tenant
 app.post('/edittenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
-  try {
-    const { name, propertyName, unitAssigned, lease_start, deposit, rent_amount } = req.body;
-    const updateData = {
-      name,
-      propertyName,
-      unitAssigned,  // Make sure this is the ObjectId coming from the dropdown
-      lease_start: new Date(lease_start),
-      deposit,
-      rent_amount,
-    };
+  const { tenantId, name, propertyName, unitAssigned, lease_start, deposit, rent_amount } = req.body;
+  const id = req.params.id;
 
-    // Optionally update photo if provided
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const tenant = await Tenant.findOne({ _id: tenantId, userId: user._id });
+    if (!tenant) {
+      return res.status(404).send('Tenant not found or you do not have permission to edit it.');
+    }
+
+    tenant.name = name;
+    tenant.propertyName = propertyName;
+    tenant.unitAssigned = unitAssigned;
+    tenant.lease_start = new Date(lease_start);
+    tenant.deposit = deposit;
+    tenant.rent_amount = rent_amount;
+
     if (req.files.photo) {
       const key = 'images/' + Date.now() + '-' + req.files.photo[0].originalname;
       const uploadParams = {
@@ -558,9 +679,9 @@ app.post('/edittenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { nam
         ContentType: req.files.photo[0].mimetype,
       };
       await s3.upload(uploadParams).promise();
-      updateData.photo = process.env.R2_PUBLIC_URL + '/' + key;
+      tenant.photo = process.env.R2_PUBLIC_URL + '/' + key;
     }
-    // Optionally update ID proof if provided
+
     if (req.files.idProof) {
       const key = 'images/' + Date.now() + '-' + req.files.idProof[0].originalname;
       const uploadParams = {
@@ -570,10 +691,22 @@ app.post('/edittenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { nam
         ContentType: req.files.idProof[0].mimetype,
       };
       await s3.upload(uploadParams).promise();
-      updateData.idProof = process.env.R2_PUBLIC_URL + '/' + key;
+      tenant.idProof = process.env.R2_PUBLIC_URL + '/' + key;
     }
 
-    await Tenant.findByIdAndUpdate(req.params.id, updateData, { new: true });
+    await tenant.save();
+
+    // Send WhatsApp confirmation
+    await sendMessage(
+      phoneNumber,
+      `Tenant "${name}" in unit "${unitAssigned}" at property "${propertyName}" has been updated.`
+    );
+
+    // Mark authorization as used and delete it
+    authorizeRecord.used = true;
+    await authorizeRecord.save();
+    await Authorize.findByIdAndDelete(id);
+
     res.send('Tenant updated successfully!');
   } catch (error) {
     console.error('Error updating tenant:', error);
@@ -581,9 +714,42 @@ app.post('/edittenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { nam
   }
 });
 
-app.post('/deletetenant/:id', async (req, res) => {
+app.post('/deletetenant/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+  const { tenantId } = req.body; // Expect tenantId from the form
+
   try {
-    await Tenant.findByIdAndDelete(req.params.id);
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const tenant = await Tenant.findOneAndDelete({ _id: tenantId, userId: user._id });
+    if (!tenant) {
+      return res.status(404).send('Tenant not found or you do not have permission to delete it.');
+    }
+
+    // Send WhatsApp confirmation message
+    await sendMessage(
+      phoneNumber,
+      `Tenant "${tenant.name}" has been successfully deleted.`
+    );
+
+    // Mark authorization as used and delete it
+    authorizeRecord.used = true;
+    await authorizeRecord.save();
+    await Authorize.findByIdAndDelete(id);
+
     res.send('Tenant deleted successfully!');
   } catch (error) {
     console.error('Error deleting tenant:', error);
@@ -703,11 +869,17 @@ app.post('/validate-otp/:id', async (req, res) => {
         case 'editproperty':
           redirectUrl = `/editproperty/${id}`;
           break;
+        case 'removeproperty':
+          redirectUrl = `/removeproperty/${id}`;
+          break;
         case 'addunit':
           redirectUrl = `/addunit/${id}`;
           break;
         case 'editunit':
           redirectUrl = `/editunit/${id}`;
+          break;
+        case 'removeunit': // Added Remove Unit
+          redirectUrl = `/removeunit/${id}`;
           break;
         case 'addtenant':
           redirectUrl = `/addtenant/${id}`;
@@ -715,8 +887,8 @@ app.post('/validate-otp/:id', async (req, res) => {
         case 'edittenant':
           redirectUrl = `/edittenant/${id}`;
           break;
-        case 'removeproperty': // Added Remove Property
-          redirectUrl = `/removeproperty/${id}`;
+        case 'removetenant': // Added Remove Tenant
+          redirectUrl = `/removetenant/${id}`;
           break;
         default:
           redirectUrl = `/editproperty/${id}`; // Fallback
@@ -833,6 +1005,197 @@ app.get('/removeproperty/:id', checkOTPValidation, async (req, res) => {
     res.render('removeProperty', { id, properties });
   } catch (error) {
     console.error('Error rendering remove property form:', error);
+    res.status(500).send('An error occurred while rendering the form.');
+  }
+});
+
+app.get('/removeunit/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const units = await Unit.find({ userId: user._id });
+    if (!units.length) {
+      return res.status(404).send('No units found to remove.');
+    }
+
+    const properties = await Property.find({ userId: user._id }); // For property names
+    res.render('removeUnit', { id, units, properties });
+  } catch (error) {
+    console.error('Error rendering remove unit form:', error);
+    res.status(500).send('An error occurred while rendering the form.');
+  }
+});
+
+app.get('/removetenant/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const tenants = await Tenant.find({ userId: user._id });
+    if (!tenants.length) {
+      return res.status(404).send('No tenants found to remove.');
+    }
+
+    res.render('removeTenant', { id, tenants });
+  } catch (error) {
+    console.error('Error rendering remove tenant form:', error);
+    res.status(500).send('An error occurred while rendering the form.');
+  }
+});
+
+app.get('/addunit/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const properties = await Property.find({ userId: user._id });
+    if (!properties.length) {
+      return res.status(404).send('No properties found. Please add a property first.');
+    }
+
+    res.render('addUnit', { id, properties });
+  } catch (error) {
+    console.error('Error rendering add unit form:', error);
+    res.status(500).send('An error occurred while rendering the form.');
+  }
+});
+
+app.get('/editunit/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const units = await Unit.find({ userId: user._id });
+    if (!units.length) {
+      return res.status(404).send('No units found to edit.');
+    }
+
+    const properties = await Property.find({ userId: user._id });
+    res.render('editUnit', { id, units, properties });
+  } catch (error) {
+    console.error('Error rendering edit unit form:', error);
+    res.status(500).send('An error occurred while rendering the form.');
+  }
+});
+
+app.get('/addtenant/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const properties = await Property.find({ userId: user._id });
+    const units = await Unit.find({ userId: user._id });
+    if (!properties.length || !units.length) {
+      return res.status(404).send('No properties or units found. Please add them first.');
+    }
+
+    res.render('addTenant', { id, properties, units });
+  } catch (error) {
+    console.error('Error rendering add tenant form:', error);
+    res.status(500).send('An error occurred while rendering the form.');
+  }
+});
+
+app.get('/edittenant/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const tenants = await Tenant.find({ userId: user._id });
+    if (!tenants.length) {
+      return res.status(404).send('No tenants found to edit.');
+    }
+
+    const properties = await Property.find({ userId: user._id });
+    const units = await Unit.find({ userId: user._id });
+    res.render('editTenant', { id, tenants, properties, units });
+  } catch (error) {
+    console.error('Error rendering edit tenant form:', error);
     res.status(500).send('An error occurred while rendering the form.');
   }
 });

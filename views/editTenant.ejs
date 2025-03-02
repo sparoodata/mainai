@@ -1,59 +1,88 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Edit Tenant</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { color: #333; }
+    form { margin-top: 20px; }
+    label, input, select { display: block; margin: 10px 0; }
+    input, select { padding: 8px; width: 200px; }
+    button { padding: 10px; background-color: #007bff; color: white; border: none; cursor: pointer; }
+    button:hover { background-color: #0056b3; }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <h2>Edit Tenant</h2>
-    <form action="/edittenant/<%= tenant._id %>" method="POST" enctype="multipart/form-data">
-      <label for="name">Tenant Name:</label>
-      <input type="text" id="name" name="name" value="<%= tenant.name %>" required />
+  <h1>Edit Tenant</h1>
+  <form action="/edittenant/<%= id %>" method="POST" enctype="multipart/form-data">
+    <label for="tenantId">Select Tenant:</label>
+    <select name="tenantId" id="tenantId" required onchange="populateFields(this)">
+      <option value="">-- Select Tenant --</option>
+      <% tenants.forEach(tenant => { %>
+        <option value="<%= tenant._id %>"
+                data-name="<%= tenant.name %>"
+                data-property-name="<%= tenant.propertyName %>"
+                data-unit-assigned="<%= tenant.unitAssigned %>"
+                data-lease-start="<%= tenant.lease_start.toISOString().split('T')[0] %>"
+                data-deposit="<%= tenant.deposit %>"
+                data-rent-amount="<%= tenant.rent_amount %>">
+          <%= tenant.name %> (Unit: <%= tenant.unitAssigned %>)
+        </option>
+      <% }) %>
+    </select>
 
-      <label for="propertyName">Property:</label>
-      <select id="propertyName" name="propertyName" required>
-        <% properties.forEach(function(prop) { %>
-          <option value="<%= prop.name %>" <%= tenant.propertyName === prop.name ? "selected" : "" %>>
-            <%= prop.name %>
-          </option>
-        <% }) %>
-      </select>
+    <label for="name">Name:</label>
+    <input type="text" name="name" id="name" required>
 
-      <label for="unitAssigned">Unit Assigned:</label>
-      <select id="unitAssigned" name="unitAssigned" required>
-        <% units.forEach(function(unit) { %>
-          <option value="<%= unit._id %>" <%= unit._id.toString() === tenant.unitAssigned.toString() ? "selected" : "" %>>
-            <%= unit.unitNumber %>
-          </option>
-        <% }) %>
-      </select>
+    <label for="propertyName">Property Name:</label>
+    <select name="propertyName" id="propertyName" required>
+      <option value="">-- Select Property --</option>
+      <% properties.forEach(property => { %>
+        <option value="<%= property.name %>"><%= property.name %></option>
+      <% }) %>
+    </select>
 
-      <label for="lease_start">Lease Start Date:</label>
-      <input type="date" id="lease_start" name="lease_start" value="<%= tenant.lease_start ? tenant.lease_start.toISOString().split('T')[0] : '' %>" required />
+    <label for="unitAssigned">Unit Assigned:</label>
+    <select name="unitAssigned" id="unitAssigned" required>
+      <option value="">-- Select Unit --</option>
+      <% units.forEach(unit => { %>
+        <% const property = properties.find(p => p._id.toString() === unit.property.toString()); %>
+        <option value="<%= unit.unitNumber %>">
+          <%= unit.unitNumber %> (Property: <%= property ? property.name : 'Unknown' %>)
+        </option>
+      <% }) %>
+    </select>
 
-      <label for="deposit">Deposit:</label>
-      <input type="number" id="deposit" name="deposit" value="<%= tenant.deposit %>" required />
+    <label for="lease_start">Lease Start Date:</label>
+    <input type="date" name="lease_start" id="lease_start" required>
 
-      <label for="rent_amount">Rent Amount:</label>
-      <input type="number" id="rent_amount" name="rent_amount" value="<%= tenant.rent_amount %>" required />
+    <label for="deposit">Deposit:</label>
+    <input type="number" name="deposit" id="deposit" required>
 
-      <!-- Optional: Display current photo and ID proof -->
-      <% if (tenant.photo) { %>
-        <p>Current Photo: <img src="<%= tenant.photo %>" alt="Tenant Photo" width="100" /></p>
-      <% } %>
-      <label for="photo">Change Tenant Photo (Max 5MB):</label>
-      <input type="file" id="photo" name="photo" accept="image/*" />
+    <label for="rent_amount">Rent Amount:</label>
+    <input type="number" name="rent_amount" id="rent_amount" required>
 
-      <% if (tenant.idProof) { %>
-        <p>Current ID Proof: <img src="<%= tenant.idProof %>" alt="ID Proof" width="100" /></p>
-      <% } %>
-      <label for="idProof">Change ID Proof (Max 5MB):</label>
-      <input type="file" id="idProof" name="idProof" accept="image/*" />
+    <label for="photo">Update Photo:</label>
+    <input type="file" name="photo" id="photo" accept="image/*">
 
-      <button type="submit">Update Tenant</button>
-    </form>
-  </div>
+    <label for="idProof">Update ID Proof:</label>
+    <input type="file" name="idProof" id="idProof" accept="image/*">
+
+    <button type="submit">Update Tenant</button>
+  </form>
+
+  <script>
+    function populateFields(select) {
+      const selectedOption = select.options[select.selectedIndex];
+      document.getElementById('name').value = selectedOption.getAttribute('data-name') || '';
+      document.getElementById('propertyName').value = selectedOption.getAttribute('data-property-name') || '';
+      document.getElementById('unitAssigned').value = selectedOption.getAttribute('data-unit-assigned') || '';
+      document.getElementById('lease_start').value = selectedOption.getAttribute('data-lease-start') || '';
+      document.getElementById('deposit').value = selectedOption.getAttribute('data-deposit') || '';
+      document.getElementById('rent_amount').value = selectedOption.getAttribute('data-rent-amount') || '';
+    }
+  </script>
 </body>
 </html>

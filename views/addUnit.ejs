@@ -1,110 +1,46 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" type="text/css" href="/styles.css">
-    <title>Add Unit</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Add Unit</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { color: #333; }
+    form { margin-top: 20px; }
+    label, input, select { display: block; margin: 10px 0; }
+    input, select { padding: 8px; width: 200px; }
+    button { padding: 10px; background-color: #007bff; color: white; border: none; cursor: pointer; }
+    button:hover { background-color: #0056b3; }
+  </style>
 </head>
 <body>
-    <!-- Success Message -->
-    <div class="success-message">
-        Authorization successful! Add your unit below:
-    </div>
+  <h1>Add Unit</h1>
+  <form action="/addunit/<%= id %>" method="POST" enctype="multipart/form-data">
+    <label for="property">Property:</label>
+    <select name="property" id="property" required>
+      <option value="">-- Select Property --</option>
+      <% properties.forEach(property => { %>
+        <option value="<%= property._id %>"><%= property.name %></option>
+      <% }) %>
+    </select>
 
-    <!-- Form Container -->
-    <div class="container">
-        <h2>Add Unit</h2>
-        <form action="/addunit/<%= id %>" method="POST" enctype="multipart/form-data" onsubmit="return validateUnitForm()">
-            
-            <!-- Property Selection -->
-            <label for="property">Property:</label>
-            <select id="property" name="property" required>
-                <% properties.forEach(function(property) { %>
-                    <option value="<%= property._id %>"><%= property.name %></option>
-                <% }) %>
-            </select>
-            <small id="propertyError" class="error-message"></small>
+    <label for="unit_number">Unit Number:</label>
+    <input type="text" name="unit_number" id="unit_number" required>
 
-            <!-- Unit Number -->
-            <label for="unit_number">Unit Number:</label>
-            <input type="text" id="unit_number" name="unit_number" required>
-            <small id="unitNumberError" class="error-message"></small>
+    <label for="rent_amount">Rent Amount:</label>
+    <input type="number" name="rent_amount" id="rent_amount" required>
 
-            <!-- Rent Amount -->
-            <label for="rent_amount">Rent Amount:</label>
-            <input type="number" id="rent_amount" name="rent_amount" required min="0">
-            <small id="rentAmountError" class="error-message"></small>
+    <label for="floor">Floor:</label>
+    <input type="text" name="floor" id="floor">
 
-            <!-- Floor -->
-            <label for="floor">Floor:</label>
-            <input type="number" id="floor" name="floor" required min="0">
-            <small id="floorError" class="error-message"></small>
+    <label for="size">Size (sq ft):</label>
+    <input type="number" name="size" id="size">
 
-            <!-- Size -->
-            <label for="size">Size (sqft):</label>
-            <input type="number" id="size" name="size" required min="0">
-            <small id="sizeError" class="error-message"></small>
+    <label for="image">Image:</label>
+    <input type="file" name="image" id="image" accept="image/*">
 
-            <!-- Unit Image -->
-            <label for="image">Unit Image (Max 5MB):</label>
-            <input type="file" id="image" name="image" required accept="image/*">
-            <small id="imageError" class="error-message"></small>
-
-            <!-- Submit Button -->
-            <button type="submit">Submit</button>
-        </form>
-    </div>
-
-    <!-- JavaScript for validation -->
-    <script>
-        function validateUnitForm() {
-            const unitNumber = document.getElementById('unit_number').value;
-            const rentAmount = document.getElementById('rent_amount').value;
-            const floor = document.getElementById('floor').value;
-            const size = document.getElementById('size').value;
-            const image = document.getElementById('image').files[0];
-
-            let valid = true;
-
-            document.getElementById('unitNumberError').innerHTML = "";
-            document.getElementById('rentAmountError').innerHTML = "";
-            document.getElementById('floorError').innerHTML = "";
-            document.getElementById('sizeError').innerHTML = "";
-            document.getElementById('imageError').innerHTML = "";
-
-            // Unit Number validation
-            if (unitNumber.trim() === "") {
-                document.getElementById('unitNumberError').innerHTML = "Unit number is required.";
-                valid = false;
-            }
-
-            // Rent Amount validation
-            if (isNaN(rentAmount) || rentAmount <= 0) {
-                document.getElementById('rentAmountError').innerHTML = "Please enter a valid rent amount.";
-                valid = false;
-            }
-
-            // Floor validation
-            if (isNaN(floor) || floor < 0) {
-                document.getElementById('floorError').innerHTML = "Please enter a valid floor number.";
-                valid = false;
-            }
-
-            // Size validation
-            if (isNaN(size) || size <= 0) {
-                document.getElementById('sizeError').innerHTML = "Please enter a valid size.";
-                valid = false;
-            }
-
-            // Image validation
-            if (image && image.size > 5 * 1024 * 1024) {
-                document.getElementById('imageError').innerHTML = "Image size cannot exceed 5MB.";
-                valid = false;
-            }
-
-            return valid;
-        }
-    </script>
+    <button type="submit">Add Unit</button>
+  </form>
 </body>
 </html>

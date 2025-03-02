@@ -1,37 +1,73 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Edit Unit</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { color: #333; }
+    form { margin-top: 20px; }
+    label, input, select { display: block; margin: 10px 0; }
+    input, select { padding: 8px; width: 200px; }
+    button { padding: 10px; background-color: #007bff; color: white; border: none; cursor: pointer; }
+    button:hover { background-color: #0056b3; }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <h2>Edit Unit</h2>
-    <form action="/editunit/<%= unit._id %>" method="POST">
-      <label for="property">Property:</label>
-      <select id="property" name="property" required>
-        <% properties.forEach(function(prop) { %>
-          <option value="<%= prop._id %>" <%= prop._id.toString() === unit.property.toString() ? "selected" : "" %>>
-            <%= prop.name %>
-          </option>
-        <% }) %>
-      </select>
+  <h1>Edit Unit</h1>
+  <form action="/editunit/<%= id %>" method="POST" enctype="multipart/form-data">
+    <label for="unitId">Select Unit:</label>
+    <select name="unitId" id="unitId" required onchange="populateFields(this)">
+      <option value="">-- Select Unit --</option>
+      <% units.forEach(unit => { %>
+        <% const property = properties.find(p => p._id.toString() === unit.property.toString()); %>
+        <option value="<%= unit._id %>" 
+                data-property="<%= unit.property %>" 
+                data-unit-number="<%= unit.unitNumber %>"
+                data-rent-amount="<%= unit.rentAmount %>"
+                data-floor="<%= unit.floor %>"
+                data-size="<%= unit.size %>">
+          <%= unit.unitNumber %> (Property: <%= property ? property.name : 'Unknown' %>)
+        </option>
+      <% }) %>
+    </select>
 
-      <label for="unit_number">Unit Number:</label>
-      <input type="text" id="unit_number" name="unit_number" value="<%= unit.unitNumber %>" required />
+    <label for="property">Property:</label>
+    <select name="property" id="property" required>
+      <option value="">-- Select Property --</option>
+      <% properties.forEach(property => { %>
+        <option value="<%= property._id %>"><%= property.name %></option>
+      <% }) %>
+    </select>
 
-      <label for="rent_amount">Rent Amount:</label>
-      <input type="number" id="rent_amount" name="rent_amount" value="<%= unit.rentAmount %>" required />
+    <label for="unit_number">Unit Number:</label>
+    <input type="text" name="unit_number" id="unit_number" required>
 
-      <label for="floor">Floor:</label>
-      <input type="number" id="floor" name="floor" value="<%= unit.floor %>" required />
+    <label for="rent_amount">Rent Amount:</label>
+    <input type="number" name="rent_amount" id="rent_amount" required>
 
-      <label for="size">Size (sq ft):</label>
-      <input type="number" id="size" name="size" value="<%= unit.size %>" required />
+    <label for="floor">Floor:</label>
+    <input type="text" name="floor" id="floor">
 
-      <button type="submit">Update Unit</button>
-    </form>
-  </div>
+    <label for="size">Size (sq ft):</label>
+    <input type="number" name="size" id="size">
+
+    <label for="image">Update Image:</label>
+    <input type="file" name="image" id="image" accept="image/*">
+
+    <button type="submit">Update Unit</button>
+  </form>
+
+  <script>
+    function populateFields(select) {
+      const selectedOption = select.options[select.selectedIndex];
+      document.getElementById('property').value = selectedOption.getAttribute('data-property') || '';
+      document.getElementById('unit_number').value = selectedOption.getAttribute('data-unit-number') || '';
+      document.getElementById('rent_amount').value = selectedOption.getAttribute('data-rent-amount') || '';
+      document.getElementById('floor').value = selectedOption.getAttribute('data-floor') || '';
+      document.getElementById('size').value = selectedOption.getAttribute('data-size') || '';
+    }
+  </script>
 </body>
 </html>

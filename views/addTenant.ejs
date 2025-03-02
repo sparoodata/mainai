@@ -1,63 +1,63 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" type="text/css" href="/styles.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Add Tenant</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { color: #333; }
+    form { margin-top: 20px; }
+    label, input, select { display: block; margin: 10px 0; }
+    input, select { padding: 8px; width: 200px; }
+    button { padding: 10px; background-color: #007bff; color: white; border: none; cursor: pointer; }
+    button:hover { background-color: #0056b3; }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <h2>Add Tenant</h2>
-    <form action="/addtenant/<%= id %>" method="POST" enctype="multipart/form-data">
-      
-      <!-- Tenant Name -->
-      <label for="name">Tenant Name:</label>
-      <input type="text" id="name" name="name" required />
+  <h1>Add Tenant</h1>
+  <form action="/addtenant/<%= id %>" method="POST" enctype="multipart/form-data">
+    <label for="name">Name:</label>
+    <input type="text" name="name" id="name" required>
 
-      <!-- Random Tenant ID (read-only) -->
-      <label for="tenant_id">Tenant ID:</label>
-      <input type="text" id="tenant_id" name="tenant_id" value="<%= tenantId %>" readonly />
+    <label for="propertyName">Property Name:</label>
+    <select name="propertyName" id="propertyName" required>
+      <option value="">-- Select Property --</option>
+      <% properties.forEach(property => { %>
+        <option value="<%= property.name %>"><%= property.name %></option>
+      <% }) %>
+    </select>
 
-      <!-- Property Name -->
-      <label for="propertyName">Property Name:</label>
-      <select id="propertyName" name="propertyName" required>
-        <% properties.forEach(function(property) { %>
-          <option value="<%= property.name %>"><%= property.name %></option>
-        <% }); %>
-      </select>
+    <label for="unitAssigned">Unit Assigned:</label>
+    <select name="unitAssigned" id="unitAssigned" required>
+      <option value="">-- Select Unit --</option>
+      <% units.forEach(unit => { %>
+        <% const property = properties.find(p => p._id.toString() === unit.property.toString()); %>
+        <option value="<%= unit.unitNumber %>">
+          <%= unit.unitNumber %> (Property: <%= property ? property.name : 'Unknown' %>)
+        </option>
+      <% }) %>
+    </select>
 
-      <!-- Unit Assignment (displaying only unit numbers) -->
-<label for="unitAssigned">Unit Assigned:</label>
-<select id="unitAssigned" name="unitAssigned" required>
-  <% units.forEach(function(unit) { %>
-    <option value="<%= unit._id %>"><%= unit.unitNumber %></option>
-  <% }); %>
-</select>
+    <label for="lease_start">Lease Start Date:</label>
+    <input type="date" name="lease_start" id="lease_start" required>
 
+    <label for="deposit">Deposit:</label>
+    <input type="number" name="deposit" id="deposit" required>
 
-      <!-- Lease Start Date -->
-      <label for="lease_start">Lease Start:</label>
-      <input type="date" id="lease_start" name="lease_start" required />
+    <label for="rent_amount">Rent Amount:</label>
+    <input type="number" name="rent_amount" id="rent_amount" required>
 
-      <!-- Deposit -->
-      <label for="deposit">Deposit:</label>
-      <input type="number" id="deposit" name="deposit" required />
+    <label for="tenant_id">Tenant ID (optional):</label>
+    <input type="text" name="tenant_id" id="tenant_id">
 
-      <!-- Rent Amount -->
-      <label for="rent_amount">Rent Amount:</label>
-      <input type="number" id="rent_amount" name="rent_amount" required />
+    <label for="photo">Photo:</label>
+    <input type="file" name="photo" id="photo" accept="image/*">
 
-      <!-- Tenant Photo -->
-      <label for="photo">Tenant Photo (Max 5MB):</label>
-      <input type="file" id="photo" name="photo" accept="image/*" required />
+    <label for="idProof">ID Proof:</label>
+    <input type="file" name="idProof" id="idProof" accept="image/*">
 
-      <!-- ID Proof -->
-      <label for="idProof">ID Proof (Max 5MB):</label>
-      <input type="file" id="idProof" name="idProof" accept="image/*" required />
-
-      <button type="submit">Submit</button>
-    </form>
-  </div>
+    <button type="submit">Add Tenant</button>
+  </form>
 </body>
 </html>

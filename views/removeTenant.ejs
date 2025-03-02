@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Remove Tenant</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    h1 {
+      color: #333;
+    }
+    form {
+      margin-top: 20px;
+    }
+    select, button {
+      padding: 10px;
+      margin: 5px 0;
+      font-size: 16px;
+    }
+    button {
+      background-color: #ff4444;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #cc0000;
+    }
+  </style>
+</head>
+<body>
+  <h1>Remove Tenant</h1>
+  <form action="/deletetenant/<%= id %>" method="POST">
+    <label for="tenantId">Select Tenant to Remove:</label><br>
+    <select name="tenantId" id="tenantId" required>
+      <option value="">-- Select a Tenant --</option>
+      <% tenants.forEach(tenant => { %>
+        <option value="<%= tenant._id %>">
+          <%= tenant.name %> (Unit: <%= tenant.unitAssigned %>)
+        </option>
+      <% }) %>
+    </select><br>
+    <button type="submit">Remove Tenant</button>
+  </form>
+</body>
+</html>
