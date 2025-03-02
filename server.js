@@ -126,40 +126,38 @@ function generateTenantId() {
 // Route to get units for a selected property
 
 // Handle form submission and image upload to Dropbox (add property)
+
 app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
     const { property_name, units, address, totalAmount } = req.body;
     const id = req.params.id;
 
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
-        // Find the authorization record
-        const authorizeRecord = await Authorize.findById(id);
+        // Find the authorization record and lock it
+        const authorizeRecord = await Authorize.findById(id).session(session);
         if (!authorizeRecord) {
-            console.error('Authorization record not found for ID:', id);
+            await session.abortTransaction();
+            session.endSession();
             return res.status(404).send('Authorization record not found.');
         }
 
-        // Debug: Log the current state of the authorization record
-        console.log('Authorization record before processing:', authorizeRecord);
-
         // Check if the authorization has already been used
         if (authorizeRecord.used) {
-            console.error('Authorization already used for ID:', id);
+            await session.abortTransaction();
+            session.endSession();
             return res.status(403).send('This link has already been used.');
         }
 
         // Use the phone number directly (no need to add '+')
         const phoneNumber = authorizeRecord.phoneNumber;
-        console.log(`Querying User collection for phoneNumber: ${phoneNumber}`);
-
-        // Find the user
-        const user = await User.findOne({ phoneNumber });
+        const user = await User.findOne({ phoneNumber }).session(session);
         if (!user) {
-            console.error('User not found for phoneNumber:', phoneNumber);
+            await session.abortTransaction();
+            session.endSession();
             return res.status(404).send('User not found.');
         }
-
-        // Log the user ID
-        console.log(`User found with ID: ${user._id}`);
 
         // Create the property
         const property = new Property({
@@ -169,7 +167,7 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
             totalAmount,
             userId: user._id,
         });
-        await property.save();
+        await property.save({ session });
 
         // Upload image to Cloudflare R2 if provided
         if (req.file) {
@@ -185,28 +183,30 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
             const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
 
             const image = new Image({ propertyId: property._id, imageUrl: imageUrl });
-            await image.save();
+            await image.save({ session });
             property.images.push(image._id);
-            await property.save();
+            await property.save({ session });
         }
 
         // Mark the authorization as used
         authorizeRecord.used = true;
-        await authorizeRecord.save();
+        await authorizeRecord.save({ session });
 
-        // Debug: Log the updated authorization record
-        console.log('Authorization record after processing:', authorizeRecord);
+        // Commit the transaction
+        await session.commitTransaction();
+        session.endSession();
 
         // Send WhatsApp confirmation message
         await sendMessage(authorizeRecord.phoneNumber, `Property *${property_name}* has been successfully added.`);
 
         res.send('Property and image added successfully!');
     } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
         console.error('Error adding property and image:', error);
         res.status(500).send('An error occurred while adding the property and image.');
     }
 });
-
 
 
 // Handle form submission and image upload to Dropbox (add unit)
@@ -516,40 +516,48 @@ const otpStore = new Map(); // { phoneNumber: { otp: '123456', attempts: 0, last
 
 // Route to request OTP
 app.get('/request-otp/:id', async (req, res) => {
-  const id = req.params.id;
-  console.log(`/request-otp/:id route called with ID: ${id}`); // Debug log
+    const id = req.params.id;
+    console.log(`/request-otp/:id route called with ID: ${id}`); // Debug log
 
-  try {
-    const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      console.error('Authorization record not found for ID:', id); // Debug log
-      return res.status(404).send('Authorization record not found.');
+    try {
+        // Find or create the authorization record
+        let authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            // If the record doesn't exist, create a new one
+            authorizeRecord = new Authorize({
+                phoneNumber: id, // Assuming `id` is the phone number
+                status: 'Sent',
+                used: false, // Default value
+            });
+            await authorizeRecord.save();
+            console.log(`New authorization record created for phoneNumber: ${id}`); // Debug log
+        }
+
+        const phoneNumber = authorizeRecord.phoneNumber;
+        console.log(`Phone number extracted from authorizeRecord: ${phoneNumber}`); // Debug log
+
+        const otp = generateOTP();
+        console.log(`Generated OTP: ${otp}`); // Debug log
+
+        // Store OTP and reset attempts
+        otpStore.set(phoneNumber, { otp, attempts: 0, lastAttempt: null, validated: false });
+        console.log(`OTP stored for phone number: ${phoneNumber}`); // Debug log
+
+        // Store phoneNumber in session
+        req.session.phoneNumber = phoneNumber;
+        console.log(`Phone number stored in session: ${phoneNumber}`); // Debug log
+
+        // Send OTP via WhatsApp
+        console.log(`Attempting to send OTP to ${phoneNumber}`); // Debug log
+        await sendOTP(phoneNumber, otp);
+
+        res.json({ status: 'OTP sent', phoneNumber });
+    } catch (error) {
+        console.error('Error in /request-otp/:id route:', error); // Debug log
+        res.status(500).send('An error occurred while generating OTP.');
     }
-
-    const phoneNumber = authorizeRecord.phoneNumber;
-    console.log(`Phone number extracted from authorizeRecord: ${phoneNumber}`); // Debug log
-
-    const otp = generateOTP();
-    console.log(`Generated OTP: ${otp}`); // Debug log
-
-    // Store OTP and reset attempts
-    otpStore.set(phoneNumber, { otp, attempts: 0, lastAttempt: null, validated: false });
-    console.log(`OTP stored for phone number: ${phoneNumber}`); // Debug log
-
-    // Store phoneNumber in session
-    req.session.phoneNumber = phoneNumber;
-    console.log(`Phone number stored in session: ${phoneNumber}`); // Debug log
-
-    // Send OTP via WhatsApp
-    console.log(`Attempting to send OTP to ${phoneNumber}`); // Debug log
-    await sendOTP(phoneNumber, otp);
-
-    res.json({ status: 'OTP sent', phoneNumber });
-  } catch (error) {
-    console.error('Error in /request-otp/:id route:', error); // Debug log
-    res.status(500).send('An error occurred while generating OTP.');
-  }
 });
+
 // Route to validate OTP
 app.post('/validate-otp/:id', async (req, res) => {
   const id = req.params.id;
@@ -630,25 +638,23 @@ function checkOTPValidation(req, res, next) {
 }
 
 
-app.get('/addproperty/:id', checkOTPValidation, async (req, res) => {
+app.get('/authorize/:id', async (req, res) => {
     const id = req.params.id;
+    console.log(`/authorize/:id route called with ID: ${id}`); // Debug log
 
     try {
         const authorizeRecord = await Authorize.findById(id);
         if (!authorizeRecord) {
+            console.error('Authorization record not found for ID:', id); // Debug log
             return res.status(404).send('Authorization record not found.');
         }
 
-        // Check if the authorization has already been used
-        if (authorizeRecord.used) {
-            return res.status(403).send('This link has already been used.');
-        }
-
-        // Render the add property form
-        res.render('addProperty', { id });
+        // Render the OTP input page
+        console.log(`Rendering OTP input page for phone number: ${authorizeRecord.phoneNumber}`); // Debug log
+        res.sendFile(path.join(__dirname, 'public', 'otp.html'));
     } catch (error) {
-        console.error('Error rendering add property form:', error);
-        res.status(500).send('An error occurred while rendering the form.');
+        console.error('Error in /authorize/:id route:', error); // Debug log
+        res.status(500).send('An error occurred while rendering the OTP page.');
     }
 });
 
