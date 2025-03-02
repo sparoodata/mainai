@@ -129,33 +129,13 @@ function generateTenantId() {
 
 app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
     const { property_name, units, address, totalAmount } = req.body;
-    const id = req.params.id;
-
-    const session = await mongoose.startSession();
-    session.startTransaction();
+    const id = req.params.id; // Assuming `id` is the phone number
 
     try {
-        // Find the authorization record and lock it
-        const authorizeRecord = await Authorize.findById(id).session(session);
-        if (!authorizeRecord) {
-            await session.abortTransaction();
-            session.endSession();
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        // Check if the authorization has already been used
-        if (authorizeRecord.used) {
-            await session.abortTransaction();
-            session.endSession();
-            return res.status(403).send('This link has already been used.');
-        }
-
-        // Use the phone number directly (no need to add '+')
-        const phoneNumber = authorizeRecord.phoneNumber;
-        const user = await User.findOne({ phoneNumber }).session(session);
+        // Find the user by phone number
+        const user = await User.findOne({ phoneNumber: id });
         if (!user) {
-            await session.abortTransaction();
-            session.endSession();
+            console.error('User not found for phoneNumber:', id); // Debug log
             return res.status(404).send('User not found.');
         }
 
@@ -167,7 +147,7 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
             totalAmount,
             userId: user._id,
         });
-        await property.save({ session });
+        await property.save();
 
         // Upload image to Cloudflare R2 if provided
         if (req.file) {
@@ -183,31 +163,20 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
             const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
 
             const image = new Image({ propertyId: property._id, imageUrl: imageUrl });
-            await image.save({ session });
+            await image.save();
             property.images.push(image._id);
-            await property.save({ session });
+            await property.save();
         }
 
-        // Mark the authorization as used
-        authorizeRecord.used = true;
-        await authorizeRecord.save({ session });
-
-        // Commit the transaction
-        await session.commitTransaction();
-        session.endSession();
-
         // Send WhatsApp confirmation message
-        await sendMessage(authorizeRecord.phoneNumber, `Property *${property_name}* has been successfully added.`);
+        await sendMessage(id, `Property *${property_name}* has been successfully added.`);
 
         res.send('Property and image added successfully!');
     } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
-        console.error('Error adding property and image:', error);
+        console.error('Error adding property and image:', error); // Debug log
         res.status(500).send('An error occurred while adding the property and image.');
     }
 });
-
 
 // Handle form submission and image upload to Dropbox (add unit)
 app.post('/addunit/:id', upload.single('image'), async (req, res) => {
@@ -516,86 +485,71 @@ const otpStore = new Map(); // { phoneNumber: { otp: '123456', attempts: 0, last
 
 // Route to request OTP
 app.get('/request-otp/:id', async (req, res) => {
-    const id = req.params.id;
+    const id = req.params.id; // Assuming `id` is the phone number
     console.log(`/request-otp/:id route called with ID: ${id}`); // Debug log
 
     try {
-        // Find or create the authorization record
-        let authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            // If the record doesn't exist, create a new one
-            authorizeRecord = new Authorize({
-                phoneNumber: id, // Assuming `id` is the phone number
-                status: 'Sent',
-                used: false, // Default value
-            });
-            await authorizeRecord.save();
-            console.log(`New authorization record created for phoneNumber: ${id}`); // Debug log
+        // Find the user by phone number
+        let user = await User.findOne({ phoneNumber: id });
+        console.log('User record before OTP generation:', user); // Debug log
+
+        if (!user) {
+            console.error('User not found for phoneNumber:', id); // Debug log
+            return res.status(404).send('User not found. Please register first.');
         }
 
-        const phoneNumber = authorizeRecord.phoneNumber;
-        console.log(`Phone number extracted from authorizeRecord: ${phoneNumber}`); // Debug log
-
+        // Generate OTP
         const otp = generateOTP();
-        console.log(`Generated OTP: ${otp}`); // Debug log
+        const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // OTP expires in 10 minutes
 
-        // Store OTP and reset attempts
-        otpStore.set(phoneNumber, { otp, attempts: 0, lastAttempt: null, validated: false });
-        console.log(`OTP stored for phone number: ${phoneNumber}`); // Debug log
+        // Update the user record with OTP and expiration time
+        user.otp = otp;
+        user.otpExpiresAt = otpExpiresAt;
+        await user.save();
+        console.log('OTP saved to user record:', user); // Debug log
 
-        // Store phoneNumber in session
-        req.session.phoneNumber = phoneNumber;
-        console.log(`Phone number stored in session: ${phoneNumber}`); // Debug log
+        // Store OTP in memory (optional, for quick validation)
+        otpStore.set(id, { otp, attempts: 0, lastAttempt: null, validated: false });
 
         // Send OTP via WhatsApp
-        console.log(`Attempting to send OTP to ${phoneNumber}`); // Debug log
-        await sendOTP(phoneNumber, otp);
+        console.log(`Attempting to send OTP to ${id}`); // Debug log
+        await sendOTP(id, otp);
 
-        res.json({ status: 'OTP sent', phoneNumber });
+        res.json({ status: 'OTP sent', phoneNumber: id });
     } catch (error) {
         console.error('Error in /request-otp/:id route:', error); // Debug log
         res.status(500).send('An error occurred while generating OTP.');
     }
 });
-
 // Route to validate OTP
 app.post('/validate-otp/:id', async (req, res) => {
-  const id = req.params.id;
-  const { otp } = req.body;
+    const id = req.params.id; // Assuming `id` is the phone number
+    const { otp } = req.body;
 
-  try {
-    const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
+    try {
+        // Find the user by phone number
+        const user = await User.findOne({ phoneNumber: id });
+        if (!user) {
+            console.error('User not found for phoneNumber:', id); // Debug log
+            return res.status(404).send('User not found.');
+        }
+
+        // Check if OTP matches and is not expired
+        if (user.otp !== otp || user.otpExpiresAt < new Date()) {
+            console.error('Invalid or expired OTP for phoneNumber:', id); // Debug log
+            return res.status(400).json({ error: 'Invalid or expired OTP.' });
+        }
+
+        // Mark OTP as validated (optional)
+        user.otp = null;
+        user.otpExpiresAt = null;
+        await user.save();
+
+        res.json({ status: 'OTP validated', phoneNumber: id });
+    } catch (error) {
+        console.error('Error validating OTP:', error); // Debug log
+        res.status(500).send('An error occurred while validating OTP.');
     }
-
-    const phoneNumber = authorizeRecord.phoneNumber;
-    const storedOTPData = otpStore.get(phoneNumber);
-
-    if (!storedOTPData) {
-      return res.status(400).json({ error: 'OTP expired or not requested.' });
-    }
-
-    const { otp: storedOTP, attempts, lastAttempt } = storedOTPData;
-
-    // Check if the user is blocked due to too many attempts
-    if (attempts >= 3 && Date.now() - lastAttempt < 180000) { // 3 minutes
-      return res.status(429).json({ error: 'Too many attempts. Try again after 3 minutes.' });
-    }
-
-    // Validate OTP
-    if (otp === storedOTP) {
-      otpStore.set(phoneNumber, { ...storedOTPData, validated: true }); // Mark OTP as validated
-      res.json({ status: 'OTP validated', phoneNumber });
-    } else {
-      // Increment failed attempts
-      otpStore.set(phoneNumber, { ...storedOTPData, attempts: attempts + 1, lastAttempt: Date.now() });
-      res.status(400).json({ error: 'Invalid OTP.' });
-    }
-  } catch (error) {
-    console.error('Error validating OTP:', error);
-    res.status(500).send('An error occurred while validating OTP.');
-  }
 });
 
 
@@ -637,6 +591,29 @@ function checkOTPValidation(req, res, next) {
   next();
 }
 
+async function requestOTP(phoneNumber) {
+    try {
+        // Find or create the authorization record
+        let authorizeRecord = await Authorize.findOne({ phoneNumber });
+        if (!authorizeRecord) {
+            authorizeRecord = new Authorize({
+                phoneNumber,
+                status: 'Sent',
+                used: false,
+            });
+            await authorizeRecord.save();
+        }
+
+        const otp = generateOTP();
+        otpStore.set(phoneNumber, { otp, attempts: 0, lastAttempt: null, validated: false });
+
+        await sendOTP(phoneNumber, otp);
+        return { status: 'OTP sent', phoneNumber };
+    } catch (error) {
+        console.error('Error requesting OTP:', error);
+        throw error;
+    }
+}
 
 app.get('/authorize/:id', async (req, res) => {
     const id = req.params.id;
