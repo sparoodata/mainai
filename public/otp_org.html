@@ -174,26 +174,19 @@
     const otpInputs = document.querySelectorAll('.otp-input');
     const keypadButtons = document.querySelectorAll('.keypad button');
     const message = document.getElementById('message');
-    const id = window.location.pathname.split('/')[2]; // Extract ID from /authorize/:id
 
     // Automatically request OTP when the page loads
     window.addEventListener('load', async () => {
+      const id = window.location.pathname.split('/')[2]; // Extract ID from URL
       try {
         const response = await fetch(`/request-otp/${id}`);
         const data = await response.json();
         if (response.ok) {
-          message.textContent = `OTP sent to ${data.phoneNumber}. Check WhatsApp!`;
-          message.classList.add('success');
-          message.classList.remove('error');
+          console.log('OTP requested successfully:', data);
         } else {
-          message.textContent = 'Failed to request OTP.';
-          message.classList.add('error');
-          message.classList.remove('success');
+          console.error('Failed to request OTP:', data);
         }
       } catch (error) {
-        message.textContent = 'Error requesting OTP. Please try again.';
-        message.classList.add('error');
-        message.classList.remove('success');
         console.error('Error requesting OTP:', error);
       }
     });
@@ -231,12 +224,7 @@
     // Validate OTP
     async function validateOTP() {
       const otp = Array.from(otpInputs).map(input => input.value).join('');
-      if (otp.length !== 6) {
-        message.textContent = 'Please enter a 6-digit OTP.';
-        message.classList.add('error');
-        message.classList.remove('success');
-        return;
-      }
+      const id = window.location.pathname.split('/')[2]; // Extract ID from URL
 
       try {
         const response = await fetch(`/validate-otp/${id}`, {
@@ -246,28 +234,22 @@
         });
 
         const data = await response.json();
-        if (response.ok && data.status === 'OTP validated') {
+        if (response.ok) {
           message.textContent = 'OTP validated! Redirecting...';
           message.classList.add('success');
           message.classList.remove('error');
           setTimeout(() => {
-            window.location.href = `/editproperty/${id}`; // Redirect to edit property page
+            window.location.href = `/addproperty/${id}`; // Redirect to the protected page
           }, 1000);
         } else {
-          message.textContent = data.error || 'Invalid OTP. Please try again.';
+          message.textContent = data.error || 'OTP validation failed.';
           message.classList.add('error');
           message.classList.remove('success');
-          // Clear inputs on invalid OTP
-          otpInputs.forEach(input => {
-            input.value = '';
-            input.classList.remove('filled');
-          });
         }
       } catch (error) {
         message.textContent = 'An error occurred. Please try again.';
         message.classList.add('error');
         message.classList.remove('success');
-        console.error('Error validating OTP:', error);
       }
     }
   </script>
