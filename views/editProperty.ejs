@@ -1,28 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Edit Property</title>
-  <link rel="stylesheet" href="/styles.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Property</title>
 </head>
 <body>
-  <div class="container">
-    <h2>Edit Property</h2>
+    <h1>Edit Property</h1>
     <form action="/editproperty/<%= property._id %>" method="POST">
-      <label for="property_name">Property Name:</label>
-      <input type="text" id="property_name" name="property_name" value="<%= property.name %>" required />
+        <label for="property_name">Property Name:</label>
+        <input type="text" id="property_name" name="property_name" value="<%= property.name %>" required><br><br>
 
-      <label for="units">Units:</label>
-      <input type="number" id="units" name="units" value="<%= property.units %>" required />
+        <label for="units">Units:</label>
+        <input type="number" id="units" name="units" value="<%= property.units %>" required><br><br>
 
-      <label for="address">Address:</label>
-      <input type="text" id="address" name="address" value="<%= property.address %>" required />
+        <label for="address">Address:</label>
+        <input type="text" id="address" name="address" value="<%= property.address %>" required><br><br>
 
-      <label for="totalAmount">Total Amount:</label>
-      <input type="number" id="totalAmount" name="totalAmount" value="<%= property.totalAmount %>" required />
+        <label for="totalAmount">Total Amount:</label>
+        <input type="number" id="totalAmount" name="totalAmount" value="<%= property.totalAmount %>" required><br><br>
 
-      <button type="submit">Update Property</button>
+        <button type="submit">Update Property</button>
     </form>
-  </div>
 </body>
 </html>
