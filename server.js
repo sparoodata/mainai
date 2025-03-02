@@ -138,6 +138,9 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
             return res.status(404).send('Authorization record not found.');
         }
 
+        // Debug: Log the current state of the authorization record
+        console.log('Authorization record before processing:', authorizeRecord);
+
         // Check if the authorization has already been used
         if (authorizeRecord.used) {
             console.error('Authorization already used for ID:', id);
@@ -191,6 +194,9 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
         authorizeRecord.used = true;
         await authorizeRecord.save();
 
+        // Debug: Log the updated authorization record
+        console.log('Authorization record after processing:', authorizeRecord);
+
         // Send WhatsApp confirmation message
         await sendMessage(authorizeRecord.phoneNumber, `Property *${property_name}* has been successfully added.`);
 
@@ -200,7 +206,6 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
         res.status(500).send('An error occurred while adding the property and image.');
     }
 });
-
 
 
 
