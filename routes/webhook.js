@@ -403,36 +403,40 @@ async function sendTenantOptions(phoneNumber) {
 
 
 async function sendPropertyLink(phoneNumber, action) {
-    console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}`); // Debug log
+  console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}`); // Debug log
 
-    try {
-        // Find the user by phone number
-        const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
-        if (!user) {
-            console.error(`No user found for phone number: +${phoneNumber}`);
-            await sendMessage(phoneNumber, 'User not found. Please register first.');
-            return;
-        }
+  try {
+    // Log the phone number being queried
+    console.log(`Querying Authorize collection for phoneNumber: +${phoneNumber}`);
 
-        // Log the user ID
-        console.log(`User found with ID: ${user._id}`); // Debug log
-
-        // Construct the long URL for OTP verification
-        const longUrl = `${GLITCH_HOST}/authorize/${user._id}`;
-        console.log(`Long URL generated: ${longUrl}`); // Debug log
-
-        // Shorten the URL
-        const shortUrl = await shortenUrl(longUrl);
-        console.log(`Short URL generated: ${shortUrl}`); // Debug log
-
-        // Send the OTP verification link to the user
-        await sendMessage(phoneNumber, `Proceed: ${shortUrl}`);
-        console.log(`OTP verification link sent to ${phoneNumber}`); // Debug log
-    } catch (error) {
-        console.error('Error in sendPropertyLink:', error); // Debug log
-        await sendMessage(phoneNumber, 'Failed to retrieve user record. Please try again.');
+    // Find the document in the 'authorizes' collection based on the phone number
+    const authorizeRecord = await Authorize.findOne({ phoneNumber: `+${phoneNumber}` });
+    if (!authorizeRecord) {
+      console.error(`No authorization record found for phone number: +${phoneNumber}`);
+      await sendMessage(phoneNumber, 'Authorization record not found. Please contact support.');
+      return;
     }
+
+    // Log the authorizeRecord ID
+    console.log(`Authorize record found with ID: ${authorizeRecord._id}`); // Debug log
+
+    // Construct the long URL for OTP verification
+    const longUrl = `${GLITCH_HOST}/authorize/${authorizeRecord._id}`;
+    console.log(`Long URL generated: ${longUrl}`); // Debug log
+
+    // Shorten the URL
+    const shortUrl = await shortenUrl(longUrl);
+    console.log(`Short URL generated: ${shortUrl}`); // Debug log
+
+    // Send the OTP verification link to the user
+    await sendMessage(phoneNumber, `Proceed: ${shortUrl}`);
+    console.log(`OTP verification link sent to ${phoneNumber}`); // Debug log
+  } catch (error) {
+    console.error('Error in sendPropertyLink:', error); // Debug log
+    await sendMessage(phoneNumber, 'Failed to retrieve authorization record. Please try again.');
+  }
 }
+
 // Export the sendMessage function
 module.exports = {
   router,

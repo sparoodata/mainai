@@ -28,8 +28,7 @@
     "fs": "^0.0.2",
     "dropbox": "^10.34.0",
     "isomorphic-fetch": "^3.0.0",
-    "aws-sdk": "^2.1692.0",
-    "@aws-sdk/client-s3": "^3.758.0"
+    "aws-sdk": "^2.1692.0"
   },
   "engines": {
     "node": "14.x"
