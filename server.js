@@ -672,7 +672,7 @@ app.post('/edittenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { nam
     // Debug: Log incoming data
     console.log('Request body:', req.body);
 
-    // Validate the unitAssigned value
+    // Validate the unitAssigned value (expects an ObjectId)
     const unit = await Unit.findById(unitAssigned);
     if (!unit) {
       return res.status(400).send(`No unit found with ID: ${unitAssigned}`);
@@ -727,52 +727,6 @@ app.post('/edittenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { nam
     res.status(500).send('Error updating tenant.');
   }
 });
-
-app.post('/deletetenant/:id', checkOTPValidation, async (req, res) => {
-  const id = req.params.id;
-  const { tenantId } = req.body; // Expect tenantId from the form
-
-  try {
-    const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
-    }
-
-    if (authorizeRecord.used) {
-      return res.status(403).send('This link has already been used.');
-    }
-
-    const phoneNumber = authorizeRecord.phoneNumber;
-    const user = await User.findOne({ phoneNumber });
-    if (!user) {
-      return res.status(404).send('User not found.');
-    }
-
-    const tenant = await Tenant.findOneAndDelete({ _id: tenantId, userId: user._id });
-    if (!tenant) {
-      return res.status(404).send('Tenant not found or you do not have permission to delete it.');
-    }
-
-    // Send WhatsApp confirmation message
-    await sendMessage(
-      phoneNumber,
-      `Tenant "${tenant.name}" has been successfully deleted.`
-    );
-
-    // Mark authorization as used and delete it
-    authorizeRecord.used = true;
-    await authorizeRecord.save();
-    await Authorize.findByIdAndDelete(id);
-
-    res.send('Tenant deleted successfully!');
-  } catch (error) {
-    console.error('Error deleting tenant:', error);
-    res.status(500).send('Error deleting tenant.');
-  }
-});
-
-
-
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1183,6 +1137,7 @@ app.get('/addtenant/:id', checkOTPValidation, async (req, res) => {
 
 app.get('/edittenant/:id', checkOTPValidation, async (req, res) => {
   const id = req.params.id;
+  const tenantId = req.query.tenantId; // Expect tenantId as a query parameter
 
   try {
     const authorizeRecord = await Authorize.findById(id);
@@ -1200,14 +1155,23 @@ app.get('/edittenant/:id', checkOTPValidation, async (req, res) => {
       return res.status(404).send('User not found.');
     }
 
+    // Fetch all tenants for the user (for selection if needed)
     const tenants = await Tenant.find({ userId: user._id });
     if (!tenants.length) {
       return res.status(404).send('No tenants found to edit.');
     }
 
+    // Fetch the specific tenant being edited
+    const tenant = await Tenant.findOne({ _id: tenantId, userId: user._id });
+    if (!tenant) {
+      return res.status(404).send('Tenant not found or invalid tenantId.');
+    }
+
     const properties = await Property.find({ userId: user._id });
     const units = await Unit.find({ userId: user._id });
-    res.render('editTenant', { id, tenants, properties, units });
+
+    // Render the editTenant form with the specific tenant
+    res.render('editTenant', { id, tenants, properties, units, tenant });
   } catch (error) {
     console.error('Error rendering edit tenant form:', error);
     res.status(500).send('An error occurred while rendering the form.');
