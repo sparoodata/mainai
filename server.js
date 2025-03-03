@@ -350,7 +350,7 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
     // Send WhatsApp confirmation
     await sendMessage(
       phoneNumber,
-      `Tenant "${name}" has been added to unit "${unit.unitNumber}" at property "${propertyName}".`
+      `Tenant "${name}" has been added to unit "${unit.unitNumber}" (ID: ${unit.unit_id}) at property "${propertyName}".`
     );
 
     // Mark authorization as used and delete it
@@ -669,9 +669,19 @@ app.post('/edittenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { nam
       return res.status(404).send('Tenant not found or you do not have permission to edit it.');
     }
 
+    // Debug: Log incoming data
+    console.log('Request body:', req.body);
+
+    // Validate the unitAssigned value
+    const unit = await Unit.findById(unitAssigned);
+    if (!unit) {
+      return res.status(400).send(`No unit found with ID: ${unitAssigned}`);
+    }
+
+    // Update tenant fields
     tenant.name = name;
     tenant.propertyName = propertyName;
-    tenant.unitAssigned = unitAssigned;
+    tenant.unitAssigned = unit._id; // Use the validated Unit's _id
     tenant.lease_start = new Date(lease_start);
     tenant.deposit = deposit;
     tenant.rent_amount = rent_amount;
@@ -705,12 +715,10 @@ app.post('/edittenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { nam
     // Send WhatsApp confirmation
     await sendMessage(
       phoneNumber,
-      `Tenant "${name}" in unit "${unitAssigned}" at property "${propertyName}" has been updated.`
+      `Tenant "${name}" in unit "${unit.unitNumber}" (ID: ${unit.unit_id}) at property "${propertyName}" has been updated.`
     );
 
     // Mark authorization as used and delete it
-    authorizeRecord.used = true;
-    await authorizeRecord.save();
     await Authorize.findByIdAndDelete(id);
 
     res.send('Tenant updated successfully!');
