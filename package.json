@@ -28,10 +28,11 @@
     "fs": "^0.0.2",
     "dropbox": "^10.34.0",
     "isomorphic-fetch": "^3.0.0",
-    "aws-sdk": "^2.1692.0"
+    "aws-sdk": "^2.1692.0",
+    "groq-sdk": "^0.15.0"
   },
   "engines": {
-    "node": "14.x"
+    "node": "16.x"
   },
   "repository": {
     "url": "https://glitch.com/edit/#!/glitch-hello-node"
