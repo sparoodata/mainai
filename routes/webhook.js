@@ -401,6 +401,61 @@ async function sendUnitOptions(phoneNumber) {
   });
 }
 
+// Helper function for Reports Submenu
+async function sendReportsSubmenu(phoneNumber) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: 'Reports Options' },
+      body: { text: 'Please select a report type:' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'current_rent_status', title: 'Current Rent Status' } },
+          { type: 'reply', reply: { id: 'tenant_info', title: 'Tenant Info' } },
+          { type: 'reply', reply: { id: 'tenants_due', title: 'Tenants Due' } },
+        ],
+      },
+    },
+  };
+
+  // Since WhatsApp limits buttons to 3, we'll handle the rest with a second message or adjust as needed
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: {
+      'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  // Send a second message for the remaining options (Property details, Unit details, Tenant Details)
+  const secondButtonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: 'More Reports' },
+      body: { text: 'More report options:' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'property_details', title: 'Property Details' } },
+          { type: 'reply', reply: { id: 'unit_details', title: 'Unit Details' } },
+          { type: 'reply', reply: { id: 'tenant_details', title: 'Tenant Details' } },
+        ],
+      },
+    },
+  };
+
+  await axios.post(WHATSAPP_API_URL, secondButtonMenu, {
+    headers: {
+      'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+  });
+}
+
 // Helper function for Tenant Options (Add, Edit, Remove)
 async function sendTenantOptions(phoneNumber) {
   const buttonMenu = {
