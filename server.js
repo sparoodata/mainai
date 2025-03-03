@@ -17,6 +17,8 @@ const Unit = require('./models/Unit');
 const Otp = require('./models/Otp');
 const Dropbox = require('dropbox').Dropbox;
 const fetch = require('isomorphic-fetch');
+const Groq = require('groq-sdk');
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const app = express();
 const port = process.env.PORT || 3000; // Glitch uses dynamic port
