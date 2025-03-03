@@ -29,15 +29,11 @@
     </select>
 
     <label for="unitAssigned">Unit Assigned:</label>
-    <select name="unitAssigned" id="unitAssigned" required>
-      <option value="">-- Select Unit --</option>
-      <% units.forEach(unit => { %>
-        <% const property = properties.find(p => p._id.toString() === unit.property.toString()); %>
-        <option value="<%= unit.unitNumber %>">
-          <%= unit.unitNumber %> (Property: <%= property ? property.name : 'Unknown' %>)
-        </option>
-      <% }) %>
-    </select>
+<select name="unitAssigned">
+  <% units.forEach(unit => { %>
+    <option value="<%= unit._id %>"><%= unit.unitNumber %> (<%= unit.unit_id %>)</option>
+  <% }); %>
+</select>
 
     <label for="lease_start">Lease Start Date:</label>
     <input type="date" name="lease_start" id="lease_start" required>

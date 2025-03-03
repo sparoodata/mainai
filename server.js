@@ -300,10 +300,13 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
       return res.status(404).send('User not found.');
     }
 
-    // Validate that unitAssigned is a valid Unit ObjectId
+    // Debug: Log the incoming unitAssigned value
+    console.log('unitAssigned from form:', unitAssigned);
+
+    // Find the unit by _id (expects a valid ObjectId)
     const unit = await Unit.findById(unitAssigned);
     if (!unit) {
-      return res.status(400).send('Invalid unit ID provided.');
+      return res.status(400).send(`No unit found with ID: ${unitAssigned}`);
     }
 
     const tenant = new Tenant({
@@ -311,11 +314,11 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
       phoneNumber: user.phoneNumber,
       userId: user._id,
       propertyName,
-      unitAssigned: unit._id, // Use the validated Unit ObjectId
+      unitAssigned: unit._id, // Use the Unit's _id (ObjectId) for the reference
       lease_start: new Date(lease_start),
       deposit,
       rent_amount,
-      tenant_id: tenant_id || generateTenantId(), // Use provided ID or generate one
+      tenant_id: tenant_id || await generateTenantId(), // Use provided ID or generate one
     });
 
     if (req.files.photo) {
