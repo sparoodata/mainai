@@ -300,12 +300,18 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
       return res.status(404).send('User not found.');
     }
 
+    // Validate that unitAssigned is a valid Unit ObjectId
+    const unit = await Unit.findById(unitAssigned);
+    if (!unit) {
+      return res.status(400).send('Invalid unit ID provided.');
+    }
+
     const tenant = new Tenant({
       name,
       phoneNumber: user.phoneNumber,
       userId: user._id,
       propertyName,
-      unitAssigned,
+      unitAssigned: unit._id, // Use the validated Unit ObjectId
       lease_start: new Date(lease_start),
       deposit,
       rent_amount,
@@ -341,12 +347,10 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
     // Send WhatsApp confirmation
     await sendMessage(
       phoneNumber,
-      `Tenant "${name}" has been added to unit "${unitAssigned}" at property "${propertyName}".`
+      `Tenant "${name}" has been added to unit "${unit.unitNumber}" at property "${propertyName}".`
     );
 
     // Mark authorization as used and delete it
-    authorizeRecord.used = true;
-    await authorizeRecord.save();
     await Authorize.findByIdAndDelete(id);
 
     res.send('Tenant added successfully!');
@@ -355,7 +359,6 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name
     res.status(500).send('An error occurred while adding the tenant.');
   }
 });
-
 // GET route to render the edit property form with current data
 // POST route to update the property
 // POST route to update the property
