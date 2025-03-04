@@ -3,10 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="/styles.css">
     <title>Edit Property</title>
-    <link rel="stylesheet" type="text/css" href="/styles.css"> <!-- Assuming you have a CSS file -->
 </head>
 <body>
+    <!-- Success Message -->
+    <div class="success-message">
+        Authorization successful!
+    </div>
+
     <!-- Form Container -->
     <div class="container">
         <h2>Edit Property</h2>
@@ -56,8 +61,8 @@
 
     <!-- Script for Validation and Pre-filling -->
     <script>
-        // Form Validation
         function validateForm() {
+            // Get form fields
             const propertyId = document.getElementById('propertyId').value;
             const propertyName = document.getElementById('property_name').value;
             const units = document.getElementById('units').value;
@@ -82,7 +87,10 @@
             }
 
             // Property Name validation
-            if (propertyName.length > 50) {
+            if (!propertyName) {
+                document.getElementById('propertyNameError').innerHTML = "Please enter a property name.";
+                valid = false;
+            } else if (propertyName.length > 50) {
                 document.getElementById('propertyNameError').innerHTML = "Property name cannot exceed 50 characters.";
                 valid = false;
             }
@@ -94,7 +102,10 @@
             }
 
             // Address validation
-            if (address.length > 80) {
+            if (!address) {
+                document.getElementById('addressError').innerHTML = "Please enter an address.";
+                valid = false;
+            } else if (address.length > 80) {
                 document.getElementById('addressError').innerHTML = "Address cannot exceed 80 characters.";
                 valid = false;
             }
