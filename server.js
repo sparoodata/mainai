@@ -1133,16 +1133,21 @@ app.get('/edittenant/:id', checkOTPValidation, async (req, res) => {
       return res.status(404).send('User not found.');
     }
 
-    const tenants = await Tenant.find({ userId: user._id });
-    if (!tenants.length) {
-      console.log(`No tenants found for userId: ${user._id}`);
-      return res.status(404).send('No tenants found to edit.');
+    if (!tenantId || !mongoose.Types.ObjectId.isValid(tenantId)) {
+      console.log(`Invalid or missing tenantId: ${tenantId}`);
+      return res.status(400).send('Invalid or missing tenantId.');
+    }
+
+    const tenant = await Tenant.findOne({ _id: tenantId, userId: user._id });
+    if (!tenant) {
+      console.log(`Tenant not found for tenantId: ${tenantId}, userId: ${user._id}`);
+      return res.status(404).send('Tenant not found or invalid tenantId.');
     }
 
     const properties = await Property.find({ userId: user._id });
     const units = await Unit.find({ userId: user._id });
 
-    res.render('editTenant', { id, tenants, properties, units, tenantId });
+    res.render('editTenant', { id, tenant, properties, units });
   } catch (error) {
     console.error('Error rendering edit tenant form:', error);
     res.status(500).send('An error occurred while rendering the form.');

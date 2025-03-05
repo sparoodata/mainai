@@ -558,10 +558,8 @@ async function promptTenantSelection(phoneNumber, action, propertyId) {
 // Helper function to send property link with optional tenantId
 async function sendPropertyLink(phoneNumber, action, tenantId = null) {
   console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}, tenantId: ${tenantId}`);
-
   try {
     let authorizeRecord = await Authorize.findOne({ phoneNumber: `+${phoneNumber}` });
-
     if (!authorizeRecord) {
       authorizeRecord = new Authorize({
         phoneNumber: `+${phoneNumber}`,
@@ -592,7 +590,6 @@ async function sendPropertyLink(phoneNumber, action, tenantId = null) {
     await sendMessage(phoneNumber, 'Failed to retrieve authorization record. Please try again.');
   }
 }
-
 // Export the module
 module.exports = {
   router,
