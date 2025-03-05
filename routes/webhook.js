@@ -3,19 +3,20 @@ const express = require('express');
 const axios = require('axios');
 const User = require('../models/User');
 const Tenant = require('../models/Tenant');
+const Property = require('../models/Property'); // Add Property model
 const Authorize = require('../models/Authorize');
-const Groq = require('groq-sdk'); // Add Groq SDK
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY }); // Initialize Groq with API key
+const Groq = require('groq-sdk');
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const router = express.Router();
 
 // WhatsApp API credentials
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
-const GLITCH_HOST = process.env.GLITCH_HOST; // Your Glitch project URL
+const GLITCH_HOST = process.env.GLITCH_HOST;
 
 // Session management to track user interactions
-const sessions = {};      // e.g., { "918885305097": { action: "rent_paid" } }
+const sessions = {};      // e.g., { "918885305097": { action: "select_property", properties: [...] } }
 let userResponses = {};   // e.g., { "918885305097": "Yes_authorize" }
 
 // Helper function to shorten URLs
@@ -25,7 +26,7 @@ async function shortenUrl(longUrl) {
     return response.data;
   } catch (error) {
     console.error('Error shortening URL:', error.response ? error.response.data : error);
-    return longUrl; // Fallback to long URL if shortener fails
+    return longUrl;
   }
 }
 
@@ -37,7 +38,7 @@ async function getGroqAIResponse(message, phoneNumber, isAssistanceMode) {
       : "You are an AI agent for a rental management app. If the user needs help with commands, suggest using 'Help' to see the menu. Otherwise, respond naturally to the message.";
 
     const response = await groq.chat.completions.create({
-      model: 'llama3-8b-8192', // Use LLaMA 3 8B model (adjust as needed)
+      model: 'llama3-8b-8192',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: message },
@@ -76,13 +77,11 @@ router.get('/', (req, res) => {
 router.post('/', async (req, res) => {
   const body = req.body;
 
-  // Check if this is an event from WhatsApp Business API
   if (body.object === 'whatsapp_business_account') {
     const entry = body.entry[0];
     const changes = entry.changes[0];
     const value = changes.value;
 
-    // Handle contacts to capture profile name
     if (value.contacts) {
       const contact = value.contacts[0];
       const contactPhoneNumber = `+${contact.wa_id}`;
@@ -105,33 +104,53 @@ router.post('/', async (req, res) => {
 
     if (value.messages) {
       const message = value.messages[0];
-      const fromNumber = message.from; // e.g., "918885305097"
-      const phoneNumber = `+${fromNumber}`; // e.g., "+918885305097"
+      const fromNumber = message.from;
+      const phoneNumber = `+${fromNumber}`;
       const text = message.text ? message.text.body.trim() : null;
       const interactive = message.interactive || null;
 
-      // Handle interactive button reply
       if (interactive && interactive.type === 'button_reply') {
         const buttonReplyId = interactive.button_reply.id;
         console.log(`Button reply received: ${buttonReplyId} from ${fromNumber}`);
         userResponses[fromNumber] = buttonReplyId;
       }
 
-      // Initialize session for this number if it doesn't exist
       if (!sessions[fromNumber]) {
         sessions[fromNumber] = { action: null };
       }
 
-      // Log the received message
       console.log(`Received message from ${phoneNumber}: ${text}`);
 
-      // Handle messages
       if (text) {
-        if (text.toLowerCase() === 'help') {
-          try {
-            sessions[fromNumber].action = null; // Reset any pending action
+        if (sessions[fromNumber].action === 'select_property') {
+          const propertyIndex = parseInt(text) - 1;
+          const properties = sessions[fromNumber].properties;
 
-            // Send WhatsApp button menu
+          if (propertyIndex >= 0 && propertyIndex < properties.length) {
+            const selectedProperty = properties[propertyIndex];
+            await promptTenantSelection(fromNumber, 'edittenant', selectedProperty._id);
+            sessions[fromNumber].action = 'select_tenant_to_edit';
+            sessions[fromNumber].propertyId = selectedProperty._id;
+          } else {
+            await sendMessage(fromNumber, 'Invalid property selection. Please reply with a valid number.');
+          }
+        } else if (sessions[fromNumber].action === 'select_tenant_to_edit') {
+          const tenantIndex = parseInt(text) - 1;
+          const tenants = sessions[fromNumber].tenants;
+
+          if (tenantIndex >= 0 && tenantIndex < tenants.length) {
+            const selectedTenant = tenants[tenantIndex];
+            await sendPropertyLink(fromNumber, 'edittenant', selectedTenant._id);
+            sessions[fromNumber].action = null;
+            delete sessions[fromNumber].propertyId;
+            delete sessions[fromNumber].tenants;
+          } else {
+            await sendMessage(fromNumber, 'Invalid tenant selection. Please reply with a valid number.');
+          }
+        } else if (text.toLowerCase() === 'help') {
+          try {
+            sessions[fromNumber].action = null;
+
             const buttonMenu = {
               messaging_product: 'whatsapp',
               to: fromNumber,
@@ -163,18 +182,15 @@ router.post('/', async (req, res) => {
             console.error('Error sending button menu:', error.response ? error.response.data : error);
           }
         } else if (text.startsWith('\\')) {
-          // AI assistance mode
-          const query = text.substring(1).trim(); // Remove '\'
+          const query = text.substring(1).trim();
           const aiResponse = await getGroqAIResponse(query, phoneNumber, true);
           await sendMessage(fromNumber, aiResponse);
         } else if (!sessions[fromNumber].action) {
-          // Default AI agent mode for random messages (not in a session action like rent_paid)
           const aiResponse = await getGroqAIResponse(text, phoneNumber, false);
           await sendMessage(fromNumber, aiResponse);
         }
       }
 
-      // Handle interactive message responses
       if (interactive) {
         const selectedOption = interactive.button_reply.id;
         if (selectedOption === 'account_info') {
@@ -244,13 +260,12 @@ router.post('/', async (req, res) => {
         } else if (selectedOption === 'add_tenant') {
           await sendPropertyLink(fromNumber, 'addtenant');
         } else if (selectedOption === 'edit_tenant') {
-          await sendPropertyLink(fromNumber, 'edittenant');
+          await promptPropertySelection(fromNumber, 'edittenant');
         } else if (selectedOption === 'remove_tenant') {
           await sendPropertyLink(fromNumber, 'removetenant');
         }
       }
 
-      // Handle text input when expecting tenant ID for rent payment
       if (sessions[fromNumber].action === 'rent_paid' && text) {
         const tenantId = text.trim();
         try {
@@ -260,7 +275,7 @@ router.post('/', async (req, res) => {
             await tenant.save();
             await sendMessage(fromNumber, `Rent payment confirmed for Tenant ID: ${tenantId}.`);
             console.log(`Tenant rent status updated to paid for Tenant ID: ${tenantId}`);
-            sessions[fromNumber].action = null; // Reset session action
+            sessions[fromNumber].action = null;
           } else {
             await sendMessage(fromNumber, `Tenant with ID "${tenantId}" not found.`);
           }
@@ -274,7 +289,6 @@ router.post('/', async (req, res) => {
     return res.sendStatus(404);
   }
 
-  // Respond to WhatsApp API with success
   res.sendStatus(200);
 });
 
@@ -306,14 +320,14 @@ async function waitForUserResponse(phoneNumber, timeout = 30000) {
         const response = userResponses[phoneNumber];
         clearInterval(intervalId);
         console.log(`Captured user response: ${response} from ${phoneNumber}`);
-        delete userResponses[phoneNumber]; // Clear the response after use
+        delete userResponses[phoneNumber];
         resolve(response);
       } else if (Date.now() - startTime >= timeout) {
         clearInterval(intervalId);
         console.error(`Authorization timed out for ${phoneNumber}`);
         reject(new Error('Authorization timed out.'));
       }
-    }, 500); // Poll every 500ms
+    }, 500);
   });
 }
 
@@ -421,7 +435,6 @@ async function sendReportsSubmenu(phoneNumber) {
     },
   };
 
-  // Since WhatsApp limits buttons to 3, we'll handle the rest with a second message or adjust as needed
   await axios.post(WHATSAPP_API_URL, buttonMenu, {
     headers: {
       'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
@@ -429,7 +442,6 @@ async function sendReportsSubmenu(phoneNumber) {
     },
   });
 
-  // Send a second message for the remaining options (Property details, Unit details, Tenant Details)
   const secondButtonMenu = {
     messaging_product: 'whatsapp',
     to: phoneNumber,
@@ -484,9 +496,59 @@ async function sendTenantOptions(phoneNumber) {
   });
 }
 
-// Helper function to send property link
-async function sendPropertyLink(phoneNumber, action) {
-  console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}`);
+// New helper function to prompt property selection
+async function promptPropertySelection(phoneNumber, action) {
+  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+  if (!user) {
+    await sendMessage(phoneNumber, 'User not found.');
+    return;
+  }
+
+  const properties = await Property.find({ userId: user._id });
+  if (!properties.length) {
+    await sendMessage(phoneNumber, 'No properties found to edit tenants for.');
+    return;
+  }
+
+  let propertyList = 'Select a property by replying with its number:\n';
+  properties.forEach((property, index) => {
+    propertyList += `${index + 1}. ${property.name} (Address: ${property.address})\n`;
+  });
+  await sendMessage(phoneNumber, propertyList);
+
+  sessions[phoneNumber] = { action: 'select_property', properties };
+}
+
+// New helper function to prompt tenant selection for a specific property
+async function promptTenantSelection(phoneNumber, action, propertyId) {
+  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+  if (!user) {
+    await sendMessage(phoneNumber, 'User not found.');
+    return;
+  }
+
+  // Find tenants whose unitAssigned references a unit in the selected property
+  const tenants = await Tenant.find({ userId: user._id })
+    .populate('unitAssigned') // Populate unitAssigned to check property
+    .then(tenants => tenants.filter(tenant => tenant.unitAssigned && tenant.unitAssigned.property.toString() === propertyId.toString()));
+
+  if (!tenants.length) {
+    await sendMessage(phoneNumber, 'No tenants found for this property.');
+    return;
+  }
+
+  let tenantList = 'Select a tenant to edit by replying with their number:\n';
+  tenants.forEach((tenant, index) => {
+    tenantList += `${index + 1}. ${tenant.name} (ID: ${tenant.tenant_id || tenant._id})\n`;
+  });
+  await sendMessage(phoneNumber, tenantList);
+
+  sessions[phoneNumber].tenants = tenants;
+}
+
+// Updated helper function to send property link with optional tenantId
+async function sendPropertyLink(phoneNumber, action, tenantId = null) {
+  console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}, tenantId: ${tenantId}`);
 
   try {
     let authorizeRecord = await Authorize.findOne({ phoneNumber: `+${phoneNumber}` });
@@ -507,7 +569,8 @@ async function sendPropertyLink(phoneNumber, action) {
       console.log(`Updated authorization record with ID: ${authorizeRecord._id}, action: ${action}`);
     }
 
-    const longUrl = `${GLITCH_HOST}/authorize/${authorizeRecord._id}`;
+    const baseUrl = `${GLITCH_HOST}/authorize/${authorizeRecord._id}`;
+    const longUrl = tenantId ? `${baseUrl}?tenantId=${tenantId}` : baseUrl;
     console.log(`Long URL generated: ${longUrl}`);
 
     const shortUrl = await shortenUrl(longUrl);
