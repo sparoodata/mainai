@@ -15,33 +15,20 @@
   </style>
 </head>
 <body>
-  <h1>Edit Tenant</h1>
+  <h1>Edit Tenant: <%= tenant.name %></h1>
   <form action="/edittenant/<%= id %>" method="POST" enctype="multipart/form-data">
-    <label for="tenantId">Select Tenant:</label>
-    <select name="tenantId" id="tenantId" required onchange="populateFields(this)">
-      <option value="">-- Select Tenant --</option>
-      <% tenants.forEach(tenant => { %>
-        <option value="<%= tenant._id %>"
-                data-name="<%= tenant.name %>"
-                data-property-name="<%= tenant.propertyName %>"
-                data-unit-assigned="<%= tenant.unitAssigned %>"
-                data-lease-start="<%= tenant.lease_start.toISOString().split('T')[0] %>"
-                data-deposit="<%= tenant.deposit %>"
-                data-rent-amount="<%= tenant.rent_amount %>"
-                <%= tenant._id.toString() === (typeof tenantId === 'string' ? tenantId : '') ? 'selected' : '' %>>
-          <%= tenant.name %> (Unit: <%= tenant.unitAssigned %>)
-        </option>
-      <% }) %>
-    </select>
+    <input type="hidden" name="tenantId" value="<%= tenant._id %>">
 
     <label for="name">Name:</label>
-    <input type="text" name="name" id="name" required>
+    <input type="text" name="name" id="name" value="<%= tenant.name %>" required>
 
     <label for="propertyName">Property Name:</label>
     <select name="propertyName" id="propertyName" required>
       <option value="">-- Select Property --</option>
       <% properties.forEach(property => { %>
-        <option value="<%= property.name %>"><%= property.name %></option>
+        <option value="<%= property.name %>" <%= tenant.propertyName === property.name ? 'selected' : '' %>>
+          <%= property.name %>
+        </option>
       <% }) %>
     </select>
 
@@ -49,18 +36,20 @@
     <select name="unitAssigned" id="unitAssigned" required>
       <option value="">-- Select Unit --</option>
       <% units.forEach(unit => { %>
-        <option value="<%= unit._id %>"><%= unit.unitNumber %> (<%= unit.unit_id %>)</option>
+        <option value="<%= unit._id %>" <%= tenant.unitAssigned.toString() === unit._id.toString() ? 'selected' : '' %>>
+          <%= unit.unitNumber %> (<%= unit.unit_id %>)
+        </option>
       <% }) %>
     </select>
 
     <label for="lease_start">Lease Start Date:</label>
-    <input type="date" name="lease_start" id="lease_start" required>
+    <input type="date" name="lease_start" id="lease_start" value="<%= tenant.lease_start.toISOString().split('T')[0] %>" required>
 
     <label for="deposit">Deposit:</label>
-    <input type="number" name="deposit" id="deposit" required>
+    <input type="number" name="deposit" id="deposit" value="<%= tenant.deposit %>" required>
 
     <label for="rent_amount">Rent Amount:</label>
-    <input type="number" name="rent_amount" id="rent_amount" required>
+    <input type="number" name="rent_amount" id="rent_amount" value="<%= tenant.rent_amount %>" required>
 
     <label for="photo">Update Photo:</label>
     <input type="file" name="photo" id="photo" accept="image/*">
@@ -70,30 +59,5 @@
 
     <button type="submit">Update Tenant</button>
   </form>
-
-  <script>
-    function populateFields(select) {
-      const selectedOption = select.options[select.selectedIndex];
-      document.getElementById('name').value = selectedOption.getAttribute('data-name') || '';
-      document.getElementById('propertyName').value = selectedOption.getAttribute('data-property-name') || '';
-      document.getElementById('unitAssigned').value = selectedOption.getAttribute('data-unit-assigned') || '';
-      document.getElementById('lease_start').value = selectedOption.getAttribute('data-lease-start') || '';
-      document.getElementById('deposit').value = selectedOption.getAttribute('data-deposit') || '';
-      document.getElementById('rent_amount').value = selectedOption.getAttribute('data-rent-amount') || '';
-    }
-
-    // Pre-populate fields if tenantId is provided in query
-    window.onload = function() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const tenantId = urlParams.get('tenantId');
-      if (tenantId) {
-        const select = document.getElementById('tenantId');
-        select.value = tenantId;
-        if (select.value === tenantId) {
-          populateFields(select);
-        }
-      }
-    };
-  </script>
 </body>
 </html>

@@ -174,12 +174,24 @@
     const otpInputs = document.querySelectorAll('.otp-input');
     const keypadButtons = document.querySelectorAll('.keypad button');
     const message = document.getElementById('message');
-    const id = window.location.pathname.split('/')[2]; // Extract ID from /authorize/:id
+
+    // Extract id and tenantId from URL
+    const pathParts = window.location.pathname.split('/');
+    const id = pathParts[2]; // Extract ID from /authorize/:id
+    const urlParams = new URLSearchParams(window.location.search);
+    const tenantId = urlParams.get('tenantId');
+    console.log(`Extracted id: ${id}, tenantId: ${tenantId}`);
+
+    // Construct base URLs with tenantId if present
+    const requestOtpUrl = tenantId ? `/request-otp/${id}?tenantId=${tenantId}` : `/request-otp/${id}`;
+    const validateOtpUrl = tenantId ? `/validate-otp/${id}?tenantId=${tenantId}` : `/validate-otp/${id}`;
+    console.log(`Request OTP URL: ${requestOtpUrl}`);
+    console.log(`Validate OTP URL: ${validateOtpUrl}`);
 
     // Automatically request OTP when the page loads
     window.addEventListener('load', async () => {
       try {
-        const response = await fetch(`/request-otp/${id}`);
+        const response = await fetch(requestOtpUrl);
         const data = await response.json();
         if (response.ok) {
           message.textContent = `OTP sent to ${data.phoneNumber}. Check WhatsApp!`;
@@ -239,7 +251,7 @@
       }
 
       try {
-        const response = await fetch(`/validate-otp/${id}`, {
+        const response = await fetch(validateOtpUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ otp }),
@@ -250,6 +262,7 @@
           message.textContent = 'OTP validated! Redirecting...';
           message.classList.add('success');
           message.classList.remove('error');
+          console.log(`Redirecting to: ${data.redirect}`);
           setTimeout(() => {
             window.location.href = data.redirect; // Use dynamic redirect from server response
           }, 1000);
