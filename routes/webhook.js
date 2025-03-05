@@ -123,11 +123,13 @@ router.post('/', async (req, res) => {
 
       if (text) {
         if (sessions[fromNumber].action === 'select_property') {
+          console.log(`Property selection received: ${text} from ${fromNumber}`);
           const propertyIndex = parseInt(text) - 1;
           const properties = sessions[fromNumber].properties;
 
           if (propertyIndex >= 0 && propertyIndex < properties.length) {
             const selectedProperty = properties[propertyIndex];
+            console.log(`Selected property: ${selectedProperty.name} (ID: ${selectedProperty._id})`);
             await promptTenantSelection(fromNumber, 'edittenant', selectedProperty._id);
             sessions[fromNumber].action = 'select_tenant_to_edit';
             sessions[fromNumber].propertyId = selectedProperty._id;
@@ -135,11 +137,13 @@ router.post('/', async (req, res) => {
             await sendMessage(fromNumber, 'Invalid property selection. Please reply with a valid number.');
           }
         } else if (sessions[fromNumber].action === 'select_tenant_to_edit') {
+          console.log(`Tenant selection received: ${text} from ${fromNumber}`);
           const tenantIndex = parseInt(text) - 1;
           const tenants = sessions[fromNumber].tenants;
 
           if (tenantIndex >= 0 && tenantIndex < tenants.length) {
             const selectedTenant = tenants[tenantIndex];
+            console.log(`Selected tenant: ${selectedTenant.name} (ID: ${selectedTenant._id})`);
             await sendPropertyLink(fromNumber, 'edittenant', selectedTenant._id);
             sessions[fromNumber].action = null;
             delete sessions[fromNumber].propertyId;
@@ -260,6 +264,7 @@ router.post('/', async (req, res) => {
         } else if (selectedOption === 'add_tenant') {
           await sendPropertyLink(fromNumber, 'addtenant');
         } else if (selectedOption === 'edit_tenant') {
+          console.log(`Edit Tenant selected by ${fromNumber}`);
           await promptPropertySelection(fromNumber, 'edittenant');
         } else if (selectedOption === 'remove_tenant') {
           await sendPropertyLink(fromNumber, 'removetenant');
@@ -496,8 +501,9 @@ async function sendTenantOptions(phoneNumber) {
   });
 }
 
-// New helper function to prompt property selection
+// Helper function to prompt property selection
 async function promptPropertySelection(phoneNumber, action) {
+  console.log(`Prompting property selection for ${phoneNumber}`);
   const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
   if (!user) {
     await sendMessage(phoneNumber, 'User not found.');
@@ -519,8 +525,9 @@ async function promptPropertySelection(phoneNumber, action) {
   sessions[phoneNumber] = { action: 'select_property', properties };
 }
 
-// New helper function to prompt tenant selection for a specific property
+// Helper function to prompt tenant selection for a specific property
 async function promptTenantSelection(phoneNumber, action, propertyId) {
+  console.log(`Prompting tenant selection for property ${propertyId} for ${phoneNumber}`);
   const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
   if (!user) {
     await sendMessage(phoneNumber, 'User not found.');
@@ -546,7 +553,7 @@ async function promptTenantSelection(phoneNumber, action, propertyId) {
   sessions[phoneNumber].tenants = tenants;
 }
 
-// Updated helper function to send property link with optional tenantId
+// Helper function to send property link with optional tenantId
 async function sendPropertyLink(phoneNumber, action, tenantId = null) {
   console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}, tenantId: ${tenantId}`);
 

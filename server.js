@@ -786,7 +786,7 @@ app.get('/request-otp/:id', async (req, res) => {
   }
 });
 
-// Route to validate OTP
+
 app.post('/validate-otp/:id', async (req, res) => {
   const id = req.params.id;
   const { otp } = req.body;
@@ -814,9 +814,9 @@ app.post('/validate-otp/:id', async (req, res) => {
       otpStore.set(phoneNumber, { ...storedOTPData, validated: true });
       console.log(`OTP validated for ${phoneNumber}. Determining redirect...`);
 
-      // Determine the redirect based on the stored action
       let redirectUrl;
-      switch (authorizeRecord.action) {
+      const tenantId = req.query.tenantId; // Preserve tenantId from original URL
+       switch (authorizeRecord.action) {
         case 'addproperty':
           redirectUrl = `/addproperty/${id}`;
           break;
@@ -859,6 +859,11 @@ app.post('/validate-otp/:id', async (req, res) => {
     res.status(500).send('An error occurred while validating OTP.');
   }
 });
+
+
+
+
+
 
 
 // Route to render the OTP input page
