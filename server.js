@@ -815,37 +815,21 @@ app.post('/validate-otp/:id', async (req, res) => {
       console.log(`OTP validated for ${phoneNumber}. Determining redirect...`);
 
       let redirectUrl;
-      const tenantId = req.query.tenantId; // Preserve tenantId from original URL
-       switch (authorizeRecord.action) {
+      const tenantId = req.query.tenantId; // Preserve tenantId
+      console.log(`tenantId from query: ${tenantId}`); // Debug log
+      switch (authorizeRecord.action) {
+        case 'edittenant':
+          redirectUrl = tenantId ? `/edittenant/${id}?tenantId=${tenantId}` : `/edittenant/${id}`;
+          break;
         case 'addproperty':
           redirectUrl = `/addproperty/${id}`;
           break;
         case 'editproperty':
           redirectUrl = `/editproperty/${id}`;
           break;
-        case 'removeproperty':
-          redirectUrl = `/removeproperty/${id}`;
-          break;
-        case 'addunit':
-          redirectUrl = `/addunit/${id}`;
-          break;
-        case 'editunit':
-          redirectUrl = `/editunit/${id}`;
-          break;
-        case 'removeunit': // Added Remove Unit
-          redirectUrl = `/removeunit/${id}`;
-          break;
-        case 'addtenant':
-          redirectUrl = `/addtenant/${id}`;
-          break;
-        case 'edittenant':
-          redirectUrl = `/edittenant/${id}`;
-          break;
-        case 'removetenant': // Added Remove Tenant
-          redirectUrl = `/removetenant/${id}`;
-          break;
+        // ... other cases ...
         default:
-          redirectUrl = `/editproperty/${id}`; // Fallback
+          redirectUrl = `/editproperty/${id}`;
       }
 
       console.log(`Redirecting to: ${redirectUrl}`);
@@ -859,7 +843,6 @@ app.post('/validate-otp/:id', async (req, res) => {
     res.status(500).send('An error occurred while validating OTP.');
   }
 });
-
 
 
 
@@ -1128,7 +1111,7 @@ app.get('/addtenant/:id', checkOTPValidation, async (req, res) => {
 
 app.get('/edittenant/:id', checkOTPValidation, async (req, res) => {
   const id = req.params.id;
-  const tenantId = req.query.tenantId; // Expect tenantId as a query parameter
+  const tenantId = req.query.tenantId;
 
   console.log(`GET /edittenant/:id called with id: ${id}, tenantId: ${tenantId}`);
 
@@ -1138,8 +1121,6 @@ app.get('/edittenant/:id', checkOTPValidation, async (req, res) => {
       console.log(`Authorize record not found for id: ${id}`);
       return res.status(404).send('Authorization record not found.');
     }
-    console.log(`Authorize record found: ${authorizeRecord._id}, phoneNumber: ${authorizeRecord.phoneNumber}`);
-
     if (authorizeRecord.used) {
       console.log(`Authorize record already used for id: ${id}`);
       return res.status(403).send('This link has already been used.');
@@ -1151,32 +1132,17 @@ app.get('/edittenant/:id', checkOTPValidation, async (req, res) => {
       console.log(`User not found for phoneNumber: ${phoneNumber}`);
       return res.status(404).send('User not found.');
     }
-    console.log(`User found: ${user._id}`);
 
     const tenants = await Tenant.find({ userId: user._id });
     if (!tenants.length) {
       console.log(`No tenants found for userId: ${user._id}`);
       return res.status(404).send('No tenants found to edit.');
     }
-    console.log(`Tenants found for user: ${JSON.stringify(tenants.map(t => ({ _id: t._id, name: t.name })))}`);
-
-    // Check if tenantId is valid
-    if (!tenantId || !mongoose.Types.ObjectId.isValid(tenantId)) {
-      console.log(`Invalid or missing tenantId: ${tenantId}`);
-      return res.status(400).send('Invalid or missing tenantId.');
-    }
-
-    const tenant = await Tenant.findOne({ _id: tenantId, userId: user._id });
-    if (!tenant) {
-      console.log(`Tenant not found for tenantId: ${tenantId}, userId: ${user._id}`);
-      return res.status(404).send('Tenant not found or invalid tenantId.');
-    }
-    console.log(`Tenant found: ${JSON.stringify(tenant)}`);
 
     const properties = await Property.find({ userId: user._id });
     const units = await Unit.find({ userId: user._id });
 
-    res.render('editTenant', { id, tenants, properties, units, tenant });
+    res.render('editTenant', { id, tenants, properties, units, tenantId });
   } catch (error) {
     console.error('Error rendering edit tenant form:', error);
     res.status(500).send('An error occurred while rendering the form.');

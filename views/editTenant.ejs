@@ -27,7 +27,8 @@
                 data-unit-assigned="<%= tenant.unitAssigned %>"
                 data-lease-start="<%= tenant.lease_start.toISOString().split('T')[0] %>"
                 data-deposit="<%= tenant.deposit %>"
-                data-rent-amount="<%= tenant.rent_amount %>">
+                data-rent-amount="<%= tenant.rent_amount %>"
+                <%= tenant._id.toString() === (typeof tenantId === 'string' ? tenantId : '') ? 'selected' : '' %>>
           <%= tenant.name %> (Unit: <%= tenant.unitAssigned %>)
         </option>
       <% }) %>
@@ -45,13 +46,12 @@
     </select>
 
     <label for="unitAssigned">Unit Assigned:</label>
-<select name="unitAssigned">
-  <% units.forEach(unit => { %>
-    <option value="<%= unit._id %>" <%= tenant.unitAssigned.toString() === unit._id.toString() ? 'selected' : '' %>>
-      <%= unit.unitNumber %> (<%= unit.unit_id %>)
-    </option>
-  <% }); %>
-</select>
+    <select name="unitAssigned" id="unitAssigned" required>
+      <option value="">-- Select Unit --</option>
+      <% units.forEach(unit => { %>
+        <option value="<%= unit._id %>"><%= unit.unitNumber %> (<%= unit.unit_id %>)</option>
+      <% }) %>
+    </select>
 
     <label for="lease_start">Lease Start Date:</label>
     <input type="date" name="lease_start" id="lease_start" required>
@@ -81,6 +81,19 @@
       document.getElementById('deposit').value = selectedOption.getAttribute('data-deposit') || '';
       document.getElementById('rent_amount').value = selectedOption.getAttribute('data-rent-amount') || '';
     }
+
+    // Pre-populate fields if tenantId is provided in query
+    window.onload = function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tenantId = urlParams.get('tenantId');
+      if (tenantId) {
+        const select = document.getElementById('tenantId');
+        select.value = tenantId;
+        if (select.value === tenantId) {
+          populateFields(select);
+        }
+      }
+    };
   </script>
 </body>
 </html>

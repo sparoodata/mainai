@@ -3,7 +3,7 @@ const express = require('express');
 const axios = require('axios');
 const User = require('../models/User');
 const Tenant = require('../models/Tenant');
-const Property = require('../models/Property'); // Add Property model
+const Property = require('../models/Property');
 const Authorize = require('../models/Authorize');
 const Groq = require('groq-sdk');
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
@@ -16,8 +16,8 @@ const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const GLITCH_HOST = process.env.GLITCH_HOST;
 
 // Session management to track user interactions
-const sessions = {};      // e.g., { "918885305097": { action: "select_property", properties: [...] } }
-let userResponses = {};   // e.g., { "918885305097": "Yes_authorize" }
+const sessions = {};
+let userResponses = {};
 
 // Helper function to shorten URLs
 async function shortenUrl(longUrl) {
@@ -120,6 +120,7 @@ router.post('/', async (req, res) => {
       }
 
       console.log(`Received message from ${phoneNumber}: ${text}`);
+      console.log(`Current session state for ${fromNumber}: ${JSON.stringify(sessions[fromNumber])}`);
 
       if (text) {
         if (sessions[fromNumber].action === 'select_property') {
@@ -521,6 +522,7 @@ async function promptPropertySelection(phoneNumber, action) {
     propertyList += `${index + 1}. ${property.name} (Address: ${property.address})\n`;
   });
   await sendMessage(phoneNumber, propertyList);
+  console.log(`Property list sent to ${phoneNumber}: ${propertyList}`);
 
   sessions[phoneNumber] = { action: 'select_property', properties };
 }
@@ -534,9 +536,8 @@ async function promptTenantSelection(phoneNumber, action, propertyId) {
     return;
   }
 
-  // Find tenants whose unitAssigned references a unit in the selected property
   const tenants = await Tenant.find({ userId: user._id })
-    .populate('unitAssigned') // Populate unitAssigned to check property
+    .populate('unitAssigned')
     .then(tenants => tenants.filter(tenant => tenant.unitAssigned && tenant.unitAssigned.property.toString() === propertyId.toString()));
 
   if (!tenants.length) {
@@ -549,6 +550,7 @@ async function promptTenantSelection(phoneNumber, action, propertyId) {
     tenantList += `${index + 1}. ${tenant.name} (ID: ${tenant.tenant_id || tenant._id})\n`;
   });
   await sendMessage(phoneNumber, tenantList);
+  console.log(`Tenant list sent to ${phoneNumber}: ${tenantList}`);
 
   sessions[phoneNumber].tenants = tenants;
 }
