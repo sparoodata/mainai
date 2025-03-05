@@ -648,77 +648,64 @@ app.post('/edittenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { nam
   const { tenantId, name, propertyName, unitAssigned, lease_start, deposit, rent_amount } = req.body;
   const id = req.params.id;
 
+  console.log(`POST /edittenant/:id called with id: ${id}`);
+  console.log('Request body:', req.body);
+  console.log('tenantId from request:', tenantId);
+
   try {
     const authorizeRecord = await Authorize.findById(id);
     if (!authorizeRecord) {
+      console.log(`Authorize record not found for id: ${id}`);
       return res.status(404).send('Authorization record not found.');
     }
 
+    console.log('Authorize record:', authorizeRecord);
+
     if (authorizeRecord.used) {
+      console.log(`Authorize record already used for id: ${id}`);
       return res.status(403).send('This link has already been used.');
     }
 
     const phoneNumber = authorizeRecord.phoneNumber;
+    console.log('Phone number from authorize:', phoneNumber);
+
     const user = await User.findOne({ phoneNumber });
     if (!user) {
+      console.log(`User not found for phoneNumber: ${phoneNumber}`);
       return res.status(404).send('User not found.');
+    }
+
+    console.log('User found:', user._id);
+
+    // Check if tenantId is a valid ObjectId
+    if (!mongoose.Types.ObjectId.isValid(tenantId)) {
+      console.log(`Invalid tenantId format: ${tenantId}`);
+      return res.status(400).send('Invalid tenantId format.');
     }
 
     const tenant = await Tenant.findOne({ _id: tenantId, userId: user._id });
     if (!tenant) {
+      console.log(`Tenant not found for tenantId: ${tenantId} and userId: ${user._id}`);
+      // Log all tenants for this user to verify
+      const allTenants = await Tenant.find({ userId: user._id });
+      console.log('All tenants for user:', allTenants);
       return res.status(404).send('Tenant not found or you do not have permission to edit it.');
     }
 
-    // Debug: Log incoming data
-    console.log('Request body:', req.body);
+    console.log('Tenant found:', tenant);
 
-    // Validate the unitAssigned value (expects an ObjectId)
     const unit = await Unit.findById(unitAssigned);
     if (!unit) {
+      console.log(`Unit not found for unitAssigned: ${unitAssigned}`);
       return res.status(400).send(`No unit found with ID: ${unitAssigned}`);
     }
 
-    // Update tenant fields
-    tenant.name = name;
-    tenant.propertyName = propertyName;
-    tenant.unitAssigned = unit._id; // Use the validated Unit's _id
-    tenant.lease_start = new Date(lease_start);
-    tenant.deposit = deposit;
-    tenant.rent_amount = rent_amount;
-
-    if (req.files.photo) {
-      const key = 'images/' + Date.now() + '-' + req.files.photo[0].originalname;
-      const uploadParams = {
-        Bucket: process.env.R2_BUCKET,
-        Key: key,
-        Body: req.files.photo[0].buffer,
-        ContentType: req.files.photo[0].mimetype,
-      };
-      await s3.upload(uploadParams).promise();
-      tenant.photo = process.env.R2_PUBLIC_URL + '/' + key;
-    }
-
-    if (req.files.idProof) {
-      const key = 'images/' + Date.now() + '-' + req.files.idProof[0].originalname;
-      const uploadParams = {
-        Bucket: process.env.R2_BUCKET,
-        Key: key,
-        Body: req.files.idProof[0].buffer,
-        ContentType: req.files.idProof[0].mimetype,
-      };
-      await s3.upload(uploadParams).promise();
-      tenant.idProof = process.env.R2_PUBLIC_URL + '/' + key;
-    }
+    // Update tenant fields...
 
     await tenant.save();
 
-    // Send WhatsApp confirmation
-    await sendMessage(
-      phoneNumber,
-      `Tenant "${name}" in unit "${unit.unitNumber}" (ID: ${unit.unit_id}) at property "${propertyName}" has been updated.`
-    );
+    // Send WhatsApp confirmation...
 
-    // Mark authorization as used and delete it
     await Authorize.findByIdAndDelete(id);
 
     res.send('Tenant updated successfully!');
@@ -727,7 +714,6 @@ app.post('/edittenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { nam
     res.status(500).send('Error updating tenant.');
   }
 });
-
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 // Helper function to generate a 6-digit OTP
@@ -1139,45 +1125,58 @@ app.get('/edittenant/:id', checkOTPValidation, async (req, res) => {
   const id = req.params.id;
   const tenantId = req.query.tenantId; // Expect tenantId as a query parameter
 
+  console.log(`GET /edittenant/:id called with id: ${id}, tenantId: ${tenantId}`);
+
   try {
     const authorizeRecord = await Authorize.findById(id);
     if (!authorizeRecord) {
+      console.log(`Authorize record not found for id: ${id}`);
       return res.status(404).send('Authorization record not found.');
     }
+    console.log(`Authorize record found: ${authorizeRecord._id}, phoneNumber: ${authorizeRecord.phoneNumber}`);
 
     if (authorizeRecord.used) {
+      console.log(`Authorize record already used for id: ${id}`);
       return res.status(403).send('This link has already been used.');
     }
 
     const phoneNumber = authorizeRecord.phoneNumber;
     const user = await User.findOne({ phoneNumber });
     if (!user) {
+      console.log(`User not found for phoneNumber: ${phoneNumber}`);
       return res.status(404).send('User not found.');
     }
+    console.log(`User found: ${user._id}`);
 
-    // Fetch all tenants for the user (for selection if needed)
     const tenants = await Tenant.find({ userId: user._id });
     if (!tenants.length) {
+      console.log(`No tenants found for userId: ${user._id}`);
       return res.status(404).send('No tenants found to edit.');
     }
+    console.log(`Tenants found for user: ${JSON.stringify(tenants.map(t => ({ _id: t._id, name: t.name })))}`);
 
-    // Fetch the specific tenant being edited
+    // Check if tenantId is valid
+    if (!tenantId || !mongoose.Types.ObjectId.isValid(tenantId)) {
+      console.log(`Invalid or missing tenantId: ${tenantId}`);
+      return res.status(400).send('Invalid or missing tenantId.');
+    }
+
     const tenant = await Tenant.findOne({ _id: tenantId, userId: user._id });
     if (!tenant) {
+      console.log(`Tenant not found for tenantId: ${tenantId}, userId: ${user._id}`);
       return res.status(404).send('Tenant not found or invalid tenantId.');
     }
+    console.log(`Tenant found: ${JSON.stringify(tenant)}`);
 
     const properties = await Property.find({ userId: user._id });
     const units = await Unit.find({ userId: user._id });
 
-    // Render the editTenant form with the specific tenant
     res.render('editTenant', { id, tenants, properties, units, tenant });
   } catch (error) {
     console.error('Error rendering edit tenant form:', error);
     res.status(500).send('An error occurred while rendering the form.');
   }
 });
-
 // Start the server
 app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
