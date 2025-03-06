@@ -821,9 +821,10 @@ app.post('/validate-otp/:id', async (req, res) => {
       otpStore.set(phoneNumber, { ...storedOTPData, validated: true });
       console.log(`OTP validated for ${phoneNumber}. Determining redirect...`);
 
+      const tenantId = req.query.tenantId;
+      console.log(`tenantId from query: ${tenantId}`);
+
       let redirectUrl;
-      const tenantId = req.query.tenantId; // Preserve tenantId
-      console.log(`tenantId from query: ${tenantId}`); // Debug log
       switch (authorizeRecord.action) {
         case 'edittenant':
           redirectUrl = tenantId ? `/edittenant/${id}?tenantId=${tenantId}` : `/edittenant/${id}`;
@@ -834,9 +835,17 @@ app.post('/validate-otp/:id', async (req, res) => {
         case 'editproperty':
           redirectUrl = `/editproperty/${id}`;
           break;
-        // ... other cases ...
+        case 'addunit':
+          redirectUrl = `/addunit/${id}`;
+          break;
+        case 'editunit':
+          redirectUrl = `/editunit/${id}`;
+          break;
+        case 'addtenant':
+          redirectUrl = `/addtenant/${id}`;
+          break;
         default:
-          redirectUrl = `/editproperty/${id}`;
+          redirectUrl = `/editproperty/${id}`; // Default case
       }
 
       console.log(`Redirecting to: ${redirectUrl}`);
@@ -850,8 +859,6 @@ app.post('/validate-otp/:id', async (req, res) => {
     res.status(500).send('An error occurred while validating OTP.');
   }
 });
-
-
 
 
 

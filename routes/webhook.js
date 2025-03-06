@@ -652,10 +652,8 @@ async function promptTenantSelection(phoneNumber, action, propertyId) {
 // Helper function to send property link (for add/edit actions)
 async function sendPropertyLink(phoneNumber, action, tenantId = null) {
   console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}, tenantId: ${tenantId}`);
-
   try {
     let authorizeRecord = await Authorize.findOne({ phoneNumber: `+${phoneNumber}` });
-
     if (!authorizeRecord) {
       authorizeRecord = new Authorize({
         phoneNumber: `+${phoneNumber}`,
@@ -686,7 +684,6 @@ async function sendPropertyLink(phoneNumber, action, tenantId = null) {
     await sendMessage(phoneNumber, 'Failed to retrieve authorization record. Please try again.');
   }
 }
-
 // Helper function to prompt property removal
 async function promptPropertyRemoval(phoneNumber) {
   console.log(`Prompting property removal selection for ${phoneNumber}`);
