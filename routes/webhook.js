@@ -232,7 +232,6 @@ router.post('/', async (req, res) => {
             await sendMessage(fromNumber, 'Failed to confirm rent payment. Please try again.');
           }
         } else if (text.toLowerCase() === 'help') {
-          // Reset session if stuck in a removal flow
           if (sessions[fromNumber].action && sessions[fromNumber].action.includes('remove')) {
             console.log(`Resetting session for ${fromNumber} from ${sessions[fromNumber].action} to handle Help`);
             sessions[fromNumber].action = null;
@@ -290,7 +289,6 @@ router.post('/', async (req, res) => {
       if (interactive) {
         const selectedOption = interactive.button_reply.id;
 
-        // Handle Yes/No confirmation for removals
         if (sessions[fromNumber].action === 'confirm_property_removal') {
           if (selectedOption === 'yes_remove_property') {
             const property = sessions[fromNumber].propertyToRemove;
@@ -400,13 +398,27 @@ router.post('/', async (req, res) => {
         } else if (selectedOption === 'add_property') {
           await sendPropertyLink(fromNumber, 'addproperty');
         } else if (selectedOption === 'edit_property') {
-          await sendPropertyLink(fromNumber, 'editproperty');
+          const user = await User.findOne({ phoneNumber: `+${fromNumber}` });
+          const properties = await Property.find({ userId: user._id });
+          if (!properties.length) {
+            await sendMessage(fromNumber, 'No properties to edit.');
+            sessions[fromNumber].action = null;
+          } else {
+            await sendPropertyLink(fromNumber, 'editproperty');
+          }
         } else if (selectedOption === 'remove_property') {
           await promptPropertyRemoval(fromNumber);
         } else if (selectedOption === 'add_unit') {
           await sendPropertyLink(fromNumber, 'addunit');
         } else if (selectedOption === 'edit_unit') {
-          await sendPropertyLink(fromNumber, 'editunit');
+          const user = await User.findOne({ phoneNumber: `+${fromNumber}` });
+          const units = await Unit.find({ userId: user._id });
+          if (!units.length) {
+            await sendMessage(fromNumber, 'No units to edit.');
+            sessions[fromNumber].action = null;
+          } else {
+            await sendPropertyLink(fromNumber, 'editunit');
+          }
         } else if (selectedOption === 'remove_unit') {
           await promptUnitRemoval(fromNumber);
         } else if (selectedOption === 'add_tenant') {
@@ -622,7 +634,8 @@ async function promptPropertySelection(phoneNumber, action) {
 
   const properties = await Property.find({ userId: user._id });
   if (!properties.length) {
-    await sendMessage(phoneNumber, 'No properties found to edit tenants for.');
+    await sendMessage(phoneNumber, 'No properties to edit.');
+    sessions[phoneNumber].action = null;
     return;
   }
 
@@ -650,7 +663,9 @@ async function promptTenantSelection(phoneNumber, action, propertyId) {
     .then(tenants => tenants.filter(tenant => tenant.unitAssigned && tenant.unitAssigned.property.toString() === propertyId.toString()));
 
   if (!tenants.length) {
-    await sendMessage(phoneNumber, 'No tenants found for this property.');
+    await sendMessage(phoneNumber, 'No tenants to edit for this property.');
+    sessions[phoneNumber].action = null;
+    delete sessions[phoneNumber].propertyId;
     return;
   }
 
@@ -713,7 +728,8 @@ async function promptPropertyRemoval(phoneNumber) {
 
   const properties = await Property.find({ userId: user._id });
   if (!properties.length) {
-    await sendMessage(phoneNumber, 'No properties found to remove.');
+    await sendMessage(phoneNumber, 'No properties to delete.');
+    sessions[phoneNumber].action = null;
     return;
   }
 
@@ -778,7 +794,8 @@ async function promptUnitRemoval(phoneNumber) {
 
   const units = await Unit.find({ userId: user._id });
   if (!units.length) {
-    await sendMessage(phoneNumber, 'No units found to remove.');
+    await sendMessage(phoneNumber, 'No units to delete.');
+    sessions[phoneNumber].action = null;
     return;
   }
 
@@ -843,7 +860,8 @@ async function promptTenantRemoval(phoneNumber) {
 
   const tenants = await Tenant.find({ userId: user._id });
   if (!tenants.length) {
-    await sendMessage(phoneNumber, 'No tenants found to remove.');
+    await sendMessage(phoneNumber, 'No tenants to delete.');
+    sessions[phoneNumber].action = null;
     return;
   }
 
