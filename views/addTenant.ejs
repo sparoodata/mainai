@@ -1,164 +1,60 @@
+<!-- views/addtenant.ejs -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" type="text/css" href="/styles.css">
-    <title>Add Tenant</title>
+  <meta charset="UTF-8">
+  <title>Add Tenant</title>
+  <style>
+    .form-group { margin-bottom: 15px; }
+    .disabled { color: gray; }
+  </style>
 </head>
 <body>
-    <!-- Success Message -->
-    <div class="success-message">
-        Authorization successful!
+  <h1>➕ Add Tenant</h1>
+  <form action="/submit-tenant/<%= authId %>" method="POST">
+    <div class="form-group">
+      <label for="tenantName">👤 Tenant Name:</label>
+      <input type="text" id="tenantName" name="tenantName" required>
     </div>
-
-    <!-- Form Container -->
-    <div class="container">
-        <h2>Add Tenant</h2>
-        <form action="/addtenant/<%= id %>" method="POST" enctype="multipart/form-data" onsubmit="return validateForm()">
-            
-            <!-- Name -->
-            <label for="name">Name:</label>
-            <input type="text" id="name" name="name" maxlength="50" required>
-            <small id="nameError" class="error-message"></small>
-
-            <!-- Property Name -->
-            <label for="propertyName">Property Name:</label>
-            <select id="propertyName" name="propertyName" required>
-                <option value="">-- Select Property --</option>
-                <% properties.forEach(property => { %>
-                    <option value="<%= property.name %>"><%= property.name %></option>
-                <% }) %>
-            </select>
-            <small id="propertyNameError" class="error-message"></small>
-
-            <!-- Unit Assigned -->
-            <label for="unitAssigned">Unit Assigned:</label>
-            <select id="unitAssigned" name="unitAssigned" required>
-                <% units.forEach(unit => { %>
-                    <option value="<%= unit._id %>"><%= unit.unitNumber %> (<%= unit.unit_id %>)</option>
-                <% }); %>
-            </select>
-            <small id="unitAssignedError" class="error-message"></small>
-
-            <!-- Lease Start Date -->
-            <label for="lease_start">Lease Start Date:</label>
-            <input type="date" id="lease_start" name="lease_start" required>
-            <small id="leaseStartError" class="error-message"></small>
-
-            <!-- Deposit -->
-            <label for="deposit">Deposit:</label>
-            <input type="number" id="deposit" name="deposit" required min="0">
-            <small id="depositError" class="error-message"></small>
-
-            <!-- Rent Amount -->
-            <label for="rent_amount">Rent Amount:</label>
-            <input type="number" id="rent_amount" name="rent_amount" required min="0">
-            <small id="rentAmountError" class="error-message"></small>
-
-            <!-- Tenant ID -->
-            <label for="tenant_id">Tenant ID (optional):</label>
-            <input type="text" id="tenant_id" name="tenant_id" maxlength="50">
-            <small id="tenantIdError" class="error-message"></small>
-
-            <!-- Photo -->
-            <label for="photo">Photo (Max 5MB):</label>
-            <input type="file" id="photo" name="photo" accept="image/*">
-            <small id="photoError" class="error-message"></small>
-
-            <!-- ID Proof -->
-            <label for="idProof">ID Proof (Max 5MB):</label>
-            <input type="file" id="idProof" name="idProof" accept="image/*">
-            <small id="idProofError" class="error-message"></small>
-
-            <!-- Submit Button -->
-            <button type="submit">Add Tenant</button>
-        </form>
+    <div class="form-group">
+      <label for="property">🏠 Property:</label>
+      <select id="property" name="property" onchange="updateUnits()">
+        <option value="">Select a property</option>
+        <% properties.forEach(property => { %>
+          <option value="<%= property._id %>"><%= property.name %> (📍 <%= property.address %>)</option>
+        <% }); %>
+      </select>
     </div>
+    <div class="form-group">
+      <label for="unitAssigned">🏡 Unit Assigned:</label>
+      <select id="unitAssigned" name="unitAssigned" disabled>
+        <option value="">Select a unit</option>
+      </select>
+    </div>
+    <button type="submit">✅ Submit</button>
+  </form>
 
-    <!-- Script for Validation -->
-    <script>
-        function validateForm() {
-            // Get form fields
-            const name = document.getElementById('name').value;
-            const propertyName = document.getElementById('propertyName').value;
-            const unitAssigned = document.getElementById('unitAssigned').value;
-            const leaseStart = document.getElementById('lease_start').value;
-            const deposit = document.getElementById('deposit').value;
-            const rentAmount = document.getElementById('rent_amount').value;
-            const tenantId = document.getElementById('tenant_id').value;
-            const photo = document.getElementById('photo').files[0];
-            const idProof = document.getElementById('idProof').files[0];
+  <script>
+    const units = <%- JSON.stringify(units) %>;
 
-            let valid = true;
+    function updateUnits() {
+      const propertyId = document.getElementById('property').value;
+      const unitSelect = document.getElementById('unitAssigned');
+      unitSelect.innerHTML = '<option value="">Select a unit</option>';
+      unitSelect.disabled = !propertyId;
 
-            // Clear previous error messages
-            document.getElementById('nameError').innerHTML = "";
-            document.getElementById('propertyNameError').innerHTML = "";
-            document.getElementById('unitAssignedError').innerHTML = "";
-            document.getElementById('leaseStartError').innerHTML = "";
-            document.getElementById('depositError').innerHTML = "";
-            document.getElementById('rentAmountError').innerHTML = "";
-            document.getElementById('tenantIdError').innerHTML = "";
-            document.getElementById('photoError').innerHTML = "";
-            document.getElementById('idProofError').innerHTML = "";
-
-            // Name validation
-            if (name.length > 50) {
-                document.getElementById('nameError').innerHTML = "Name cannot exceed 50 characters.";
-                valid = false;
-            }
-
-            // Property Name validation
-            if (!propertyName) {
-                document.getElementById('propertyNameError').innerHTML = "Please select a property.";
-                valid = false;
-            }
-
-            // Unit Assigned validation
-            if (!unitAssigned) {
-                document.getElementById('unitAssignedError').innerHTML = "Please select a unit.";
-                valid = false;
-            }
-
-            // Lease Start validation
-            if (!leaseStart) {
-                document.getElementById('leaseStartError').innerHTML = "Please select a lease start date.";
-                valid = false;
-            }
-
-            // Deposit validation
-            if (isNaN(deposit) || deposit < 0) {
-                document.getElementById('depositError').innerHTML = "Please enter a valid deposit amount.";
-                valid = false;
-            }
-
-            // Rent Amount validation
-            if (isNaN(rentAmount) || rentAmount <= 0) {
-                document.getElementById('rentAmountError').innerHTML = "Please enter a valid rent amount.";
-                valid = false;
-            }
-
-            // Tenant ID validation
-            if (tenantId && tenantId.length > 50) {
-                document.getElementById('tenantIdError').innerHTML = "Tenant ID cannot exceed 50 characters.";
-                valid = false;
-            }
-
-            // Photo validation (Max size 5MB)
-            if (photo && photo.size > 5 * 1024 * 1024) {
-                document.getElementById('photoError').innerHTML = "Photo size cannot exceed 5MB.";
-                valid = false;
-            }
-
-            // ID Proof validation (Max size 5MB)
-            if (idProof && idProof.size > 5 * 1024 * 1024) {
-                document.getElementById('idProofError').innerHTML = "ID Proof size cannot exceed 5MB.";
-                valid = false;
-            }
-
-            return valid;
-        }
-    </script>
+      if (propertyId) {
+        const filteredUnits = units.filter(unit => unit.propertyId === propertyId);
+        filteredUnits.forEach(unit => {
+          const option = document.createElement('option');
+          option.value = unit._id;
+          option.text = unit.unitNumber + (unit.isAssigned ? ` (Assigned to ${unit.assignedTo})` : '');
+          option.disabled = unit.isAssigned;
+          if (unit.isAssigned) option.classList.add('disabled');
+          unitSelect.appendChild(option);
+        });
+      }
+    }
+  </script>
 </body>
 </html>

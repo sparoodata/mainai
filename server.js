@@ -1091,38 +1091,47 @@ app.get('/editunit/:id', checkOTPValidation, async (req, res) => {
   }
 });
 
-app.get('/addtenant/:id', checkOTPValidation, async (req, res) => {
-  const id = req.params.id;
-
+// In server.js
+app.get('/addtenant/:id', async (req, res) => {
+  const authId = req.params.id;
   try {
-    const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
+    const authorizeRecord = await Authorize.findById(authId);
+    if (!authorizeRecord || authorizeRecord.used) {
+      return res.status(404).send('Authorization record not found or already used.');
     }
 
-    if (authorizeRecord.used) {
-      return res.status(403).send('This link has already been used.');
-    }
-
-    const phoneNumber = authorizeRecord.phoneNumber;
-    const user = await User.findOne({ phoneNumber });
+    const user = await User.findOne({ phoneNumber: authorizeRecord.phoneNumber });
     if (!user) {
       return res.status(404).send('User not found.');
     }
 
     const properties = await Property.find({ userId: user._id });
-    const units = await Unit.find({ userId: user._id });
-    if (!properties.length || !units.length) {
-      return res.status(404).send('No properties or units found. Please add them first.');
-    }
+    const units = await Unit.find({ userId: user._id }).populate('property');
+    const tenants = await Tenant.find({ userId: user._id }).populate('unitAssigned');
 
-    res.render('addTenant', { id, properties, units });
+    // Mark units as assigned with tenant names
+    const unitOptions = units.map(unit => {
+      const assignedTenant = tenants.find(t => t.unitAssigned && t.unitAssigned._id.toString() === unit._id.toString());
+      return {
+        _id: unit._id,
+        unitNumber: unit.unitNumber || unit._id,
+        propertyId: unit.property._id.toString(),
+        isAssigned: !!assignedTenant,
+        assignedTo: assignedTenant ? assignedTenant.name : null,
+      };
+    });
+
+    res.render('addtenant', {
+      authId,
+      properties,
+      units: unitOptions,
+      user,
+    });
   } catch (error) {
-    console.error('Error rendering add tenant form:', error);
-    res.status(500).send('An error occurred while rendering the form.');
+    console.error('Error in /addtenant/:id:', error);
+    res.status(500).send('An error occurred.');
   }
 });
-
 app.get('/edittenant/:id', checkOTPValidation, async (req, res) => {
   const id = req.params.id;
   const tenantId = req.query.tenantId;
@@ -1167,6 +1176,38 @@ app.get('/edittenant/:id', checkOTPValidation, async (req, res) => {
     res.status(500).send('An error occurred while rendering the form.');
   }
 });
+
+// In server.js
+app.post('/submit-tenant/:id', async (req, res) => {
+  const authId = req.params.id;
+  const { tenantName, property, unitAssigned } = req.body;
+
+  try {
+    const authorizeRecord = await Authorize.findById(authId);
+    if (!authorizeRecord || authorizeRecord.used) {
+      return res.status(404).send('Authorization record not found or already used.');
+    }
+
+    const user = await User.findOne({ phoneNumber: authorizeRecord.phoneNumber });
+    if (!user) return res.status(404).send('User not found.');
+
+    const tenant = new Tenant({
+      name: tenantName,
+      userId: user._id,
+      unitAssigned: unitAssigned || null,
+    });
+    await tenant.save();
+
+    authorizeRecord.used = true;
+    await authorizeRecord.save();
+
+    res.send('✅ Tenant added successfully!');
+  } catch (error) {
+    console.error('Error submitting tenant:', error);
+    res.status(500).send('⚠️ Error adding tenant.');
+  }
+});
+
 // Start the server
 app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
