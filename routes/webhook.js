@@ -42,17 +42,27 @@ async function shortenUrl(longUrl) {
 // Helper function to send WhatsApp message
 async function sendMessage(phoneNumber, message) {
   try {
-    await axios.post(WHATSAPP_API_URL, {
+    console.log('Sending WhatsApp message:', { phoneNumber, message });
+
+    if (!message || typeof message !== 'string' || message.trim() === '') {
+      throw new Error('Message body is required and must be a non-empty string');
+    }
+
+    const payload = {
       messaging_product: 'whatsapp',
       to: phoneNumber,
       type: 'text',
-      text: { body: message },
-    }, {
+      text: { body: message.trim() },
+    };
+    console.log('Payload:', payload);
+
+    await axios.post(WHATSAPP_API_URL, payload, {
       headers: {
         'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
       },
     });
+    console.log('Message sent successfully to', phoneNumber);
   } catch (err) {
     console.error('Error sending WhatsApp message:', err.response ? err.response.data : err);
   }
@@ -216,6 +226,7 @@ router.post('/', async (req, res) => {
           }
         } else {
           const dialogflowResponse = await getDialogflowResponse(fromNumber, text);
+          console.log('Dialogflow response:', dialogflowResponse);
           if (dialogflowResponse.action === 'trigger_help') {
             await sendHelpMenu(fromNumber);
           } else if (dialogflowResponse.action === 'manage_properties') {
@@ -239,7 +250,10 @@ router.post('/', async (req, res) => {
               await sendMessage(fromNumber, `⚠️ Tenant with ID "${tenantId}" not found.`);
             }
           } else {
-            await sendMessage(fromNumber, dialogflowResponse.fulfillmentText);
+            const responseText = dialogflowResponse.fulfillmentText && dialogflowResponse.fulfillmentText.trim()
+              ? dialogflowResponse.fulfillmentText
+              : '🤔 I didn’t get a clear response. Try "Help" for options.';
+            await sendMessage(fromNumber, responseText);
           }
         }
       }
@@ -335,6 +349,9 @@ router.post('/dialogflow-webhook', async (req, res) => {
     case 'Help':
       responseText = '🏠 Type "Manage Properties", "Manage Units", or "Manage Tenants" to get started!';
       break;
+    case 'ManageProperties':
+      responseText = '🏠 Showing property options...';
+      break;
     case 'RentPaid':
       if (parameters.tenantId) {
         const tenantId = parameters.tenantId;
@@ -346,6 +363,8 @@ router.post('/dialogflow-webhook', async (req, res) => {
         } else {
           responseText = `⚠️ Tenant with ID "${tenantId}" not found.`;
         }
+      } else {
+        responseText = '📝 Please provide the Tenant ID.';
       }
       break;
     default:
