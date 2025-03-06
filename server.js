@@ -21,7 +21,8 @@ const fetch = require('isomorphic-fetch');
 const app = express();
 const port = process.env.PORT || 3000; // Glitch uses dynamic port
 const AWS = require('aws-sdk');
-
+app.set('view engine', 'ejs'); // Use 'ejs' or your preferred engine (e.g., 'html' with 'ejs' adapter)
+app.set('views', path.join(__dirname, 'views')); // Ensure views directory is /app/views
 // Configure the S3 client to use Cloudflare R2 settings
 const s3 = new AWS.S3({
   endpoint: process.env.R2_ENDPOINT, // e.g., https://<account-id>.r2.cloudflarestorage.com
@@ -1109,7 +1110,6 @@ app.get('/addtenant/:id', async (req, res) => {
     const units = await Unit.find({ userId: user._id }).populate('property');
     const tenants = await Tenant.find({ userId: user._id }).populate('unitAssigned');
 
-    // Mark units as assigned with tenant names
     const unitOptions = units.map(unit => {
       const assignedTenant = tenants.find(t => t.unitAssigned && t.unitAssigned._id.toString() === unit._id.toString());
       return {
@@ -1132,6 +1132,7 @@ app.get('/addtenant/:id', async (req, res) => {
     res.status(500).send('An error occurred.');
   }
 });
+
 app.get('/edittenant/:id', checkOTPValidation, async (req, res) => {
   const id = req.params.id;
   const tenantId = req.query.tenantId;
