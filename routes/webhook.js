@@ -200,6 +200,20 @@ router.post('/', async (req, res) => {
           } else {
             await sendMessage(fromNumber, 'Invalid unit selection. Please reply with a valid number.');
           }
+        } else if (sessions[fromNumber].action === 'select_property_to_remove_tenant') {
+          console.log(`Property selection for tenant removal received: ${text} from ${fromNumber}`);
+          const propertyIndex = parseInt(text) - 1;
+          const properties = sessions[fromNumber].properties;
+
+          if (propertyIndex >= 0 && propertyIndex < properties.length) {
+            const selectedProperty = properties[propertyIndex];
+            console.log(`Selected property for tenant removal: ${selectedProperty.name} (ID: ${selectedProperty._id})`);
+            await promptTenantRemoval(fromNumber, selectedProperty._id);
+            sessions[fromNumber].action = 'select_tenant_to_remove';
+            sessions[fromNumber].propertyId = selectedProperty._id;
+          } else {
+            await sendMessage(fromNumber, 'Invalid property selection. Please reply with a valid number.');
+          }
         } else if (sessions[fromNumber].action === 'select_tenant_to_remove') {
           console.log(`Tenant to remove selection received: ${text} from ${fromNumber}`);
           const tenantIndex = parseInt(text) - 1;
@@ -342,6 +356,7 @@ router.post('/', async (req, res) => {
           sessions[fromNumber].action = null;
           delete sessions[fromNumber].tenantToRemove;
           delete sessions[fromNumber].tenants;
+          delete sessions[fromNumber].propertyId;
           console.log(`Session reset after tenant removal confirmation for ${fromNumber}`);
         } else if (selectedOption === 'account_info') {
           try {
@@ -427,7 +442,8 @@ router.post('/', async (req, res) => {
           console.log(`Edit Tenant selected by ${fromNumber}`);
           await promptPropertySelection(fromNumber, 'edittenant');
         } else if (selectedOption === 'remove_tenant') {
-          await promptTenantRemoval(fromNumber);
+          console.log(`Remove Tenant selected by ${fromNumber}`);
+          await promptPropertySelectionForTenantRemoval(fromNumber);
         }
       }
     }
@@ -649,6 +665,32 @@ async function promptPropertySelection(phoneNumber, action) {
   sessions[phoneNumber] = { action: 'select_property', properties };
 }
 
+// Helper function to prompt property selection for tenant removal
+async function promptPropertySelectionForTenantRemoval(phoneNumber) {
+  console.log(`Prompting property selection for tenant removal for ${phoneNumber}`);
+  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+  if (!user) {
+    await sendMessage(phoneNumber, 'User not found.');
+    return;
+  }
+
+  const properties = await Property.find({ userId: user._id });
+  if (!properties.length) {
+    await sendMessage(phoneNumber, 'No properties to delete tenants from.');
+    sessions[phoneNumber].action = null;
+    return;
+  }
+
+  let propertyList = 'Select a property to remove a tenant from by replying with its number:\n';
+  properties.forEach((property, index) => {
+    propertyList += `${index + 1}. ${property.name} (Address: ${property.address})\n`;
+  });
+  await sendMessage(phoneNumber, propertyList);
+  console.log(`Property list for tenant removal sent to ${phoneNumber}: ${propertyList}`);
+
+  sessions[phoneNumber] = { action: 'select_property_to_remove_tenant', properties };
+}
+
 // Helper function to prompt tenant selection (for editing)
 async function promptTenantSelection(phoneNumber, action, propertyId) {
   console.log(`Prompting tenant selection for property ${propertyId} for ${phoneNumber}`);
@@ -850,18 +892,22 @@ async function confirmUnitRemoval(phoneNumber, unit) {
 }
 
 // Helper function to prompt tenant removal
-async function promptTenantRemoval(phoneNumber) {
-  console.log(`Prompting tenant removal selection for ${phoneNumber}`);
+async function promptTenantRemoval(phoneNumber, propertyId) {
+  console.log(`Prompting tenant removal selection for property ${propertyId} for ${phoneNumber}`);
   const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
   if (!user) {
     await sendMessage(phoneNumber, 'User not found.');
     return;
   }
 
-  const tenants = await Tenant.find({ userId: user._id });
+  const tenants = await Tenant.find({ userId: user._id })
+    .populate('unitAssigned')
+    .then(tenants => tenants.filter(tenant => tenant.unitAssigned && tenant.unitAssigned.property.toString() === propertyId.toString()));
+
   if (!tenants.length) {
-    await sendMessage(phoneNumber, 'No tenants to delete.');
+    await sendMessage(phoneNumber, 'No tenants to delete for this property.');
     sessions[phoneNumber].action = null;
+    delete sessions[phoneNumber].propertyId;
     return;
   }
 
@@ -872,7 +918,7 @@ async function promptTenantRemoval(phoneNumber) {
   await sendMessage(phoneNumber, tenantList);
   console.log(`Tenant removal list sent to ${phoneNumber}: ${tenantList}`);
 
-  sessions[phoneNumber] = { action: 'select_tenant_to_remove', tenants };
+  sessions[phoneNumber].tenants = tenants;
 }
 
 // Helper function to confirm tenant removal
