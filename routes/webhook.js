@@ -159,6 +159,28 @@ router.post('/', async (req, res) => {
           } else {
             await sendMessage(fromNumber, '❌ Invalid tenant selection.');
           }
+        } else if (sessions[fromNumber].action === 'select_property_to_remove') {
+          const propertyIndex = parseInt(text) - 1;
+          const properties = sessions[fromNumber].properties;
+          if (propertyIndex >= 0 && propertyIndex < properties.length) {
+            const selectedProperty = properties[propertyIndex];
+            await confirmPropertyRemoval(fromNumber, selectedProperty);
+            sessions[fromNumber].action = 'confirm_property_removal';
+            sessions[fromNumber].propertyToRemove = selectedProperty;
+          } else {
+            await sendMessage(fromNumber, '❌ Invalid property selection.');
+          }
+        } else if (sessions[fromNumber].action === 'select_unit_to_remove') {
+          const unitIndex = parseInt(text) - 1;
+          const units = sessions[fromNumber].units;
+          if (unitIndex >= 0 && unitIndex < units.length) {
+            const selectedUnit = units[unitIndex];
+            await confirmUnitRemoval(fromNumber, selectedUnit);
+            sessions[fromNumber].action = 'confirm_unit_removal';
+            sessions[fromNumber].unitToRemove = selectedUnit;
+          } else {
+            await sendMessage(fromNumber, '❌ Invalid unit selection.');
+          }
         } else if (sessions[fromNumber].action === 'select_property_to_remove_tenant') {
           const propertyIndex = parseInt(text) - 1;
           const properties = sessions[fromNumber].properties;
@@ -224,8 +246,29 @@ router.post('/', async (req, res) => {
 
       if (interactive) {
         const selectedOption = interactive.button_reply.id;
-        // Handle button replies as before (e.g., confirmations)
-        if (sessions[fromNumber].action === 'confirm_tenant_removal') {
+        if (sessions[fromNumber].action === 'confirm_property_removal') {
+          if (selectedOption === 'yes_remove_property') {
+            const property = sessions[fromNumber].propertyToRemove;
+            await Property.findByIdAndDelete(property._id);
+            await sendMessage(fromNumber, `✅ Property "${property.name}" deleted successfully!`);
+          } else if (selectedOption === 'no_remove_property') {
+            await sendMessage(fromNumber, `ℹ️ Property "${sessions[fromNumber].propertyToRemove.name}" removal canceled.`);
+          }
+          sessions[fromNumber].action = null;
+          delete sessions[fromNumber].propertyToRemove;
+          delete sessions[fromNumber].properties;
+        } else if (sessions[fromNumber].action === 'confirm_unit_removal') {
+          if (selectedOption === 'yes_remove_unit') {
+            const unit = sessions[fromNumber].unitToRemove;
+            await Unit.findByIdAndDelete(unit._id);
+            await sendMessage(fromNumber, `✅ Unit "${unit.unitNumber}" deleted successfully!`);
+          } else if (selectedOption === 'no_remove_unit') {
+            await sendMessage(fromNumber, `ℹ️ Unit "${sessions[fromNumber].unitToRemove.unitNumber}" removal canceled.`);
+          }
+          sessions[fromNumber].action = null;
+          delete sessions[fromNumber].unitToRemove;
+          delete sessions[fromNumber].units;
+        } else if (sessions[fromNumber].action === 'confirm_tenant_removal') {
           if (selectedOption === 'yes_remove_tenant') {
             const tenant = sessions[fromNumber].tenantToRemove;
             await Tenant.findByIdAndDelete(tenant._id);
@@ -237,10 +280,40 @@ router.post('/', async (req, res) => {
           delete sessions[fromNumber].tenantToRemove;
           delete sessions[fromNumber].tenants;
           delete sessions[fromNumber].propertyId;
+        } else if (selectedOption === 'manage_properties') {
+          await sendPropertyOptions(fromNumber);
+        } else if (selectedOption === 'manage_units') {
+          await sendUnitOptions(fromNumber);
         } else if (selectedOption === 'manage_tenants') {
           await sendTenantOptions(fromNumber);
+        } else if (selectedOption === 'add_property') {
+          await sendPropertyLink(fromNumber, 'addproperty');
+        } else if (selectedOption === 'edit_property') {
+          const user = await User.findOne({ phoneNumber: `+${fromNumber}` });
+          const properties = await Property.find({ userId: user._id });
+          if (!properties.length) {
+            await sendMessage(fromNumber, '🏠 No properties to edit.');
+          } else {
+            await sendPropertyLink(fromNumber, 'editproperty');
+          }
+        } else if (selectedOption === 'remove_property') {
+          await promptPropertyRemoval(fromNumber);
+        } else if (selectedOption === 'add_unit') {
+          await sendPropertyLink(fromNumber, 'addunit');
+        } else if (selectedOption === 'edit_unit') {
+          const user = await User.findOne({ phoneNumber: `+${fromNumber}` });
+          const units = await Unit.find({ userId: user._id });
+          if (!units.length) {
+            await sendMessage(fromNumber, '🏡 No units to edit.');
+          } else {
+            await sendPropertyLink(fromNumber, 'editunit');
+          }
+        } else if (selectedOption === 'remove_unit') {
+          await promptUnitRemoval(fromNumber);
         } else if (selectedOption === 'add_tenant') {
           await sendPropertyLink(fromNumber, 'addtenant');
+        } else if (selectedOption === 'edit_tenant') {
+          await promptPropertySelection(fromNumber, 'edittenant');
         } else if (selectedOption === 'remove_tenant') {
           await promptPropertySelectionForTenantRemoval(fromNumber);
         }
@@ -254,7 +327,7 @@ router.post('/', async (req, res) => {
 router.post('/dialogflow-webhook', async (req, res) => {
   const intent = req.body.queryResult.intent.displayName;
   const parameters = req.body.queryResult.parameters;
-  const phoneNumber = req.body.session.split('/').pop(); // Extract phoneNumber from session
+  const phoneNumber = req.body.session.split('/').pop();
 
   let responseText = '';
 
@@ -279,12 +352,10 @@ router.post('/dialogflow-webhook', async (req, res) => {
       responseText = '🤔 I’m not sure how to help with that. Try "Help" for options.';
   }
 
-  res.json({
-    fulfillmentText: responseText,
-  });
+  res.json({ fulfillmentText: responseText });
 });
 
-// Helper functions (simplified for brevity)
+// Helper functions
 async function sendHelpMenu(phoneNumber) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -296,9 +367,55 @@ async function sendHelpMenu(phoneNumber) {
       body: { text: 'Please select an option below:' },
       action: {
         buttons: [
+          { type: 'reply', reply: { id: 'manage_properties', title: '🏠 Manage Properties' } },
+          { type: 'reply', reply: { id: 'manage_units', title: '🏡 Manage Units' } },
           { type: 'reply', reply: { id: 'manage_tenants', title: '👥 Manage Tenants' } },
-          { type: 'reply', reply: { id: 'add_tenant', title: '➕ Add Tenant' } },
-          { type: 'reply', reply: { id: 'remove_tenant', title: '🗑️ Remove Tenant' } },
+        ],
+      },
+    },
+  };
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
+  });
+}
+
+async function sendPropertyOptions(phoneNumber) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '🏠 Property Options' },
+      body: { text: 'Please select an option:' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'add_property', title: '➕ Add Property' } },
+          { type: 'reply', reply: { id: 'edit_property', title: '✏️ Edit Property' } },
+          { type: 'reply', reply: { id: 'remove_property', title: '🗑️ Remove Property' } },
+        ],
+      },
+    },
+  };
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
+  });
+}
+
+async function sendUnitOptions(phoneNumber) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '🏡 Unit Options' },
+      body: { text: 'Please select an option:' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'add_unit', title: '➕ Add Unit' } },
+          { type: 'reply', reply: { id: 'edit_unit', title: '✏️ Edit Unit' } },
+          { type: 'reply', reply: { id: 'remove_unit', title: '🗑️ Remove Unit' } },
         ],
       },
     },
@@ -331,11 +448,43 @@ async function sendTenantOptions(phoneNumber) {
   });
 }
 
+async function promptPropertySelection(phoneNumber, action) {
+  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+  const properties = await Property.find({ userId: user._id });
+  if (!properties.length) {
+    await sendMessage(phoneNumber, '🏠 No properties to edit.');
+    sessions[phoneNumber].action = null;
+    return;
+  }
+  let propertyList = '🏠 Select a property by replying with its number:\n';
+  properties.forEach((p, i) => propertyList += `${i + 1}. ${p.name} (📍 ${p.address})\n`);
+  await sendMessage(phoneNumber, propertyList);
+  sessions[phoneNumber] = { action: 'select_property', properties };
+}
+
+async function promptTenantSelection(phoneNumber, action, propertyId) {
+  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+  const tenants = await Tenant.find({ userId: user._id })
+    .populate('unitAssigned')
+    .then(t => t.filter(tenant => tenant.unitAssigned && tenant.unitAssigned.property.toString() === propertyId.toString()));
+  if (!tenants.length) {
+    await sendMessage(phoneNumber, '👥 No tenants to edit for this property.');
+    sessions[phoneNumber].action = null;
+    delete sessions[phoneNumber].propertyId;
+    return;
+  }
+  let tenantList = '👥 Select a tenant to edit by replying with their number:\n';
+  tenants.forEach((t, i) => tenantList += `${i + 1}. ${t.name} (🆔 ${t.tenant_id || t._id})\n`);
+  await sendMessage(phoneNumber, tenantList);
+  sessions[phoneNumber].tenants = tenants;
+}
+
 async function promptPropertySelectionForTenantRemoval(phoneNumber) {
   const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
   const properties = await Property.find({ userId: user._id });
   if (!properties.length) {
     await sendMessage(phoneNumber, '🏠 No properties to delete tenants from.');
+    sessions[phoneNumber].action = null;
     return;
   }
   let propertyList = '🏠 Select a property to remove a tenant from:\n';
@@ -352,12 +501,97 @@ async function promptTenantRemoval(phoneNumber, propertyId) {
   if (!tenants.length) {
     await sendMessage(phoneNumber, '👥 No tenants to delete for this property.');
     sessions[phoneNumber].action = null;
+    delete sessions[phoneNumber].propertyId;
     return;
   }
   let tenantList = '👥 Select a tenant to remove:\n';
   tenants.forEach((t, i) => tenantList += `${i + 1}. ${t.name} (🆔 ${t.tenant_id || t._id})\n`);
   await sendMessage(phoneNumber, tenantList);
   sessions[phoneNumber].tenants = tenants;
+}
+
+async function promptPropertyRemoval(phoneNumber) {
+  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+  const properties = await Property.find({ userId: user._id });
+  if (!properties.length) {
+    await sendMessage(phoneNumber, '🏠 No properties to delete.');
+    sessions[phoneNumber].action = null;
+    return;
+  }
+  let propertyList = '🏠 Select a property to remove by replying with its number:\n';
+  properties.forEach((p, i) => propertyList += `${i + 1}. ${p.name} (📍 ${p.address})\n`);
+  await sendMessage(phoneNumber, propertyList);
+  sessions[phoneNumber] = { action: 'select_property_to_remove', properties };
+}
+
+async function promptUnitRemoval(phoneNumber) {
+  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+  const units = await Unit.find({ userId: user._id });
+  if (!units.length) {
+    await sendMessage(phoneNumber, '🏡 No units to delete.');
+    sessions[phoneNumber].action = null;
+    return;
+  }
+  let unitList = '🏡 Select a unit to remove by replying with its number:\n';
+  units.forEach((u, i) => unitList += `${i + 1}. ${u.unitNumber} (🆔 ${u.unit_id || u._id})\n`);
+  await sendMessage(phoneNumber, unitList);
+  sessions[phoneNumber] = { action: 'select_unit_to_remove', units };
+}
+
+async function confirmPropertyRemoval(phoneNumber, property) {
+  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+  const units = await Unit.find({ property: property._id });
+  if (units.length > 0) {
+    await sendMessage(phoneNumber, `🏡 Units defined under "${property.name}". Remove them first.`);
+    sessions[phoneNumber].action = null;
+    return;
+  }
+  const confirmationMessage = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      body: { text: `🗑️ Are you sure you want to remove "${property.name}"?` },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'yes_remove_property', title: 'Yes' } },
+          { type: 'reply', reply: { id: 'no_remove_property', title: 'No' } },
+        ],
+      },
+    },
+  };
+  await axios.post(WHATSAPP_API_URL, confirmationMessage, {
+    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
+  });
+}
+
+async function confirmUnitRemoval(phoneNumber, unit) {
+  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+  const tenants = await Tenant.find({ unitAssigned: unit._id });
+  if (tenants.length > 0) {
+    await sendMessage(phoneNumber, `👥 Tenants assigned to "${unit.unitNumber}". Remove them first.`);
+    sessions[phoneNumber].action = null;
+    return;
+  }
+  const confirmationMessage = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      body: { text: `🗑️ Are you sure you want to remove "${unit.unitNumber}"?` },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'yes_remove_unit', title: 'Yes' } },
+          { type: 'reply', reply: { id: 'no_remove_unit', title: 'No' } },
+        ],
+      },
+    },
+  };
+  await axios.post(WHATSAPP_API_URL, confirmationMessage, {
+    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
+  });
 }
 
 async function confirmTenantRemoval(phoneNumber, tenant) {
@@ -381,13 +615,19 @@ async function confirmTenantRemoval(phoneNumber, tenant) {
   });
 }
 
-async function sendPropertyLink(phoneNumber, action) {
-  const authorizeRecord = new Authorize({ phoneNumber: `+${phoneNumber}`, used: false, action });
+async function sendPropertyLink(phoneNumber, action, tenantId = null) {
+  let authorizeRecord = await Authorize.findOne({ phoneNumber: `+${phoneNumber}` });
+  if (!authorizeRecord) {
+    authorizeRecord = new Authorize({ phoneNumber: `+${phoneNumber}`, used: false, action });
+  } else {
+    authorizeRecord.action = action;
+    authorizeRecord.used = false;
+  }
   await authorizeRecord.save();
-  const shortUrl = await shortenUrl(`${GLITCH_HOST}/authorize/${authorizeRecord._id}`);
+  const baseUrl = `${GLITCH_HOST}/authorize/${authorizeRecord._id}`;
+  const longUrl = tenantId ? `${baseUrl}?tenantId=${tenantId}` : baseUrl;
+  const shortUrl = await shortenUrl(longUrl);
   await sendMessage(phoneNumber, `🔗 Proceed: ${shortUrl}`);
 }
-
-// Add other helper functions (sendPropertyOptions, sendUnitOptions, etc.) as needed
 
 module.exports = { router, sendMessage, sessions, userResponses };
