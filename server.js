@@ -21,8 +21,7 @@ const fetch = require('isomorphic-fetch');
 const app = express();
 const port = process.env.PORT || 3000; // Glitch uses dynamic port
 const AWS = require('aws-sdk');
-app.set('view engine', 'ejs'); // Use 'ejs' or your preferred engine (e.g., 'html' with 'ejs' adapter)
-app.set('views', path.join(__dirname, 'views')); // Ensure views directory is /app/views
+
 // Configure the S3 client to use Cloudflare R2 settings
 const s3 = new AWS.S3({
   endpoint: process.env.R2_ENDPOINT, // e.g., https://<account-id>.r2.cloudflarestorage.com
@@ -822,10 +821,9 @@ app.post('/validate-otp/:id', async (req, res) => {
       otpStore.set(phoneNumber, { ...storedOTPData, validated: true });
       console.log(`OTP validated for ${phoneNumber}. Determining redirect...`);
 
-      const tenantId = req.query.tenantId;
-      console.log(`tenantId from query: ${tenantId}`);
-
       let redirectUrl;
+      const tenantId = req.query.tenantId; // Preserve tenantId
+      console.log(`tenantId from query: ${tenantId}`); // Debug log
       switch (authorizeRecord.action) {
         case 'edittenant':
           redirectUrl = tenantId ? `/edittenant/${id}?tenantId=${tenantId}` : `/edittenant/${id}`;
@@ -836,17 +834,9 @@ app.post('/validate-otp/:id', async (req, res) => {
         case 'editproperty':
           redirectUrl = `/editproperty/${id}`;
           break;
-        case 'addunit':
-          redirectUrl = `/addunit/${id}`;
-          break;
-        case 'editunit':
-          redirectUrl = `/editunit/${id}`;
-          break;
-        case 'addtenant':
-          redirectUrl = `/addtenant/${id}`;
-          break;
+        // ... other cases ...
         default:
-          redirectUrl = `/editproperty/${id}`; // Default case
+          redirectUrl = `/editproperty/${id}`;
       }
 
       console.log(`Redirecting to: ${redirectUrl}`);
@@ -860,6 +850,8 @@ app.post('/validate-otp/:id', async (req, res) => {
     res.status(500).send('An error occurred while validating OTP.');
   }
 });
+
+
 
 
 
@@ -1092,44 +1084,35 @@ app.get('/editunit/:id', checkOTPValidation, async (req, res) => {
   }
 });
 
-// In server.js
-app.get('/addtenant/:id', async (req, res) => {
-  const authId = req.params.id;
+app.get('/addtenant/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+
   try {
-    const authorizeRecord = await Authorize.findById(authId);
-    if (!authorizeRecord || authorizeRecord.used) {
-      return res.status(404).send('Authorization record not found or already used.');
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
     }
 
-    const user = await User.findOne({ phoneNumber: authorizeRecord.phoneNumber });
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
     if (!user) {
       return res.status(404).send('User not found.');
     }
 
     const properties = await Property.find({ userId: user._id });
-    const units = await Unit.find({ userId: user._id }).populate('property');
-    const tenants = await Tenant.find({ userId: user._id }).populate('unitAssigned');
+    const units = await Unit.find({ userId: user._id });
+    if (!properties.length || !units.length) {
+      return res.status(404).send('No properties or units found. Please add them first.');
+    }
 
-    const unitOptions = units.map(unit => {
-      const assignedTenant = tenants.find(t => t.unitAssigned && t.unitAssigned._id.toString() === unit._id.toString());
-      return {
-        _id: unit._id,
-        unitNumber: unit.unitNumber || unit._id,
-        propertyId: unit.property._id.toString(),
-        isAssigned: !!assignedTenant,
-        assignedTo: assignedTenant ? assignedTenant.name : null,
-      };
-    });
-
-    res.render('addtenant', {
-      authId,
-      properties,
-      units: unitOptions,
-      user,
-    });
+    res.render('addTenant', { id, properties, units });
   } catch (error) {
-    console.error('Error in /addtenant/:id:', error);
-    res.status(500).send('An error occurred.');
+    console.error('Error rendering add tenant form:', error);
+    res.status(500).send('An error occurred while rendering the form.');
   }
 });
 
@@ -1177,38 +1160,6 @@ app.get('/edittenant/:id', checkOTPValidation, async (req, res) => {
     res.status(500).send('An error occurred while rendering the form.');
   }
 });
-
-// In server.js
-app.post('/submit-tenant/:id', async (req, res) => {
-  const authId = req.params.id;
-  const { tenantName, property, unitAssigned } = req.body;
-
-  try {
-    const authorizeRecord = await Authorize.findById(authId);
-    if (!authorizeRecord || authorizeRecord.used) {
-      return res.status(404).send('Authorization record not found or already used.');
-    }
-
-    const user = await User.findOne({ phoneNumber: authorizeRecord.phoneNumber });
-    if (!user) return res.status(404).send('User not found.');
-
-    const tenant = new Tenant({
-      name: tenantName,
-      userId: user._id,
-      unitAssigned: unitAssigned || null,
-    });
-    await tenant.save();
-
-    authorizeRecord.used = true;
-    await authorizeRecord.save();
-
-    res.send('✅ Tenant added successfully!');
-  } catch (error) {
-    console.error('Error submitting tenant:', error);
-    res.status(500).send('⚠️ Error adding tenant.');
-  }
-});
-
 // Start the server
 app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
