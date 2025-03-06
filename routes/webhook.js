@@ -232,9 +232,19 @@ router.post('/', async (req, res) => {
             await sendMessage(fromNumber, 'Failed to confirm rent payment. Please try again.');
           }
         } else if (text.toLowerCase() === 'help') {
-          try {
+          // Reset session if stuck in a removal flow
+          if (sessions[fromNumber].action && sessions[fromNumber].action.includes('remove')) {
+            console.log(`Resetting session for ${fromNumber} from ${sessions[fromNumber].action} to handle Help`);
             sessions[fromNumber].action = null;
+            delete sessions[fromNumber].propertyToRemove;
+            delete sessions[fromNumber].unitToRemove;
+            delete sessions[fromNumber].tenantToRemove;
+            delete sessions[fromNumber].properties;
+            delete sessions[fromNumber].units;
+            delete sessions[fromNumber].tenants;
+          }
 
+          try {
             const buttonMenu = {
               messaging_product: 'whatsapp',
               to: fromNumber,
@@ -272,6 +282,8 @@ router.post('/', async (req, res) => {
         } else if (!sessions[fromNumber].action) {
           const aiResponse = await getGroqAIResponse(text, phoneNumber, false);
           await sendMessage(fromNumber, aiResponse);
+        } else {
+          await sendMessage(fromNumber, 'Please complete the current action or type "Help" to start over.');
         }
       }
 
@@ -279,58 +291,61 @@ router.post('/', async (req, res) => {
         const selectedOption = interactive.button_reply.id;
 
         // Handle Yes/No confirmation for removals
-        if (sessions[fromNumber].action === 'confirm_property_removal' && selectedOption === 'yes_remove_property') {
-          const property = sessions[fromNumber].propertyToRemove;
-          try {
-            await Property.findByIdAndDelete(property._id);
-            await sendMessage(fromNumber, `Property "${property.name}" deleted successfully!`);
-            console.log(`Property ${property._id} deleted`);
-          } catch (error) {
-            console.error(`Error deleting property ${property._id}:`, error);
-            await sendMessage(fromNumber, `Failed to delete property "${property.name}". Please try again.`);
+        if (sessions[fromNumber].action === 'confirm_property_removal') {
+          if (selectedOption === 'yes_remove_property') {
+            const property = sessions[fromNumber].propertyToRemove;
+            try {
+              await Property.findByIdAndDelete(property._id);
+              await sendMessage(fromNumber, `Property "${property.name}" deleted successfully!`);
+              console.log(`Property ${property._id} deleted`);
+            } catch (error) {
+              console.error(`Error deleting property ${property._id}:`, error);
+              await sendMessage(fromNumber, `Failed to delete property "${property.name}". Please try again.`);
+            }
+          } else if (selectedOption === 'no_remove_property') {
+            await sendMessage(fromNumber, `Property "${sessions[fromNumber].propertyToRemove.name}" removal canceled.`);
           }
           sessions[fromNumber].action = null;
           delete sessions[fromNumber].propertyToRemove;
-        } else if (sessions[fromNumber].action === 'confirm_property_removal' && selectedOption === 'no_remove_property') {
-          await sendMessage(fromNumber, `Property "${sessions[fromNumber].propertyToRemove.name}" removal canceled.`);
-          sessions[fromNumber].action = null;
-          delete sessions[fromNumber].propertyToRemove;
-        } else if (sessions[fromNumber].action === 'confirm_unit_removal' && selectedOption === 'yes_remove_unit') {
-          const unit = sessions[fromNumber].unitToRemove;
-          try {
-            await Unit.findByIdAndDelete(unit._id);
-            await sendMessage(fromNumber, `Unit "${unit.unitNumber}" deleted successfully!`);
-            console.log(`Unit ${unit._id} deleted`);
-          } catch (error) {
-            console.error(`Error deleting unit ${unit._id}:`, error);
-            await sendMessage(fromNumber, `Failed to delete unit "${unit.unitNumber}". Please try again.`);
+          delete sessions[fromNumber].properties;
+          console.log(`Session reset after property removal confirmation for ${fromNumber}`);
+        } else if (sessions[fromNumber].action === 'confirm_unit_removal') {
+          if (selectedOption === 'yes_remove_unit') {
+            const unit = sessions[fromNumber].unitToRemove;
+            try {
+              await Unit.findByIdAndDelete(unit._id);
+              await sendMessage(fromNumber, `Unit "${unit.unitNumber}" deleted successfully!`);
+              console.log(`Unit ${unit._id} deleted`);
+            } catch (error) {
+              console.error(`Error deleting unit ${unit._id}:`, error);
+              await sendMessage(fromNumber, `Failed to delete unit "${unit.unitNumber}". Please try again.`);
+            }
+          } else if (selectedOption === 'no_remove_unit') {
+            await sendMessage(fromNumber, `Unit "${sessions[fromNumber].unitToRemove.unitNumber}" removal canceled.`);
           }
           sessions[fromNumber].action = null;
           delete sessions[fromNumber].unitToRemove;
-        } else if (sessions[fromNumber].action === 'confirm_unit_removal' && selectedOption === 'no_remove_unit') {
-          await sendMessage(fromNumber, `Unit "${sessions[fromNumber].unitToRemove.unitNumber}" removal canceled.`);
-          sessions[fromNumber].action = null;
-          delete sessions[fromNumber].unitToRemove;
-        } else if (sessions[fromNumber].action === 'confirm_tenant_removal' && selectedOption === 'yes_remove_tenant') {
-          const tenant = sessions[fromNumber].tenantToRemove;
-          try {
-            await Tenant.findByIdAndDelete(tenant._id);
-            await sendMessage(fromNumber, `Tenant "${tenant.name}" deleted successfully!`);
-            console.log(`Tenant ${tenant._id} deleted`);
-          } catch (error) {
-            console.error(`Error deleting tenant ${tenant._id}:`, error);
-            await sendMessage(fromNumber, `Failed to delete tenant "${tenant.name}". Please try again.`);
+          delete sessions[fromNumber].units;
+          console.log(`Session reset after unit removal confirmation for ${fromNumber}`);
+        } else if (sessions[fromNumber].action === 'confirm_tenant_removal') {
+          if (selectedOption === 'yes_remove_tenant') {
+            const tenant = sessions[fromNumber].tenantToRemove;
+            try {
+              await Tenant.findByIdAndDelete(tenant._id);
+              await sendMessage(fromNumber, `Tenant "${tenant.name}" deleted successfully!`);
+              console.log(`Tenant ${tenant._id} deleted`);
+            } catch (error) {
+              console.error(`Error deleting tenant ${tenant._id}:`, error);
+              await sendMessage(fromNumber, `Failed to delete tenant "${tenant.name}". Please try again.`);
+            }
+          } else if (selectedOption === 'no_remove_tenant') {
+            await sendMessage(fromNumber, `Tenant "${sessions[fromNumber].tenantToRemove.name}" removal canceled.`);
           }
           sessions[fromNumber].action = null;
           delete sessions[fromNumber].tenantToRemove;
-        } else if (sessions[fromNumber].action === 'confirm_tenant_removal' && selectedOption === 'no_remove_tenant') {
-          await sendMessage(fromNumber, `Tenant "${sessions[fromNumber].tenantToRemove.name}" removal canceled.`);
-          sessions[fromNumber].action = null;
-          delete sessions[fromNumber].tenantToRemove;
-        }
-
-        // Handle menu options
-        else if (selectedOption === 'account_info') {
+          delete sessions[fromNumber].tenants;
+          console.log(`Session reset after tenant removal confirmation for ${fromNumber}`);
+        } else if (selectedOption === 'account_info') {
           try {
             const user = await User.findOne({ phoneNumber });
             if (user) {
@@ -652,8 +667,10 @@ async function promptTenantSelection(phoneNumber, action, propertyId) {
 // Helper function to send property link (for add/edit actions)
 async function sendPropertyLink(phoneNumber, action, tenantId = null) {
   console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}, tenantId: ${tenantId}`);
+
   try {
     let authorizeRecord = await Authorize.findOne({ phoneNumber: `+${phoneNumber}` });
+
     if (!authorizeRecord) {
       authorizeRecord = new Authorize({
         phoneNumber: `+${phoneNumber}`,
@@ -684,6 +701,7 @@ async function sendPropertyLink(phoneNumber, action, tenantId = null) {
     await sendMessage(phoneNumber, 'Failed to retrieve authorization record. Please try again.');
   }
 }
+
 // Helper function to prompt property removal
 async function promptPropertyRemoval(phoneNumber) {
   console.log(`Prompting property removal selection for ${phoneNumber}`);
