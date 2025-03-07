@@ -15,36 +15,20 @@
     <!-- Form Container -->
     <div class="container">
         <h2>Add Property</h2>
-        <form action="/addproperty/<%= id %>" method="POST" enctype="multipart/form-data" onsubmit="return validateForm()">
-            
-            <!-- Property Name -->
-            <label for="property_name">Property Name:</label>
-            <input type="text" id="property_name" name="property_name" maxlength="50" required>
-            <small id="propertyNameError" class="error-message"></small>
-
-            <!-- Number of Units -->
-            <label for="units">Number of Units:</label>
-            <input type="number" id="units" name="units" required min="1">
-            <small id="unitsError" class="error-message"></small>
-
-            <!-- Address -->
-            <label for="address">Address:</label>
-            <input type="text" id="address" name="address" maxlength="80" required>
-            <small id="addressError" class="error-message"></small>
-
-            <!-- Total Amount -->
-            <label for="totalAmount">Total Amount:</label>
-            <input type="number" id="totalAmount" name="totalAmount" required min="0">
-            <small id="totalAmountError" class="error-message"></small>
-
-            <!-- Property Image -->
-            <label for="image">Property Image (Max 5MB):</label>
-            <input type="file" id="image" name="image" required accept="image/*">
-            <small id="imageError" class="error-message"></small>
-
-            <!-- Submit Button -->
-            <button type="submit">Submit</button>
-        </form>
+       <form action="/addproperty/<%= id %>" method="POST" enctype="multipart/form-data">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <label for="property_name">Property Name:</label>
+  <input type="text" id="property_name" name="property_name" required>
+  <label for="units">Units:</label>
+  <input type="number" id="units" name="units" required>
+  <label for="address">Address:</label>
+  <input type="text" id="address" name="address" required>
+  <label for="totalAmount">Total Amount:</label>
+  <input type="number" id="totalAmount" name="totalAmount" step="0.01" required>
+  <label for="image">Image:</label>
+  <input type="file" id="image" name="image" accept="image/*">
+  <button type="submit">Add Property</button>
+</form>
     </div>
 
     <!-- Script for Validation -->
