@@ -5,8 +5,12 @@ const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
+const csurf = require('csurf');
+const jwt = require('jsonwebtoken');
+const { body, validationResult } = require('express-validator');
 const path = require('path');
-const axios = require("axios");
+const axios = require('axios');
 const multer = require('multer');
 const Tenant = require('./models/Tenant');
 const Image = require('./models/Image');
@@ -14,541 +18,409 @@ const Property = require('./models/Property');
 const User = require('./models/User');
 const Authorize = require('./models/Authorize');
 const Unit = require('./models/Unit');
-const Otp = require('./models/Otp');
-const Dropbox = require('dropbox').Dropbox;
-const fetch = require('isomorphic-fetch');
-
-const app = express();
-const port = process.env.PORT || 3000; // Glitch uses dynamic port
 const AWS = require('aws-sdk');
 
-// Configure the S3 client to use Cloudflare R2 settings
+const app = express();
+const port = process.env.PORT || 3000;
+
+// Configure S3 for Cloudflare R2
 const s3 = new AWS.S3({
-  endpoint: process.env.R2_ENDPOINT, // e.g., https://<account-id>.r2.cloudflarestorage.com
+  endpoint: process.env.R2_ENDPOINT,
   accessKeyId: process.env.R2_ACCESS_KEY_ID,
   secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
   Bucket: process.env.R2_BUCKET,
-  region: 'auto', // R2 doesn’t require a region but "auto" works for S3 compatibility
+  region: 'auto',
   signatureVersion: 'v4',
 });
 
-// Trust the first proxy
+// Security Middleware
+app.use(helmet());
 app.set('trust proxy', 1);
+app.use(bodyParser.json({ limit: '10kb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '10kb' }));
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Set up EJS as the templating engine
+// MongoDB Connection
+mongoose.set('strictQuery', true);
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+}).then(() => console.log('MongoDB connected'))
+  .catch(error => console.error('MongoDB connection error:', error));
+
+// Session Configuration
+app.use(session({
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGODB_URI,
+    ttl: 3600,
+  }),
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    sameSite: 'strict',
+    maxAge: 3600000,
+  },
+}));
+
+// CSRF Protection
+const csrfProtection = csurf({ cookie: true });
+app.use(csrfProtection);
+
+// Rate Limiting
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: 'Too many requests from this IP, please try again later.',
+});
+app.use(globalLimiter);
+
+const sensitiveLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: 'Too many attempts, please try again later.',
+});
+
+// Multer Configuration
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const filetypes = /jpeg|jpg|png/;
+    const mimetype = filetypes.test(file.mimetype);
+    if (mimetype) return cb(null, true);
+    cb(new Error('Only JPEG/PNG images allowed'));
+  },
+});
+
+// JWT Middleware
+const authenticateJWT = (req, res, next) => {
+  const token = req.headers['authorization']?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Authentication required' });
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Invalid token' });
+    req.user = user;
+    next();
+  });
+};
+
+// View Engine
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-// Middleware
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-
-// MongoDB connection
-mongoose.set('strictQuery', false);
-mongoose.connect(process.env.MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-})
-.then(() => console.log('MongoDB connected'))
-.catch(error => console.error('MongoDB connection error:', error));
-
-const cors = require('cors');
-app.use(cors({
-    origin: 'http://your-frontend-domain.com', // Replace with your frontend domain
-    credentials: true, // Allow cookies to be sent
-}));
-// Session setup with MongoDB storage
-app.use(session({
-    secret: process.env.SESSION_SECRET, // Ensure this is set in .env
-    resave: false,
-    saveUninitialized: true,
-    store: MongoStore.create({
-        mongoUrl: process.env.MONGODB_URI, // Ensure this is correct
-        collectionName: 'sessions', // Optional: Name of the collection to store sessions
-        ttl: 3600, // Session TTL (time to live) in seconds (1 hour)
-    }),
-    cookie: {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production', // Ensure cookies are only sent over HTTPS in production
-        maxAge: 3600000, // 1 hour
-    },
-}));
-
-// Serve static files (public directory)
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Rate limiter for signup
-const signupLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 10,
-    message: 'Too many signup attempts. Try again later.',
-});
-
-// Configure multer for image uploads (memory storage)
-const storage = multer.memoryStorage(); // Use memory storage for direct upload to Dropbox
-const upload = multer({ 
-    storage: storage, 
-    limits: { fileSize: 5 * 1024 * 1024 }, // Limit file size to 5 MB
-});
-
-// Routes and webhook handling
-const { router, waitForUserResponse, userResponses, sendMessage } = require('./routes/webhook');
+// Routes
+const { router, sendMessage } = require('./routes/webhook');
 app.use('/webhook', router);
 
-
-
-
-// Function to send WhatsApp message for authorization
+// WhatsApp Message Function
 async function sendWhatsAppAuthMessage(phoneNumber) {
-    return axios.post(process.env.WHATSAPP_API_URL, {
-        messaging_product: 'whatsapp',
-        to: phoneNumber,
-        type: 'interactive',
-        interactive: {
-            type: 'button',
-            body: { text: 'Do you authorize this action?' },
-            action: {
-                buttons: [
-                    { type: 'reply', reply: { id: 'Yes_authorize', title: 'Yes' } },
-                    { type: 'reply', reply: { id: 'No_authorize', title: 'No' } }
-                ]
-            }
-        }
-    }, {
-        headers: {
-            'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
-        },
-    });
+  const message = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      body: { text: '*Authorization Request*\nDo you authorize this action?' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'Yes_authorize', title: 'Yes' } },
+          { type: 'reply', reply: { id: 'No_authorize', title: 'No' } },
+        ],
+      },
+    },
+  };
+  await axios.post(process.env.WHATSAPP_API_URL, message, {
+    headers: {
+      'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+  });
 }
-
-
 
 function generateTenantId() {
-    // Generate a random 4-digit number (ensuring it is always 4 digits)
-    const digits = Math.floor(1000 + Math.random() * 9000);
-    // Generate a random uppercase letter (A-Z)
-    const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
-    return 'T' + digits + letter;
+  const digits = Math.floor(1000 + Math.random() * 9000);
+  const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+  return `T${digits}${letter}`;
 }
 
+// Add Property Route
+app.post('/addproperty/:id', authenticateJWT, sensitiveLimiter, upload.single('image'), [
+  body('property_name').trim().notEmpty().escape(),
+  body('units').isInt({ min: 1 }),
+  body('address').trim().notEmpty().escape(),
+  body('totalAmount').isFloat({ min: 0 }),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-// Route to get units for a selected property
+  const { property_name, units, address, totalAmount } = req.body;
+  const id = req.params.id;
 
-// Handle form submission and image upload to Dropbox (add property)
-app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
-    const { property_name, units, address, totalAmount } = req.body;
-    const id = req.params.id;
-
-    try {
-        // Find the authorization record
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            console.error('Authorization record not found for ID:', id);
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        // Check if the authorization has already been used
-        if (authorizeRecord.used) {
-            console.error('Authorization already used for ID:', id);
-            return res.status(403).send('This link has already been used.');
-        }
-
-        // Use the phone number directly (no need to add '+')
-        const phoneNumber = authorizeRecord.phoneNumber;
-        console.log(`Querying User collection for phoneNumber: ${phoneNumber}`);
-
-        // Find the user
-        const user = await User.findOne({ phoneNumber });
-        if (!user) {
-            console.error('User not found for phoneNumber:', phoneNumber);
-            return res.status(404).send('User not found.');
-        }
-
-        // Log the user ID
-        console.log(`User found with ID: ${user._id}`);
-
-        // Create the property
-        const property = new Property({
-            name: property_name,
-            units,
-            address,
-            totalAmount,
-            userId: user._id,
-        });
-        await property.save();
-
-        // Upload image to Cloudflare R2 if provided
-        if (req.file) {
-            const key = 'images/' + Date.now() + '-' + req.file.originalname;
-            const uploadParams = {
-                Bucket: process.env.R2_BUCKET,
-                Key: key,
-                Body: req.file.buffer,
-                ContentType: req.file.mimetype,
-            };
-
-            await s3.upload(uploadParams).promise();
-            const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
-
-            const image = new Image({ propertyId: property._id, imageUrl: imageUrl });
-            await image.save();
-            property.images.push(image._id);
-            await property.save();
-        }
-
-        // Send WhatsApp confirmation message
-        await sendMessage(authorizeRecord.phoneNumber, `Property *${property_name}* has been successfully added.`);
-
-        // Delete the authorization record after successful property addition
-        await Authorize.findByIdAndDelete(id);
-        console.log(`Authorization record deleted for ID: ${id}`);
-
-        res.send('Property and image added successfully!');
-    } catch (error) {
-        console.error('Error adding property and image:', error);
-        res.status(500).send('An error occurred while adding the property and image.');
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord || authorizeRecord.used) {
+      return res.status(403).json({ error: 'Invalid or used authorization' });
     }
+
+    const user = await User.findOne({ phoneNumber: authorizeRecord.phoneNumber });
+    if (!user || user._id.toString() !== req.user.id) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const property = new Property({ name: property_name, units, address, totalAmount, userId: user._id });
+    await property.save();
+
+    if (req.file) {
+      const key = `images/${Date.now()}-${req.file.originalname}`;
+      await s3.upload({
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype,
+      }).promise();
+
+      const imageUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
+      const image = new Image({ propertyId: property._id, imageUrl });
+      await image.save();
+      property.images.push(image._id);
+      await property.save();
+    }
+
+    await sendMessage(authorizeRecord.phoneNumber, `*Property Added*\nProperty "${property_name}" has been successfully added.`);
+    await Authorize.findByIdAndDelete(id);
+    res.json({ message: 'Property added successfully' });
+  } catch (error) {
+    console.error('Error adding property:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
-// Handle form submission and image upload to Dropbox (add unit)
-app.post('/addunit/:id', upload.single('image'), async (req, res) => {
+// Add Unit Route
+app.post('/addunit/:id', authenticateJWT, sensitiveLimiter, upload.single('image'), [
+  body('property').isMongoId(),
+  body('unit_number').trim().notEmpty().escape(),
+  body('rent_amount').isFloat({ min: 0 }),
+  body('floor').isInt(),
+  body('size').isFloat({ min: 0 }),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
   const { property, unit_number, rent_amount, floor, size } = req.body;
   const id = req.params.id;
 
   try {
     const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
+    if (!authorizeRecord || authorizeRecord.used) {
+      return res.status(403).json({ error: 'Invalid or used authorization' });
     }
 
-    if (authorizeRecord.used) {
-      return res.status(403).send('This link has already been used.');
+    const user = await User.findOne({ phoneNumber: authorizeRecord.phoneNumber });
+    if (!user || user._id.toString() !== req.user.id) {
+      return res.status(403).json({ error: 'Unauthorized' });
     }
 
-    const phoneNumber = authorizeRecord.phoneNumber;
-    const user = await User.findOne({ phoneNumber });
-    if (!user) {
-      return res.status(404).send('User not found.');
-    }
-
-    const unit = new Unit({
-      property,
-      unitNumber: unit_number,
-      rentAmount: rent_amount,
-      floor,
-      size,
-      userId: user._id,
-    });
+    const unit = new Unit({ property, unitNumber: unit_number, rentAmount: rent_amount, floor, size, userId: user._id });
     await unit.save();
 
     if (req.file) {
-      const key = 'images/' + Date.now() + '-' + req.file.originalname;
-      const uploadParams = {
+      const key = `images/${Date.now()}-${req.file.originalname}`;
+      await s3.upload({
         Bucket: process.env.R2_BUCKET,
         Key: key,
         Body: req.file.buffer,
         ContentType: req.file.mimetype,
-      };
+      }).promise();
 
-      await s3.upload(uploadParams).promise();
-      const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
-
-      const image = new Image({ unitId: unit._id, imageUrl: imageUrl });
+      const imageUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
+      const image = new Image({ unitId: unit._id, imageUrl });
       await image.save();
       unit.images.push(image._id);
       await unit.save();
     }
 
-    // Send WhatsApp confirmation
     const propertyDoc = await Property.findById(property);
-    await sendMessage(
-      phoneNumber,
-      `Unit "${unit_number}" has been added to property "${propertyDoc ? propertyDoc.name : 'Unknown'}".`
-    );
-
-    // Mark authorization as used and delete it
-    authorizeRecord.used = true;
-    await authorizeRecord.save();
+    await sendMessage(authorizeRecord.phoneNumber, `*Unit Added*\nUnit "${unit_number}" has been added to "${propertyDoc?.name || 'Unknown'}".`);
     await Authorize.findByIdAndDelete(id);
-
-    res.send('Unit and image added successfully!');
+    res.json({ message: 'Unit added successfully' });
   } catch (error) {
-    console.error('Error adding unit and image:', error);
-    res.status(500).send('An error occurred while adding the unit and image.');
+    console.error('Error adding unit:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Add tenant route that waits for WhatsApp authorization
-app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
+// Add Tenant Route
+app.post('/addtenant/:id', authenticateJWT, sensitiveLimiter, upload.fields([
+  { name: 'photo', maxCount: 1 },
+  { name: 'idProof', maxCount: 1 },
+]), [
+  body('name').trim().notEmpty().escape(),
+  body('propertyName').trim().notEmpty().escape(),
+  body('unitAssigned').isMongoId(),
+  body('lease_start').isISO8601(),
+  body('deposit').isFloat({ min: 0 }),
+  body('rent_amount').isFloat({ min: 0 }),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
   const { name, propertyName, unitAssigned, lease_start, deposit, rent_amount, tenant_id } = req.body;
   const id = req.params.id;
 
   try {
     const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
+    if (!authorizeRecord || authorizeRecord.used) {
+      return res.status(403).json({ error: 'Invalid or used authorization' });
     }
 
-    if (authorizeRecord.used) {
-      return res.status(403).send('This link has already been used.');
+    const user = await User.findOne({ phoneNumber: authorizeRecord.phoneNumber });
+    if (!user || user._id.toString() !== req.user.id) {
+      return res.status(403).json({ error: 'Unauthorized' });
     }
 
-    const phoneNumber = authorizeRecord.phoneNumber;
-    const user = await User.findOne({ phoneNumber });
-    if (!user) {
-      return res.status(404).send('User not found.');
-    }
-
-    // Debug: Log the incoming unitAssigned value
-    console.log('unitAssigned from form:', unitAssigned);
-
-    // Find the unit by _id (expects a valid ObjectId)
     const unit = await Unit.findById(unitAssigned);
-    if (!unit) {
-      return res.status(400).send(`No unit found with ID: ${unitAssigned}`);
-    }
+    if (!unit) return res.status(400).json({ error: 'Unit not found' });
 
     const tenant = new Tenant({
       name,
       phoneNumber: user.phoneNumber,
       userId: user._id,
       propertyName,
-      unitAssigned: unit._id, // Use the Unit's _id (ObjectId) for the reference
+      unitAssigned: unit._id,
       lease_start: new Date(lease_start),
       deposit,
       rent_amount,
-      tenant_id: tenant_id || await generateTenantId(), // Use provided ID or generate one
+      tenant_id: tenant_id || generateTenantId(),
     });
 
     if (req.files.photo) {
-      const key = 'images/' + Date.now() + '-' + req.files.photo[0].originalname;
-      const uploadParams = {
+      const key = `images/${Date.now()}-${req.files.photo[0].originalname}`;
+      await s3.upload({
         Bucket: process.env.R2_BUCKET,
         Key: key,
         Body: req.files.photo[0].buffer,
         ContentType: req.files.photo[0].mimetype,
-      };
-      await s3.upload(uploadParams).promise();
-      tenant.photo = process.env.R2_PUBLIC_URL + '/' + key;
+      }).promise();
+      tenant.photo = `${process.env.R2_PUBLIC_URL}/${key}`;
     }
 
     if (req.files.idProof) {
-      const key = 'images/' + Date.now() + '-' + req.files.idProof[0].originalname;
-      const uploadParams = {
+      const key = `images/${Date.now()}-${req.files.idProof[0].originalname}`;
+      await s3.upload({
         Bucket: process.env.R2_BUCKET,
         Key: key,
         Body: req.files.idProof[0].buffer,
         ContentType: req.files.idProof[0].mimetype,
-      };
-      await s3.upload(uploadParams).promise();
-      tenant.idProof = process.env.R2_PUBLIC_URL + '/' + key;
+      }).promise();
+      tenant.idProof = `${process.env.R2_PUBLIC_URL}/${key}`;
     }
 
     await tenant.save();
-
-    // Send WhatsApp confirmation
-    await sendMessage(
-      phoneNumber,
-      `Tenant "${name}" has been added to unit "${unit.unitNumber}" (ID: ${unit.unit_id}) at property "${propertyName}".`
-    );
-
-    // Mark authorization as used and delete it
+    await sendMessage(user.phoneNumber, `*Tenant Added*\nTenant "${name}" has been added to unit "${unit.unitNumber}" at "${propertyName}".`);
     await Authorize.findByIdAndDelete(id);
-
-    res.send('Tenant added successfully!');
+    res.json({ message: 'Tenant added successfully' });
   } catch (error) {
     console.error('Error adding tenant:', error);
-    res.status(500).send('An error occurred while adding the tenant.');
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
-// GET route to render the edit property form with current data
-// POST route to update the property
-// POST route to update the property
-app.post('/editproperty/:id', upload.single('image'), async (req, res) => {
-    const { propertyId, property_name, units, address, totalAmount } = req.body;
-    const id = req.params.id;
 
-    try {
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            console.error('Authorization record not found for ID:', id);
-            return res.status(404).send('Authorization record not found.');
-        }
+// Edit Property Route
+app.post('/editproperty/:id', authenticateJWT, sensitiveLimiter, upload.single('image'), [
+  body('propertyId').isMongoId(),
+  body('property_name').trim().notEmpty().escape(),
+  body('units').isInt({ min: 1 }),
+  body('address').trim().notEmpty().escape(),
+  body('totalAmount').isFloat({ min: 0 }),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-        if (authorizeRecord.used) {
-            console.error('Authorization already used for ID:', id);
-            return res.status(403).send('This link has already been used.');
-        }
-
-        const phoneNumber = authorizeRecord.phoneNumber;
-        const user = await User.findOne({ phoneNumber });
-        if (!user) {
-            console.error('User not found for phoneNumber:', phoneNumber);
-            return res.status(404).send('User not found.');
-        }
-
-        // Update the property
-        const property = await Property.findOne({ _id: propertyId, userId: user._id });
-        if (!property) {
-            return res.status(404).send('Property not found or you do not have permission to edit it.');
-        }
-
-        property.name = property_name;
-        property.units = units;
-        property.address = address;
-        property.totalAmount = totalAmount;
-
-        // Handle image upload if provided
-        if (req.file) {
-            const key = 'images/' + Date.now() + '-' + req.file.originalname;
-            const uploadParams = {
-                Bucket: process.env.R2_BUCKET,
-                Key: key,
-                Body: req.file.buffer,
-                ContentType: req.file.mimetype,
-            };
-
-            await s3.upload(uploadParams).promise();
-            const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
-
-            // If property already has an image, update it; otherwise, create a new one
-            if (property.images.length > 0) {
-                const image = await Image.findById(property.images[0]);
-                image.imageUrl = imageUrl;
-                await image.save();
-            } else {
-                const image = new Image({ propertyId: property._id, imageUrl });
-                await image.save();
-                property.images.push(image._id);
-            }
-        }
-
-        await property.save();
-
-        // Send WhatsApp confirmation message
-        await sendMessage(phoneNumber, `Property "${property_name}" has been successfully updated.`);
-
-        // Mark authorization as used and delete it
-        authorizeRecord.used = true;
-        await authorizeRecord.save();
-        await Authorize.findByIdAndDelete(id);
-
-        res.send('Property updated successfully!');
-    } catch (error) {
-        console.error('Error updating property:', error);
-        res.status(500).send('Error updating property.');
-    }
-});
-// GET route to render the edit property form with current data
-app.get('/editproperty/:id', checkOTPValidation, async (req, res) => {
-    const id = req.params.id;
-
-    try {
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        // Check if the authorization has already been used
-        if (authorizeRecord.used) {
-            return res.status(403).send('This link has already been used.');
-        }
-
-        // Fetch all properties for the user
-        const phoneNumber = authorizeRecord.phoneNumber;
-        const user = await User.findOne({ phoneNumber });
-        if (!user) {
-            return res.status(404).send('User not found.');
-        }
-
-        const properties = await Property.find({ userId: user._id });
-        if (!properties.length) {
-            return res.status(404).send('No properties found to edit.');
-        }
-
-        // Render the edit property form with properties list
-        res.render('editProperty', { id, properties });
-    } catch (error) {
-        console.error('Error rendering edit property form:', error);
-        res.status(500).send('An error occurred while rendering the form.');
-    }
-});
-
-
-app.post('/deleteproperty/:id', checkOTPValidation, async (req, res) => {
+  const { propertyId, property_name, units, address, totalAmount } = req.body;
   const id = req.params.id;
-  const { propertyId } = req.body; // Expect propertyId from the form
 
   try {
     const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
+    if (!authorizeRecord || authorizeRecord.used) {
+      return res.status(403).json({ error: 'Invalid or used authorization' });
     }
 
-    if (authorizeRecord.used) {
-      return res.status(403).send('This link has already been used.');
+    const user = await User.findOne({ phoneNumber: authorizeRecord.phoneNumber });
+    if (!user || user._id.toString() !== req.user.id) {
+      return res.status(403).json({ error: 'Unauthorized' });
     }
 
-    const phoneNumber = authorizeRecord.phoneNumber;
-    const user = await User.findOne({ phoneNumber });
-    if (!user) {
-      return res.status(404).send('User not found.');
+    const property = await Property.findOne({ _id: propertyId, userId: user._id });
+    if (!property) return res.status(404).json({ error: 'Property not found' });
+
+    property.name = property_name;
+    property.units = units;
+    property.address = address;
+    property.totalAmount = totalAmount;
+
+    if (req.file) {
+      const key = `images/${Date.now()}-${req.file.originalname}`;
+      await s3.upload({
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype,
+      }).promise();
+
+      const imageUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
+      if (property.images.length > 0) {
+        const image = await Image.findById(property.images[0]);
+        image.imageUrl = imageUrl;
+        await image.save();
+      } else {
+        const image = new Image({ propertyId: property._id, imageUrl });
+        await image.save();
+        property.images.push(image._id);
+      }
     }
 
-    // Find and delete the property
-    const property = await Property.findOneAndDelete({
-      _id: propertyId,
-      userId: user._id,
-    });
-
-    if (!property) {
-      return res.status(404).send('Property not found or you do not have permission to delete it.');
-    }
-
-    // Send WhatsApp confirmation message
-    await sendMessage(
-      phoneNumber,
-      `Property "${property.name}" has been successfully deleted.`
-    );
-
-    // Mark authorization as used and delete it
-    authorizeRecord.used = true;
-    await authorizeRecord.save();
+    await property.save();
+    await sendMessage(user.phoneNumber, `*Property Updated*\nProperty "${property_name}" has been successfully updated.`);
     await Authorize.findByIdAndDelete(id);
-
-    res.send('Property deleted successfully!');
+    res.json({ message: 'Property updated successfully' });
   } catch (error) {
-    console.error('Error deleting property:', error);
-    res.status(500).send('Error deleting property.');
+    console.error('Error updating property:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
-// GET route to render the edit unit form (with list of properties if needed)
-// POST route to update the unit
-app.post('/editunit/:id', upload.single('image'), async (req, res) => {
+
+// Edit Unit Route
+app.post('/editunit/:id', authenticateJWT, sensitiveLimiter, upload.single('image'), [
+  body('unitId').isMongoId(),
+  body('property').isMongoId(),
+  body('unit_number').trim().notEmpty().escape(),
+  body('rent_amount').isFloat({ min: 0 }),
+  body('floor').isInt(),
+  body('size').isFloat({ min: 0 }),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
   const { unitId, property, unit_number, rent_amount, floor, size } = req.body;
   const id = req.params.id;
 
   try {
     const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
+    if (!authorizeRecord || authorizeRecord.used) {
+      return res.status(403).json({ error: 'Invalid or used authorization' });
     }
 
-    if (authorizeRecord.used) {
-      return res.status(403).send('This link has already been used.');
-    }
-
-    const phoneNumber = authorizeRecord.phoneNumber;
-    const user = await User.findOne({ phoneNumber });
-    if (!user) {
-      return res.status(404).send('User not found.');
+    const user = await User.findOne({ phoneNumber: authorizeRecord.phoneNumber });
+    if (!user || user._id.toString() !== req.user.id) {
+      return res.status(403).json({ error: 'Unauthorized' });
     }
 
     const unit = await Unit.findOne({ _id: unitId, userId: user._id });
-    if (!unit) {
-      return res.status(404).send('Unit not found or you do not have permission to edit it.');
-    }
+    if (!unit) return res.status(404).json({ error: 'Unit not found' });
 
     unit.property = property;
     unit.unitNumber = unit_number;
@@ -557,17 +429,15 @@ app.post('/editunit/:id', upload.single('image'), async (req, res) => {
     unit.size = size;
 
     if (req.file) {
-      const key = 'images/' + Date.now() + '-' + req.file.originalname;
-      const uploadParams = {
+      const key = `images/${Date.now()}-${req.file.originalname}`;
+      await s3.upload({
         Bucket: process.env.R2_BUCKET,
         Key: key,
         Body: req.file.buffer,
         ContentType: req.file.mimetype,
-      };
+      }).promise();
 
-      await s3.upload(uploadParams).promise();
-      const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
-
+      const imageUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
       if (unit.images.length > 0) {
         const image = await Image.findById(unit.images[0]);
         image.imageUrl = imageUrl;
@@ -580,109 +450,52 @@ app.post('/editunit/:id', upload.single('image'), async (req, res) => {
     }
 
     await unit.save();
-
-    // Send WhatsApp confirmation
     const propertyDoc = await Property.findById(property);
-    await sendMessage(
-      phoneNumber,
-      `Unit "${unit_number}" in property "${propertyDoc ? propertyDoc.name : 'Unknown'}" has been updated.`
-    );
-
-    // Mark authorization as used and delete it
-    authorizeRecord.used = true;
-    await authorizeRecord.save();
+    await sendMessage(user.phoneNumber, `*Unit Updated*\nUnit "${unit_number}" in "${propertyDoc?.name || 'Unknown'}" has been updated.`);
     await Authorize.findByIdAndDelete(id);
-
-    res.send('Unit updated successfully!');
+    res.json({ message: 'Unit updated successfully' });
   } catch (error) {
     console.error('Error updating unit:', error);
-    res.status(500).send('Error updating unit.');
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-app.post('/deleteunit/:id', checkOTPValidation, async (req, res) => {
-  const id = req.params.id;
-  const { unitId } = req.body; // Expect unitId from the form
+// Edit Tenant Route
+app.post('/edittenant/:id', authenticateJWT, sensitiveLimiter, upload.fields([
+  { name: 'photo', maxCount: 1 },
+  { name: 'idProof', maxCount: 1 },
+]), [
+  body('tenantId').isMongoId(),
+  body('name').trim().notEmpty().escape(),
+  body('propertyName').trim().notEmpty().escape(),
+  body('unitAssigned').isMongoId(),
+  body('lease_start').isISO8601(),
+  body('deposit').isFloat({ min: 0 }),
+  body('rent_amount').isFloat({ min: 0 }),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-  try {
-    const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
-    }
-
-    if (authorizeRecord.used) {
-      return res.status(403).send('This link has already been used.');
-    }
-
-    const phoneNumber = authorizeRecord.phoneNumber;
-    const user = await User.findOne({ phoneNumber });
-    if (!user) {
-      return res.status(404).send('User not found.');
-    }
-
-    const unit = await Unit.findOneAndDelete({ _id: unitId, userId: user._id });
-    if (!unit) {
-      return res.status(404).send('Unit not found or you do not have permission to delete it.');
-    }
-
-    // Send WhatsApp confirmation message
-    await sendMessage(
-      phoneNumber,
-      `Unit "${unit.unitNumber}" has been successfully deleted.`
-    );
-
-    // Mark authorization as used and delete it
-    authorizeRecord.used = true;
-    await authorizeRecord.save();
-    await Authorize.findByIdAndDelete(id);
-
-    res.send('Unit deleted successfully!');
-  } catch (error) {
-    console.error('Error deleting unit:', error);
-    res.status(500).send('Error deleting unit.');
-  }
-});
-// GET route to render the edit tenant form with current data
-// POST route to update the tenant
-app.post('/edittenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
   const { tenantId, name, propertyName, unitAssigned, lease_start, deposit, rent_amount } = req.body;
   const id = req.params.id;
 
-  console.log(`POST /edittenant/:id called with id: ${id}, tenantId: ${tenantId}`);
-
   try {
     const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      console.log(`Authorize record not found for id: ${id}`);
-      return res.status(404).send('Authorization record not found.');
+    if (!authorizeRecord || authorizeRecord.used) {
+      return res.status(403).json({ error: 'Invalid or used authorization' });
     }
 
-    if (authorizeRecord.used) {
-      console.log(`Authorize record already used for id: ${id}`);
-      return res.status(403).send('This link has already been used.');
-    }
-
-    const phoneNumber = authorizeRecord.phoneNumber;
-    const user = await User.findOne({ phoneNumber });
-    if (!user) {
-      console.log(`User not found for phoneNumber: ${phoneNumber}`);
-      return res.status(404).send('User not found.');
+    const user = await User.findOne({ phoneNumber: authorizeRecord.phoneNumber });
+    if (!user || user._id.toString() !== req.user.id) {
+      return res.status(403).json({ error: 'Unauthorized' });
     }
 
     const tenant = await Tenant.findOne({ _id: tenantId, userId: user._id });
-    if (!tenant) {
-      console.log(`Tenant not found for tenantId: ${tenantId}, userId: ${user._id}`);
-      return res.status(404).send('Tenant not found or you do not have permission to edit it.');
-    }
+    if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
 
-    // Validate unitAssigned
     const unit = await Unit.findById(unitAssigned);
-    if (!unit) {
-      console.log(`Unit not found for unitAssigned: ${unitAssigned}`);
-      return res.status(400).send(`No unit found with ID: ${unitAssigned}`);
-    }
+    if (!unit) return res.status(400).json({ error: 'Unit not found' });
 
-    // Update tenant fields
     tenant.name = name;
     tenant.propertyName = propertyName;
     tenant.unitAssigned = unit._id;
@@ -690,484 +503,303 @@ app.post('/edittenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { nam
     tenant.deposit = deposit;
     tenant.rent_amount = rent_amount;
 
-    // Handle file uploads (if present)
-    if (req.files['photo']) {
-      tenant.photo = {
-        data: req.files['photo'][0].buffer,
-        contentType: req.files['photo'][0].mimetype
-      };
+    if (req.files.photo) {
+      const key = `images/${Date.now()}-${req.files.photo[0].originalname}`;
+      await s3.upload({
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: req.files.photo[0].buffer,
+        ContentType: req.files.photo[0].mimetype,
+      }).promise();
+      tenant.photo = `${process.env.R2_PUBLIC_URL}/${key}`;
     }
-    if (req.files['idProof']) {
-      tenant.idProof = {
-        data: req.files['idProof'][0].buffer,
-        contentType: req.files['idProof'][0].mimetype
-      };
+
+    if (req.files.idProof) {
+      const key = `images/${Date.now()}-${req.files.idProof[0].originalname}`;
+      await s3.upload({
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: req.files.idProof[0].buffer,
+        ContentType: req.files.idProof[0].mimetype,
+      }).promise();
+      tenant.idProof = `${process.env.R2_PUBLIC_URL}/${key}`;
     }
 
     await tenant.save();
-    console.log(`Tenant ${tenantId} updated successfully`);
-
-    // Send WhatsApp message
-    const whatsappMessage = `Tenant "${name}" edited successfully!`;
-    await sendMessage(phoneNumber, whatsappMessage);
-    console.log(`WhatsApp message sent to ${phoneNumber}: ${whatsappMessage}`);
-
-    // Mark authorization as used and delete it
+    await sendMessage(user.phoneNumber, `*Tenant Updated*\nTenant "${name}" has been successfully updated.`);
     await Authorize.findByIdAndDelete(id);
-
-    res.send('Tenant updated successfully! Check WhatsApp for confirmation.');
+    res.json({ message: 'Tenant updated successfully' });
   } catch (error) {
     console.error('Error updating tenant:', error);
-    res.status(500).send('Error updating tenant.');
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
-/////////////////////////////////////////////////////////////////////////////////////////////
 
-// Helper function to generate a 6-digit OTP
-// Helper function to generate a 6-digit OTP
+// Delete Property Route
+app.post('/deleteproperty/:id', authenticateJWT, sensitiveLimiter, [
+  body('propertyId').isMongoId(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const { propertyId } = req.body;
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord || authorizeRecord.used) {
+      return res.status(403).json({ error: 'Invalid or used authorization' });
+    }
+
+    const user = await User.findOne({ phoneNumber: authorizeRecord.phoneNumber });
+    if (!user || user._id.toString() !== req.user.id) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const property = await Property.findOneAndDelete({ _id: propertyId, userId: user._id });
+    if (!property) return res.status(404).json({ error: 'Property not found' });
+
+    await sendMessage(user.phoneNumber, `*Property Deleted*\nProperty "${property.name}" has been successfully deleted.`);
+    await Authorize.findByIdAndDelete(id);
+    res.json({ message: 'Property deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting property:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete Unit Route
+app.post('/deleteunit/:id', authenticateJWT, sensitiveLimiter, [
+  body('unitId').isMongoId(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const { unitId } = req.body;
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord || authorizeRecord.used) {
+      return res.status(403).json({ error: 'Invalid or used authorization' });
+    }
+
+    const user = await User.findOne({ phoneNumber: authorizeRecord.phoneNumber });
+    if (!user || user._id.toString() !== req.user.id) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const unit = await Unit.findOneAndDelete({ _id: unitId, userId: user._id });
+    if (!unit) return res.status(404).json({ error: 'Unit not found' });
+
+    await sendMessage(user.phoneNumber, `*Unit Deleted*\nUnit "${unit.unitNumber}" has been successfully deleted.`);
+    await Authorize.findByIdAndDelete(id);
+    res.json({ message: 'Unit deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting unit:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// OTP Routes
 function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// Function to send OTP via WhatsApp
 async function sendOTP(phoneNumber, otp) {
-  console.log(`sendOTP function called for phone number: ${phoneNumber}`); // Debug log
-
-  try {
-    const response = await axios.post(process.env.WHATSAPP_API_URL, {
-      messaging_product: 'whatsapp',
-      to: phoneNumber,
-      type: 'text',
-      text: { body: `Your OTP for authorization is: ${otp}` },
-    }, {
-      headers: {
-        'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    console.log(`OTP sent to ${phoneNumber}: ${otp}`); // Debug log
-    console.log('WhatsApp API response:', response.data); // Debug log
-  } catch (error) {
-    console.error('Error sending OTP:', error.response ? {
-      status: error.response.status,
-      data: error.response.data,
-      headers: error.response.headers,
-    } : error.message); // Debug log
-  }
+  await axios.post(process.env.WHATSAPP_API_URL, {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'text',
+    text: { body: `*OTP Verification*\nYour one-time password is: *${otp}*\nValid for 10 minutes.` },
+  }, {
+    headers: {
+      'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+  });
 }
-// In-memory store for OTPs and attempts
-const otpStore = new Map(); // { phoneNumber: { otp: '123456', attempts: 0, lastAttempt: Date } }
 
-// Route to request OTP
-app.get('/request-otp/:id', async (req, res) => {
+const otpStore = new Map();
+
+app.get('/request-otp/:id', sensitiveLimiter, async (req, res) => {
   const id = req.params.id;
-  console.log(`/request-otp/:id route called with ID: ${id}`);
 
   try {
     const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      console.error('Authorization record not found for ID:', id);
-      return res.status(404).send('Authorization record not found.');
-    }
-
-    const phoneNumber = authorizeRecord.phoneNumber;
-    console.log(`Phone number extracted from authorizeRecord: ${phoneNumber}`);
+    if (!authorizeRecord) return res.status(404).json({ error: 'Authorization not found' });
 
     const otp = generateOTP();
-    console.log(`Generated OTP: ${otp}`);
-
-    otpStore.set(phoneNumber, { otp, attempts: 0, lastAttempt: null, validated: false });
-    console.log(`OTP stored for phone number: ${phoneNumber}`);
-
-    // Store phoneNumber in session and verify
-    req.session.phoneNumber = phoneNumber;
-    console.log(`Session phoneNumber set to: ${req.session.phoneNumber}`);
-    console.log(`Full session object: ${JSON.stringify(req.session)}`);
-
-    await sendOTP(phoneNumber, otp);
-    res.json({ status: 'OTP sent', phoneNumber });
+    otpStore.set(authorizeRecord.phoneNumber, { otp, attempts: 0, expires: Date.now() + 600000 });
+    await sendOTP(authorizeRecord.phoneNumber, otp);
+    req.session.phoneNumber = authorizeRecord.phoneNumber;
+    res.json({ message: 'OTP sent' });
   } catch (error) {
-    console.error('Error in /request-otp/:id route:', error);
-    res.status(500).send('An error occurred while generating OTP.');
+    console.error('Error requesting OTP:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
+app.post('/validate-otp/:id', sensitiveLimiter, [
+  body('otp').isNumeric().isLength({ min: 6, max: 6 }),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-app.post('/validate-otp/:id', async (req, res) => {
-  const id = req.params.id;
   const { otp } = req.body;
+  const id = req.params.id;
 
   try {
     const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
+    if (!authorizeRecord) return res.status(404).json({ error: 'Authorization not found' });
+
+    const storedOTPData = otpStore.get(authorizeRecord.phoneNumber);
+    if (!storedOTPData || storedOTPData.expires < Date.now()) {
+      return res.status(400).json({ error: 'OTP expired or not requested' });
     }
 
-    const phoneNumber = authorizeRecord.phoneNumber;
-    const storedOTPData = otpStore.get(phoneNumber);
-
-    if (!storedOTPData) {
-      return res.status(400).json({ error: 'OTP expired or not requested.' });
+    if (storedOTPData.attempts >= 3) {
+      return res.status(429).json({ error: 'Too many attempts' });
     }
 
-    const { otp: storedOTP, attempts, lastAttempt } = storedOTPData;
-
-    if (attempts >= 3 && Date.now() - lastAttempt < 180000) {
-      return res.status(429).json({ error: 'Too many attempts. Try again after 3 minutes.' });
-    }
-
-    if (otp === storedOTP) {
-      otpStore.set(phoneNumber, { ...storedOTPData, validated: true });
-      console.log(`OTP validated for ${phoneNumber}. Determining redirect...`);
-
-      const tenantId = req.query.tenantId;
-      console.log(`tenantId from query: ${tenantId}`);
-
+    if (otp === storedOTPData.otp) {
+      const token = jwt.sign({ id: authorizeRecord.phoneNumber }, process.env.JWT_SECRET, { expiresIn: '1h' });
+      otpStore.delete(authorizeRecord.phoneNumber);
       let redirectUrl;
       switch (authorizeRecord.action) {
-        case 'edittenant':
-          redirectUrl = tenantId ? `/edittenant/${id}?tenantId=${tenantId}` : `/edittenant/${id}`;
-          break;
-        case 'addproperty':
-          redirectUrl = `/addproperty/${id}`;
-          break;
-        case 'editproperty':
-          redirectUrl = `/editproperty/${id}`;
-          break;
-        case 'addunit':
-          redirectUrl = `/addunit/${id}`;
-          break;
-        case 'editunit':
-          redirectUrl = `/editunit/${id}`;
-          break;
-        case 'addtenant':
-          redirectUrl = `/addtenant/${id}`;
-          break;
-        default:
-          redirectUrl = `/editproperty/${id}`; // Default case
+        case 'addproperty': redirectUrl = `/addproperty/${id}`; break;
+        case 'editproperty': redirectUrl = `/editproperty/${id}`; break;
+        case 'addunit': redirectUrl = `/addunit/${id}`; break;
+        case 'editunit': redirectUrl = `/editunit/${id}`; break;
+        case 'addtenant': redirectUrl = `/addtenant/${id}`; break;
+        case 'edittenant': redirectUrl = `/edittenant/${id}`; break;
+        default: redirectUrl = '/';
       }
-
-      console.log(`Redirecting to: ${redirectUrl}`);
-      res.json({ status: 'OTP validated', redirect: redirectUrl });
+      res.json({ message: 'OTP validated', token, redirect: redirectUrl });
     } else {
-      otpStore.set(phoneNumber, { ...storedOTPData, attempts: attempts + 1, lastAttempt: Date.now() });
-      res.status(400).json({ error: 'Invalid OTP.' });
+      storedOTPData.attempts += 1;
+      res.status(400).json({ error: 'Invalid OTP' });
     }
   } catch (error) {
     console.error('Error validating OTP:', error);
-    res.status(500).send('An error occurred while validating OTP.');
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-
-
-
-// Route to render the OTP input page
-app.get('/authorize/:id', async (req, res) => {
+// Render Routes
+app.get('/addproperty/:id', authenticateJWT, async (req, res) => {
   const id = req.params.id;
-  console.log(`/authorize/:id route called with ID: ${id}`); // Debug log
-
   try {
     const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      console.error('Authorization record not found for ID:', id); // Debug log
-      return res.status(404).send('Authorization record not found.');
+    if (!authorizeRecord || authorizeRecord.used) {
+      return res.status(403).send('Invalid or used authorization');
     }
-
-    // Render the OTP input page
-    console.log(`Rendering OTP input page for phone number: ${authorizeRecord.phoneNumber}`); // Debug log
-    res.sendFile(path.join(__dirname, 'public', 'otp.html'));
+    res.render('addProperty', { id, csrfToken: req.csrfToken() });
   } catch (error) {
-    console.error('Error in /authorize/:id route:', error); // Debug log
-    res.status(500).send('An error occurred while rendering the OTP page.');
+    console.error('Error rendering add property:', error);
+    res.status(500).send('Internal server error');
   }
 });
 
-// Middleware to check if OTP is validated
-function checkOTPValidation(req, res, next) {
+app.get('/editproperty/:id', authenticateJWT, async (req, res) => {
   const id = req.params.id;
-  const phoneNumber = req.session.phoneNumber;
-
-  console.log(`checkOTPValidation: ID = ${id}, Session phoneNumber = ${phoneNumber}`); // Debug log
-  console.log(`Full session object: ${JSON.stringify(req.session)}`); // Debug log
-
-  if (!phoneNumber) {
-    console.error('No phoneNumber in session. OTP not requested.');
-    return res.status(401).send('OTP not requested. Please request an OTP first.');
-  }
-
-  const storedOTPData = otpStore.get(phoneNumber);
-  console.log(`otpStore data for ${phoneNumber}: ${JSON.stringify(storedOTPData)}`); // Debug log
-
-  if (!storedOTPData || !storedOTPData.validated) {
-    console.error('OTP not validated or not found in otpStore.');
-    return res.status(401).send('OTP not validated. Please validate the OTP first.');
-  }
-
-  console.log(`OTP validated successfully for ${phoneNumber}. Proceeding...`);
-  next();
-}
-
-
-
-app.get('/addproperty/:id', checkOTPValidation, async (req, res) => {
-    const id = req.params.id;
-
-    try {
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        // Check if the authorization has already been used
-        if (authorizeRecord.used) {
-            return res.status(403).send('This link has already been used.');
-        }
-
-        // Render the add property form
-        res.render('addProperty', { id });
-    } catch (error) {
-        console.error('Error rendering add property form:', error);
-        res.status(500).send('An error occurred while rendering the form.');
-    }
-});
-
-app.get('/removeproperty/:id', checkOTPValidation, async (req, res) => {
-  const id = req.params.id;
-
   try {
     const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
+    if (!authorizeRecord || authorizeRecord.used) {
+      return res.status(403).send('Invalid or used authorization');
     }
-
-    if (authorizeRecord.used) {
-      return res.status(403).send('This link has already been used.');
-    }
-
-    const phoneNumber = authorizeRecord.phoneNumber;
-    const user = await User.findOne({ phoneNumber });
-    if (!user) {
-      return res.status(404).send('User not found.');
-    }
-
+    const user = await User.findOne({ phoneNumber: authorizeRecord.phoneNumber });
     const properties = await Property.find({ userId: user._id });
-    if (!properties.length) {
-      return res.status(404).send('No properties found to remove.');
-    }
-
-    // Render the remove property form with properties list
-    res.render('removeProperty', { id, properties });
+    res.render('editProperty', { id, properties, csrfToken: req.csrfToken() });
   } catch (error) {
-    console.error('Error rendering remove property form:', error);
-    res.status(500).send('An error occurred while rendering the form.');
+    console.error('Error rendering edit property:', error);
+    res.status(500).send('Internal server error');
   }
 });
 
-app.get('/removeunit/:id', checkOTPValidation, async (req, res) => {
+app.get('/addunit/:id', authenticateJWT, async (req, res) => {
   const id = req.params.id;
-
   try {
     const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
+    if (!authorizeRecord || authorizeRecord.used) {
+      return res.status(403).send('Invalid or used authorization');
     }
+    const user = await User.findOne({ phoneNumber: authorizeRecord.phoneNumber });
+    const properties = await Property.find({ userId: user._id });
+    res.render('addUnit', { id, properties, csrfToken: req.csrfToken() });
+  } catch (error) {
+    console.error('Error rendering add unit:', error);
+    res.status(500).send('Internal server error');
+  }
+});
 
-    if (authorizeRecord.used) {
-      return res.status(403).send('This link has already been used.');
+app.get('/editunit/:id', authenticateJWT, async (req, res) => {
+  const id = req.params.id;
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord || authorizeRecord.used) {
+      return res.status(403).send('Invalid or used authorization');
     }
-
-    const phoneNumber = authorizeRecord.phoneNumber;
-    const user = await User.findOne({ phoneNumber });
-    if (!user) {
-      return res.status(404).send('User not found.');
-    }
-
+    const user = await User.findOne({ phoneNumber: authorizeRecord.phoneNumber });
     const units = await Unit.find({ userId: user._id });
-    if (!units.length) {
-      return res.status(404).send('No units found to remove.');
-    }
-
-    const properties = await Property.find({ userId: user._id }); // For property names
-    res.render('removeUnit', { id, units, properties });
-  } catch (error) {
-    console.error('Error rendering remove unit form:', error);
-    res.status(500).send('An error occurred while rendering the form.');
-  }
-});
-
-app.get('/removetenant/:id', checkOTPValidation, async (req, res) => {
-  const id = req.params.id;
-
-  try {
-    const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
-    }
-
-    if (authorizeRecord.used) {
-      return res.status(403).send('This link has already been used.');
-    }
-
-    const phoneNumber = authorizeRecord.phoneNumber;
-    const user = await User.findOne({ phoneNumber });
-    if (!user) {
-      return res.status(404).send('User not found.');
-    }
-
-    const tenants = await Tenant.find({ userId: user._id });
-    if (!tenants.length) {
-      return res.status(404).send('No tenants found to remove.');
-    }
-
-    res.render('removeTenant', { id, tenants });
-  } catch (error) {
-    console.error('Error rendering remove tenant form:', error);
-    res.status(500).send('An error occurred while rendering the form.');
-  }
-});
-
-app.get('/addunit/:id', checkOTPValidation, async (req, res) => {
-  const id = req.params.id;
-
-  try {
-    const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
-    }
-
-    if (authorizeRecord.used) {
-      return res.status(403).send('This link has already been used.');
-    }
-
-    const phoneNumber = authorizeRecord.phoneNumber;
-    const user = await User.findOne({ phoneNumber });
-    if (!user) {
-      return res.status(404).send('User not found.');
-    }
-
     const properties = await Property.find({ userId: user._id });
-    if (!properties.length) {
-      return res.status(404).send('No properties found. Please add a property first.');
-    }
-
-    res.render('addUnit', { id, properties });
+    res.render('editUnit', { id, units, properties, csrfToken: req.csrfToken() });
   } catch (error) {
-    console.error('Error rendering add unit form:', error);
-    res.status(500).send('An error occurred while rendering the form.');
+    console.error('Error rendering edit unit:', error);
+    res.status(500).send('Internal server error');
   }
 });
 
-app.get('/editunit/:id', checkOTPValidation, async (req, res) => {
+app.get('/addtenant/:id', authenticateJWT, async (req, res) => {
   const id = req.params.id;
-
   try {
     const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
+    if (!authorizeRecord || authorizeRecord.used) {
+      return res.status(403).send('Invalid or used authorization');
     }
-
-    if (authorizeRecord.used) {
-      return res.status(403).send('This link has already been used.');
-    }
-
-    const phoneNumber = authorizeRecord.phoneNumber;
-    const user = await User.findOne({ phoneNumber });
-    if (!user) {
-      return res.status(404).send('User not found.');
-    }
-
-    const units = await Unit.find({ userId: user._id });
-    if (!units.length) {
-      return res.status(404).send('No units found to edit.');
-    }
-
-    const properties = await Property.find({ userId: user._id });
-    res.render('editUnit', { id, units, properties });
-  } catch (error) {
-    console.error('Error rendering edit unit form:', error);
-    res.status(500).send('An error occurred while rendering the form.');
-  }
-});
-
-app.get('/addtenant/:id', checkOTPValidation, async (req, res) => {
-  const id = req.params.id;
-
-  try {
-    const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
-    }
-
-    if (authorizeRecord.used) {
-      return res.status(403).send('This link has already been used.');
-    }
-
-    const phoneNumber = authorizeRecord.phoneNumber;
-    const user = await User.findOne({ phoneNumber });
-    if (!user) {
-      return res.status(404).send('User not found.');
-    }
-
+    const user = await User.findOne({ phoneNumber: authorizeRecord.phoneNumber });
     const properties = await Property.find({ userId: user._id });
     const units = await Unit.find({ userId: user._id });
-    if (!properties.length || !units.length) {
-      return res.status(404).send('No properties or units found. Please add them first.');
-    }
-
-    res.render('addTenant', { id, properties, units });
+    res.render('addTenant', { id, properties, units, csrfToken: req.csrfToken() });
   } catch (error) {
-    console.error('Error rendering add tenant form:', error);
-    res.status(500).send('An error occurred while rendering the form.');
+    console.error('Error rendering add tenant:', error);
+    res.status(500).send('Internal server error');
   }
 });
 
-app.get('/edittenant/:id', checkOTPValidation, async (req, res) => {
+app.get('/edittenant/:id', authenticateJWT, async (req, res) => {
   const id = req.params.id;
   const tenantId = req.query.tenantId;
-
-  console.log(`GET /edittenant/:id called with id: ${id}, tenantId: ${tenantId}`);
-
   try {
     const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      console.log(`Authorize record not found for id: ${id}`);
-      return res.status(404).send('Authorization record not found.');
+    if (!authorizeRecord || authorizeRecord.used) {
+      return res.status(403).send('Invalid or used authorization');
     }
-    if (authorizeRecord.used) {
-      console.log(`Authorize record already used for id: ${id}`);
-      return res.status(403).send('This link has already been used.');
-    }
-
-    const phoneNumber = authorizeRecord.phoneNumber;
-    const user = await User.findOne({ phoneNumber });
-    if (!user) {
-      console.log(`User not found for phoneNumber: ${phoneNumber}`);
-      return res.status(404).send('User not found.');
-    }
-
-    if (!tenantId || !mongoose.Types.ObjectId.isValid(tenantId)) {
-      console.log(`Invalid or missing tenantId: ${tenantId}`);
-      return res.status(400).send('Invalid or missing tenantId.');
-    }
-
+    const user = await User.findOne({ phoneNumber: authorizeRecord.phoneNumber });
     const tenant = await Tenant.findOne({ _id: tenantId, userId: user._id });
-    if (!tenant) {
-      console.log(`Tenant not found for tenantId: ${tenantId}, userId: ${user._id}`);
-      return res.status(404).send('Tenant not found or invalid tenantId.');
-    }
-
+    if (!tenant) return res.status(404).send('Tenant not found');
     const properties = await Property.find({ userId: user._id });
     const units = await Unit.find({ userId: user._id });
-
-    res.render('editTenant', { id, tenant, properties, units });
+    res.render('editTenant', { id, tenant, properties, units, csrfToken: req.csrfToken() });
   } catch (error) {
-    console.error('Error rendering edit tenant form:', error);
-    res.status(500).send('An error occurred while rendering the form.');
+    console.error('Error rendering edit tenant:', error);
+    res.status(500).send('Internal server error');
   }
 });
-// Start the server
+
+app.get('/authorize/:id', async (req, res) => {
+  const id = req.params.id;
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) return res.status(404).send('Authorization not found');
+    res.sendFile(path.join(__dirname, 'public', 'otp.html'));
+  } catch (error) {
+    console.error('Error rendering OTP page:', error);
+    res.status(500).send('Internal server error');
+  }
+});
+
+// Start Server
 app.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}`);
+  console.log(`Server running on http://localhost:${port}`);
 });
