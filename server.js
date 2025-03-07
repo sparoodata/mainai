@@ -10,6 +10,9 @@ const csurf = require('csurf');
 const path = require('path');
 const axios = require('axios');
 const multer = require('multer');
+const mongoSanitize = require('express-mongo-sanitize');
+const xss = require('xss-clean');
+const crypto = require('crypto');
 const Tenant = require('./models/Tenant');
 const Image = require('./models/Image');
 const Property = require('./models/Property');
@@ -18,9 +21,6 @@ const Authorize = require('./models/Authorize');
 const Unit = require('./models/Unit');
 const Otp = require('./models/Otp');
 const AWS = require('aws-sdk');
-const { sanitize } = require('express-mongo-sanitize');
-const xss = require('xss-clean');
-const crypto = require('crypto');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -53,10 +53,10 @@ app.use(helmet({
     },
   },
 }));
-app.use(sanitize());
+app.use(mongoSanitize());
 app.use(xss());
 
-// Body parsing with limits
+// Body parsing with limits (must come before CSRF)
 app.use(bodyParser.json({ limit: '1mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '1mb' }));
 
@@ -70,7 +70,7 @@ mongoose.connect(process.env.MONGODB_URI, {
 }).then(() => console.log('MongoDB connected'))
   .catch(error => console.error('MongoDB connection error:', error));
 
-// Session setup with secure options
+// Session setup with secure options (must come before CSRF)
 app.use(session({
   secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
   resave: false,
@@ -106,8 +106,8 @@ const globalLimiter = rateLimit({
 });
 app.use(globalLimiter);
 
-// CSRF protection
-const csrfProtection = csurf({ cookie: true });
+// CSRF protection (session-based, no cookie option)
+const csrfProtection = csurf({ cookie: false }); // Use session instead of cookies
 app.use(csrfProtection);
 
 // Serve static files securely
@@ -116,6 +116,12 @@ app.use(express.static(path.join(__dirname, 'public'), {
   lastModified: true,
   maxAge: '1h',
 }));
+
+// Middleware to add CSRF token to responses for EJS templates
+app.use((req, res, next) => {
+  res.locals.csrfToken = req.csrfToken(); // Make CSRF token available in templates
+  next();
+});
 
 // Multer with file type validation
 const storage = multer.memoryStorage();
@@ -135,6 +141,7 @@ const upload = multer({
 // Routes and webhook
 const { router, sendMessage } = require('./routes/webhook');
 app.use('/webhook', router);
+
 
 // Secure OTP generation
 function generateOTP() {
