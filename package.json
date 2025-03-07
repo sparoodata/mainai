@@ -29,8 +29,7 @@
     "dropbox": "^10.34.0",
     "isomorphic-fetch": "^3.0.0",
     "aws-sdk": "^2.1692.0",
-    "groq-sdk": "^0.15.0",
-    "dialogflow": "^1.2.0"
+    "groq-sdk": "^0.15.0"
   },
   "engines": {
     "node": "16.x"
