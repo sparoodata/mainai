@@ -106,8 +106,14 @@ const globalLimiter = rateLimit({
 });
 app.use(globalLimiter);
 
-// CSRF protection (session-based)
+// CSRF protection (applied globally, skipped for /webhook)
 const csrfProtection = csurf({ cookie: false });
+app.use((req, res, next) => {
+  if (req.path.startsWith('/webhook')) {
+    return next(); // Skip CSRF for webhook
+  }
+  csrfProtection(req, res, next);
+});
 
 // Serve static files securely
 app.use(express.static(path.join(__dirname, 'public'), {
@@ -116,11 +122,9 @@ app.use(express.static(path.join(__dirname, 'public'), {
   maxAge: '1h',
 }));
 
-// Middleware to add CSRF token to responses for EJS templates
+// Middleware to add CSRF token to responses for EJS templates and HTML
 app.use((req, res, next) => {
-  if (req.method === 'GET' && !req.path.startsWith('/webhook')) {
-    res.locals.csrfToken = req.csrfToken ? req.csrfToken() : null;
-  }
+  res.locals.csrfToken = req.csrfToken(); // Always available after csrfProtection
   next();
 });
 
@@ -176,7 +180,7 @@ function checkOTPValidation(req, res, next) {
 app.locals.otpStore = new Map();
 
 // Routes
-app.post('/addproperty/:id', upload.single('image'), csrfProtection, async (req, res) => {
+app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
   const { property_name, units, address, totalAmount } = req.body;
   const id = req.params.id;
 
@@ -231,7 +235,7 @@ app.post('/addproperty/:id', upload.single('image'), csrfProtection, async (req,
   }
 });
 
-app.post('/addunit/:id', upload.single('image'), csrfProtection, async (req, res) => {
+app.post('/addunit/:id', upload.single('image'), async (req, res) => {
   const { property, unit_number, rent_amount, floor, size } = req.body;
   const id = req.params.id;
 
@@ -288,7 +292,7 @@ app.post('/addunit/:id', upload.single('image'), csrfProtection, async (req, res
   }
 });
 
-app.post('/addtenant/:id', upload.fields([{ name: 'photo' }, { name: 'idProof' }]), csrfProtection, async (req, res) => {
+app.post('/addtenant/:id', upload.fields([{ name: 'photo' }, { name: 'idProof' }]), async (req, res) => {
   const { name, propertyName, unitAssigned, lease_start, deposit, rent_amount, tenant_id } = req.body;
   const id = req.params.id;
 
@@ -359,7 +363,7 @@ app.post('/addtenant/:id', upload.fields([{ name: 'photo' }, { name: 'idProof' }
   }
 });
 
-app.post('/editproperty/:id', upload.single('image'), csrfProtection, async (req, res) => {
+app.post('/editproperty/:id', upload.single('image'), async (req, res) => {
   const { propertyId, property_name, units, address, totalAmount } = req.body;
   const id = req.params.id;
 
@@ -446,7 +450,7 @@ app.get('/editproperty/:id', checkOTPValidation, async (req, res) => {
   }
 });
 
-app.post('/deleteproperty/:id', checkOTPValidation, csrfProtection, async (req, res) => {
+app.post('/deleteproperty/:id', checkOTPValidation, async (req, res) => {
   const { propertyId } = req.body;
   const id = req.params.id;
 
@@ -480,7 +484,7 @@ app.post('/deleteproperty/:id', checkOTPValidation, csrfProtection, async (req, 
   }
 });
 
-app.post('/editunit/:id', upload.single('image'), csrfProtection, async (req, res) => {
+app.post('/editunit/:id', upload.single('image'), async (req, res) => {
   const { unitId, property, unit_number, rent_amount, floor, size } = req.body;
   const id = req.params.id;
 
@@ -543,7 +547,7 @@ app.post('/editunit/:id', upload.single('image'), csrfProtection, async (req, re
   }
 });
 
-app.post('/deleteunit/:id', checkOTPValidation, csrfProtection, async (req, res) => {
+app.post('/deleteunit/:id', checkOTPValidation, async (req, res) => {
   const { unitId } = req.body;
   const id = req.params.id;
 
@@ -577,7 +581,7 @@ app.post('/deleteunit/:id', checkOTPValidation, csrfProtection, async (req, res)
   }
 });
 
-app.post('/edittenant/:id', upload.fields([{ name: 'photo' }, { name: 'idProof' }]), csrfProtection, async (req, res) => {
+app.post('/edittenant/:id', upload.fields([{ name: 'photo' }, { name: 'idProof' }]), async (req, res) => {
   const { tenantId, name, propertyName, unitAssigned, lease_start, deposit, rent_amount } = req.body;
   const id = req.params.id;
 
@@ -675,7 +679,7 @@ app.get('/request-otp/:id', async (req, res) => {
   }
 });
 
-app.post('/validate-otp/:id', csrfProtection, async (req, res) => {
+app.post('/validate-otp/:id', async (req, res) => {
   const id = req.params.id;
   const { otp } = req.body;
 
@@ -702,7 +706,7 @@ app.post('/validate-otp/:id', csrfProtection, async (req, res) => {
 
     if (otp === storedOTPData.otp) {
       app.locals.otpStore.set(phoneNumber, { ...storedOTPData, validated: true });
-      const redirectUrl = `/authorize/${id}`;
+      const redirectUrl = `/addproperty/${id}`; // Adjust based on action if needed
       res.json({ status: 'OTP validated', redirect: redirectUrl });
     } else {
       app.locals.otpStore.set(phoneNumber, { ...storedOTPData, attempts: storedOTPData.attempts + 1, lastAttempt: Date.now() });
@@ -726,7 +730,8 @@ app.get('/authorize/:id', async (req, res) => {
       return res.status(404).send('Authorization not found.');
     }
 
-    res.sendFile(path.join(__dirname, 'public', 'otp.html'));
+    // Render otp.html with CSRF token dynamically
+    res.render('otp', { id, csrfToken: res.locals.csrfToken });
   } catch (error) {
     console.error('Error rendering OTP page:', error);
     res.status(500).send('Server error.');
@@ -953,5 +958,5 @@ app.use((err, req, res, next) => {
 
 // Start server
 app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+  console.log(`Server running  on http://localhost:${port}`);
 });
