@@ -56,7 +56,7 @@ app.use(helmet({
 app.use(mongoSanitize());
 app.use(xss());
 
-// Body parsing with limits (must come before CSRF)
+// Body parsing with limits
 app.use(bodyParser.json({ limit: '1mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '1mb' }));
 
@@ -70,7 +70,7 @@ mongoose.connect(process.env.MONGODB_URI, {
 }).then(() => console.log('MongoDB connected'))
   .catch(error => console.error('MongoDB connection error:', error));
 
-// Session setup with secure options (must come before CSRF)
+// Session setup with secure options
 app.use(session({
   secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
   resave: false,
@@ -106,9 +106,8 @@ const globalLimiter = rateLimit({
 });
 app.use(globalLimiter);
 
-// CSRF protection (session-based, no cookie option)
-const csrfProtection = csurf({ cookie: false }); // Use session instead of cookies
-app.use(csrfProtection);
+// CSRF protection (session-based)
+const csrfProtection = csurf({ cookie: false });
 
 // Serve static files securely
 app.use(express.static(path.join(__dirname, 'public'), {
@@ -119,7 +118,9 @@ app.use(express.static(path.join(__dirname, 'public'), {
 
 // Middleware to add CSRF token to responses for EJS templates
 app.use((req, res, next) => {
-  res.locals.csrfToken = req.csrfToken(); // Make CSRF token available in templates
+  if (req.method === 'GET' && !req.path.startsWith('/webhook')) {
+    res.locals.csrfToken = req.csrfToken ? req.csrfToken() : null;
+  }
   next();
 });
 
@@ -141,7 +142,6 @@ const upload = multer({
 // Routes and webhook
 const { router, sendMessage } = require('./routes/webhook');
 app.use('/webhook', router);
-
 
 // Secure OTP generation
 function generateOTP() {
@@ -940,6 +940,15 @@ app.get('/edittenant/:id', checkOTPValidation, async (req, res) => {
     console.error('Error rendering edit tenant:', error);
     res.status(500).send('Server error.');
   }
+});
+
+// Error handling for CSRF
+app.use((err, req, res, next) => {
+  if (err.code === 'EBADCSRFTOKEN') {
+    console.error('CSRF Token Error:', err);
+    return res.status(403).send('Invalid CSRF token.');
+  }
+  next(err);
 });
 
 // Start server
