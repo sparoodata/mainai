@@ -1,80 +1,103 @@
-<!-- /views/addProperty.ejs -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Add Property</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 600px;
-      margin: 20px auto;
-      padding: 20px;
-      background-color: #f9f9f9;
-    }
-    h2 {
-      color: #333;
-      text-align: center;
-    }
-    form {
-      background: #fff;
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    }
-    label {
-      display: block;
-      margin: 10px 0 5px;
-      font-weight: bold;
-    }
-    input[type="text"],
-    input[type="number"] {
-      width: 100%;
-      padding: 8px;
-      margin-bottom: 10px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-    }
-    input[type="file"] {
-      margin-bottom: 10px;
-    }
-    button {
-      background-color: #4CAF50;
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      width: 100%;
-    }
-    button:hover {
-      background-color: #45a049;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="/styles.css">
+    <title>Add Property</title>
 </head>
 <body>
-  <h2>Add Property</h2>
-  <form action="/addproperty/<%= id %>" method="POST" enctype="multipart/form-data">
-    <!-- CSRF Token -->
-    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <!-- Success Message -->
+    <div class="success-message">
+        Authorization successful! 
+    </div>
 
-    <label for="property_name">Property Name:</label>
-    <input type="text" id="property_name" name="property_name" required>
+    <!-- Form Container -->
+    <div class="container">
+        <h2>Add Property</h2>
+        <form action="/addproperty/<%= id %>" method="POST" enctype="multipart/form-data" onsubmit="return validateForm()">
+            
+            <!-- Property Name -->
+            <label for="property_name">Property Name:</label>
+            <input type="text" id="property_name" name="property_name" maxlength="50" required>
+            <small id="propertyNameError" class="error-message"></small>
 
-    <label for="units">Number of Units:</label>
-    <input type="number" id="units" name="units" required>
+            <!-- Number of Units -->
+            <label for="units">Number of Units:</label>
+            <input type="number" id="units" name="units" required min="1">
+            <small id="unitsError" class="error-message"></small>
 
-    <label for="address">Address:</label>
-    <input type="text" id="address" name="address" required>
+            <!-- Address -->
+            <label for="address">Address:</label>
+            <input type="text" id="address" name="address" maxlength="80" required>
+            <small id="addressError" class="error-message"></small>
 
-    <label for="totalAmount">Total Amount:</label>
-    <input type="number" id="totalAmount" name="totalAmount" step="0.01" required>
+            <!-- Total Amount -->
+            <label for="totalAmount">Total Amount:</label>
+            <input type="number" id="totalAmount" name="totalAmount" required min="0">
+            <small id="totalAmountError" class="error-message"></small>
 
-    <label for="image">Upload Image (optional):</label>
-    <input type="file" id="image" name="image" accept="image/*">
+            <!-- Property Image -->
+            <label for="image">Property Image (Max 5MB):</label>
+            <input type="file" id="image" name="image" required accept="image/*">
+            <small id="imageError" class="error-message"></small>
 
-    <button type="submit">Add Property</button>
-  </form>
+            <!-- Submit Button -->
+            <button type="submit">Submit</button>
+        </form>
+    </div>
+
+    <!-- Script for Validation -->
+    <script>
+        function validateForm() {
+            // Get form fields
+            const propertyName = document.getElementById('property_name').value;
+            const units = document.getElementById('units').value;
+            const address = document.getElementById('address').value;
+            const totalAmount = document.getElementById('totalAmount').value;
+            const image = document.getElementById('image').files[0];
+
+            let valid = true;
+
+            // Clear previous error messages
+            document.getElementById('propertyNameError').innerHTML = "";
+            document.getElementById('unitsError').innerHTML = "";
+            document.getElementById('addressError').innerHTML = "";
+            document.getElementById('totalAmountError').innerHTML = "";
+            document.getElementById('imageError').innerHTML = "";
+
+            // Property Name validation
+            if (propertyName.length > 50) {
+                document.getElementById('propertyNameError').innerHTML = "Property name cannot exceed 50 characters.";
+                valid = false;
+            }
+
+            // Number of Units validation
+            if (isNaN(units) || units <= 0) {
+                document.getElementById('unitsError').innerHTML = "Please enter a valid number of units.";
+                valid = false;
+            }
+
+            // Address validation
+            if (address.length > 80) {
+                document.getElementById('addressError').innerHTML = "Address cannot exceed 80 characters.";
+                valid = false;
+            }
+
+            // Total Amount validation
+            if (isNaN(totalAmount) || totalAmount <= 0) {
+                document.getElementById('totalAmountError').innerHTML = "Please enter a valid total amount.";
+                valid = false;
+            }
+
+            // Image validation (Max size 5MB)
+            if (image && image.size > 5 * 1024 * 1024) {
+                document.getElementById('imageError').innerHTML = "Image size cannot exceed 5MB.";
+                valid = false;
+            }
+
+            return valid;
+        }
+    </script>
 </body>
 </html>
