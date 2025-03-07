@@ -65,9 +65,8 @@ app.use(session({
   },
 }));
 
-// CSRF Protection
+// CSRF Protection - Applied selectively later
 const csrfProtection = csurf({ cookie: true });
-app.use(csrfProtection);
 
 // Rate Limiting
 const globalLimiter = rateLimit({
@@ -114,7 +113,7 @@ app.set('views', path.join(__dirname, 'views'));
 
 // Routes
 const { router, sendMessage } = require('./routes/webhook');
-app.use('/webhook', router);
+app.use('/webhook', router); // Webhook doesn’t need CSRF
 
 // WhatsApp Message Function
 async function sendWhatsAppAuthMessage(phoneNumber) {
@@ -148,7 +147,7 @@ function generateTenantId() {
 }
 
 // Add Property Route
-app.post('/addproperty/:id', authenticateJWT, sensitiveLimiter, upload.single('image'), [
+app.post('/addproperty/:id', authenticateJWT, sensitiveLimiter, upload.single('image'), csrfProtection, [
   body('property_name').trim().notEmpty().escape(),
   body('units').isInt({ min: 1 }),
   body('address').trim().notEmpty().escape(),
@@ -200,7 +199,7 @@ app.post('/addproperty/:id', authenticateJWT, sensitiveLimiter, upload.single('i
 });
 
 // Add Unit Route
-app.post('/addunit/:id', authenticateJWT, sensitiveLimiter, upload.single('image'), [
+app.post('/addunit/:id', authenticateJWT, sensitiveLimiter, upload.single('image'), csrfProtection, [
   body('property').isMongoId(),
   body('unit_number').trim().notEmpty().escape(),
   body('rent_amount').isFloat({ min: 0 }),
@@ -257,7 +256,7 @@ app.post('/addunit/:id', authenticateJWT, sensitiveLimiter, upload.single('image
 app.post('/addtenant/:id', authenticateJWT, sensitiveLimiter, upload.fields([
   { name: 'photo', maxCount: 1 },
   { name: 'idProof', maxCount: 1 },
-]), [
+]), csrfProtection, [
   body('name').trim().notEmpty().escape(),
   body('propertyName').trim().notEmpty().escape(),
   body('unitAssigned').isMongoId(),
@@ -330,7 +329,7 @@ app.post('/addtenant/:id', authenticateJWT, sensitiveLimiter, upload.fields([
 });
 
 // Edit Property Route
-app.post('/editproperty/:id', authenticateJWT, sensitiveLimiter, upload.single('image'), [
+app.post('/editproperty/:id', authenticateJWT, sensitiveLimiter, upload.single('image'), csrfProtection, [
   body('propertyId').isMongoId(),
   body('property_name').trim().notEmpty().escape(),
   body('units').isInt({ min: 1 }),
@@ -394,7 +393,7 @@ app.post('/editproperty/:id', authenticateJWT, sensitiveLimiter, upload.single('
 });
 
 // Edit Unit Route
-app.post('/editunit/:id', authenticateJWT, sensitiveLimiter, upload.single('image'), [
+app.post('/editunit/:id', authenticateJWT, sensitiveLimiter, upload.single('image'), csrfProtection, [
   body('unitId').isMongoId(),
   body('property').isMongoId(),
   body('unit_number').trim().notEmpty().escape(),
@@ -464,7 +463,7 @@ app.post('/editunit/:id', authenticateJWT, sensitiveLimiter, upload.single('imag
 app.post('/edittenant/:id', authenticateJWT, sensitiveLimiter, upload.fields([
   { name: 'photo', maxCount: 1 },
   { name: 'idProof', maxCount: 1 },
-]), [
+]), csrfProtection, [
   body('tenantId').isMongoId(),
   body('name').trim().notEmpty().escape(),
   body('propertyName').trim().notEmpty().escape(),
@@ -536,7 +535,7 @@ app.post('/edittenant/:id', authenticateJWT, sensitiveLimiter, upload.fields([
 });
 
 // Delete Property Route
-app.post('/deleteproperty/:id', authenticateJWT, sensitiveLimiter, [
+app.post('/deleteproperty/:id', authenticateJWT, sensitiveLimiter, csrfProtection, [
   body('propertyId').isMongoId(),
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -569,7 +568,7 @@ app.post('/deleteproperty/:id', authenticateJWT, sensitiveLimiter, [
 });
 
 // Delete Unit Route
-app.post('/deleteunit/:id', authenticateJWT, sensitiveLimiter, [
+app.post('/deleteunit/:id', authenticateJWT, sensitiveLimiter, csrfProtection, [
   body('unitId').isMongoId(),
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -640,7 +639,7 @@ app.get('/request-otp/:id', sensitiveLimiter, async (req, res) => {
   }
 });
 
-app.post('/validate-otp/:id', sensitiveLimiter, [
+app.post('/validate-otp/:id', sensitiveLimiter, csrfProtection, [
   body('otp').isNumeric().isLength({ min: 6, max: 6 }),
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -686,8 +685,8 @@ app.post('/validate-otp/:id', sensitiveLimiter, [
   }
 });
 
-// Render Routes
-app.get('/addproperty/:id', authenticateJWT, async (req, res) => {
+// Render Routes with CSRF Protection
+app.get('/addproperty/:id', authenticateJWT, csrfProtection, async (req, res) => {
   const id = req.params.id;
   try {
     const authorizeRecord = await Authorize.findById(id);
@@ -701,7 +700,7 @@ app.get('/addproperty/:id', authenticateJWT, async (req, res) => {
   }
 });
 
-app.get('/editproperty/:id', authenticateJWT, async (req, res) => {
+app.get('/editproperty/:id', authenticateJWT, csrfProtection, async (req, res) => {
   const id = req.params.id;
   try {
     const authorizeRecord = await Authorize.findById(id);
@@ -717,7 +716,7 @@ app.get('/editproperty/:id', authenticateJWT, async (req, res) => {
   }
 });
 
-app.get('/addunit/:id', authenticateJWT, async (req, res) => {
+app.get('/addunit/:id', authenticateJWT, csrfProtection, async (req, res) => {
   const id = req.params.id;
   try {
     const authorizeRecord = await Authorize.findById(id);
@@ -733,7 +732,7 @@ app.get('/addunit/:id', authenticateJWT, async (req, res) => {
   }
 });
 
-app.get('/editunit/:id', authenticateJWT, async (req, res) => {
+app.get('/editunit/:id', authenticateJWT, csrfProtection, async (req, res) => {
   const id = req.params.id;
   try {
     const authorizeRecord = await Authorize.findById(id);
@@ -750,7 +749,7 @@ app.get('/editunit/:id', authenticateJWT, async (req, res) => {
   }
 });
 
-app.get('/addtenant/:id', authenticateJWT, async (req, res) => {
+app.get('/addtenant/:id', authenticateJWT, csrfProtection, async (req, res) => {
   const id = req.params.id;
   try {
     const authorizeRecord = await Authorize.findById(id);
@@ -767,7 +766,7 @@ app.get('/addtenant/:id', authenticateJWT, async (req, res) => {
   }
 });
 
-app.get('/edittenant/:id', authenticateJWT, async (req, res) => {
+app.get('/edittenant/:id', authenticateJWT, csrfProtection, async (req, res) => {
   const id = req.params.id;
   const tenantId = req.query.tenantId;
   try {
@@ -797,6 +796,15 @@ app.get('/authorize/:id', async (req, res) => {
     console.error('Error rendering OTP page:', error);
     res.status(500).send('Internal server error');
   }
+});
+
+// CSRF Error Handler
+app.use((err, req, res, next) => {
+  if (err.code === 'EBADCSRFTOKEN') {
+    console.error('CSRF Token Error:', err);
+    return res.status(403).json({ error: 'Invalid CSRF token' });
+  }
+  next(err);
 });
 
 // Start Server
