@@ -564,11 +564,11 @@ async function promptPropertySelection(phoneNumber, action) {
     return;
   }
 
-  let propertyList = `*🏠 Select a Property* \nReply with the number of the property:\n━━━━━━━━━━━━━━━━━━━━━━\n`;
+  let propertyList = `*🏠 Select a Property* \nReply with the number of the property:\n━━━━━━━━━━━━━━━\n`;
   properties.forEach((property, index) => {
     propertyList += `${index + 1}. *${property.name}* \n   _Address_: ${property.address}\n`;
   });
-  propertyList += `━━━━━━━━━━━━━━━━━━━━━━`;
+  propertyList += `━━━━━━━━━━━━━━━`;
   await sendMessage(phoneNumber, propertyList);
   console.log(`Property list sent to ${phoneNumber}: ${propertyList}`);
 
@@ -593,11 +593,11 @@ async function promptTenantSelection(phoneNumber, action, propertyId) {
     return;
   }
 
-  let tenantList = `*👥 Select a Tenant to Edit* \nReply with the number of the tenant:\n━━━━━━━━━━━━━━━━━━━━━━\n`;
+  let tenantList = `*👥 Select a Tenant to Edit* \nReply with the number of the tenant:\n━━━━━━━━━━━━━━━\n`;
   tenants.forEach((tenant, index) => {
     tenantList += `${index + 1}. *${tenant.name}* \n   _ID_: ${tenant.tenant_id || tenant._id}\n`;
   });
-  tenantList += `━━━━━━━━━━━━━━━━━━━━━━`;
+  tenantList += `━━━━━━━━━━━━━━━`;
   await sendMessage(phoneNumber, tenantList);
   console.log(`Tenant list sent to ${phoneNumber}: ${tenantList}`);
 
@@ -655,11 +655,11 @@ async function promptPropertyRemoval(phoneNumber) {
     return;
   }
 
-  let propertyList = `*🏠 Select a Property to Remove* \nReply with the number of the property:\n━━━━━━━━━━━━━━━━━━━━━━\n`;
+  let propertyList = `*🏠 Select a Property to Remove* \nReply with the number of the property:\n━━━━━━━━━━━━━━━\n`;
   properties.forEach((property, index) => {
     propertyList += `${index + 1}. *${property.name}* \n   _Address_: ${property.address}\n`;
   });
-  propertyList += `━━━━━━━━━━━━━━━━━━━━━━`;
+  propertyList += `━━━━━━━━━━━━━━━`;
   await sendMessage(phoneNumber, propertyList);
   console.log(`Property removal list sent to ${phoneNumber}: ${propertyList}`);
 
@@ -721,11 +721,11 @@ async function promptUnitRemoval(phoneNumber) {
     return;
   }
 
-  let unitList = `*🚪 Select a Unit to Remove* \nReply with the number of the unit:\n━━━━━━━━━━━━━━━━━━━━━━\n`;
+  let unitList = `*🚪 Select a Unit to Remove* \nReply with the number of the unit:\n━━━━━━━━━━━━━━━\n`;
   units.forEach((unit, index) => {
     unitList += `${index + 1}. *${unit.unitNumber}* \n   _ID_: ${unit.unit_id || unit._id}\n`;
   });
-  unitList += `━━━━━━━━━━━━━━━━━━━━━━`;
+  unitList += `━━━━━━━━━━━━━━━`;
   await sendMessage(phoneNumber, unitList);
   console.log(`Unit removal list sent to ${phoneNumber}: ${unitList}`);
 
@@ -787,11 +787,11 @@ async function promptTenantRemoval(phoneNumber) {
     return;
   }
 
-  let tenantList = `*👥 Select a Tenant to Remove* \nReply with the number of the tenant:\n━━━━━━━━━━━━━━━━━━━━━━\n`;
+  let tenantList = `*👥 Select a Tenant to Remove* \nReply with the number of the tenant:\n━━━━━━━━━━━━━━━\n`;
   tenants.forEach((tenant, index) => {
     tenantList += `${index + 1}. *${tenant.name}* \n   _ID_: ${tenant.tenant_id || tenant._id}\n`;
   });
-  tenantList += `━━━━━━━━━━━━━━━━━━━━━━`;
+  tenantList += `━━━━━━━━━━━━━━━`;
   await sendMessage(phoneNumber, tenantList);
   console.log(`Tenant removal list sent to ${phoneNumber}: ${tenantList}`);
 
