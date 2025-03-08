@@ -91,6 +91,7 @@ async function sendImageMessage(phoneNumber, imageUrl, caption) {
         'Content-Type': 'application/json',
       },
     });
+    console.log(`Image message sent to ${phoneNumber} with URL: ${imageUrl}`);
   } catch (err) {
     console.error('Error sending image message:', err.response ? err.response.data : err);
     await sendMessage(phoneNumber, '⚠️ *Error* \nFailed to send image. Here’s the info without the image:\n' + caption);
@@ -137,8 +138,6 @@ router.post('/', async (req, res) => {
           user.profileName = profileName;
           await user.save();
           console.log(`Profile name updated to ${profileName} for user ${contactPhoneNumber}`);
-        } else {
-          console.log(`No profile name available to update for user ${contactPhoneNumber}`);
         }
       } else {
         console.log(`No user found for phone: ${contactPhoneNumber}`);
@@ -147,8 +146,8 @@ router.post('/', async (req, res) => {
 
     if (value.messages) {
       const message = value.messages[0];
-      const fromNumber = message.from;
-      const phoneNumber = `+${fromNumber}`;
+      const fromNumber = message.from; // e.g., "918885305097"
+      const phoneNumber = `+${fromNumber}`; // e.g., "+918885305097"
       const text = message.text ? message.text.body.trim() : null;
       const interactive = message.interactive || null;
 
@@ -166,6 +165,7 @@ router.post('/', async (req, res) => {
       console.log(`Current session state for ${fromNumber}: ${JSON.stringify(sessions[fromNumber])}`);
 
       if (text) {
+        console.log(`Processing text input: ${text} for ${fromNumber}`);
         if (sessions[fromNumber].action === 'select_property') {
           console.log(`Property selection received: ${text} from ${fromNumber}`);
           const propertyIndex = parseInt(text) - 1;
@@ -255,10 +255,13 @@ router.post('/', async (req, res) => {
             await sendMessage(fromNumber, '❌ *Error* \nFailed to confirm rent payment. Please try again.');
           }
         } else if (sessions[fromNumber].action === 'select_property_for_info') {
+          console.log(`Property info selection received: ${text} from ${fromNumber}`);
           const propertyIndex = parseInt(text) - 1;
           const properties = sessions[fromNumber].properties;
+
           if (propertyIndex >= 0 && propertyIndex < properties.length) {
             const selectedProperty = properties[propertyIndex];
+            console.log(`Selected property: ${selectedProperty.name} (ID: ${selectedProperty._id})`);
             await sendPropertyInfo(fromNumber, selectedProperty);
             sessions[fromNumber].action = null;
             delete sessions[fromNumber].properties;
@@ -266,10 +269,13 @@ router.post('/', async (req, res) => {
             await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid property number.');
           }
         } else if (sessions[fromNumber].action === 'select_unit_for_info') {
+          console.log(`Unit info selection received: ${text} from ${fromNumber}`);
           const unitIndex = parseInt(text) - 1;
           const units = sessions[fromNumber].units;
+
           if (unitIndex >= 0 && unitIndex < units.length) {
             const selectedUnit = units[unitIndex];
+            console.log(`Selected unit: ${selectedUnit.unitNumber} (ID: ${selectedUnit._id})`);
             await sendUnitInfo(fromNumber, selectedUnit);
             sessions[fromNumber].action = null;
             delete sessions[fromNumber].units;
@@ -277,10 +283,13 @@ router.post('/', async (req, res) => {
             await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid unit number.');
           }
         } else if (sessions[fromNumber].action === 'select_tenant_for_info') {
+          console.log(`Tenant info selection received: ${text} from ${fromNumber}`);
           const tenantIndex = parseInt(text) - 1;
           const tenants = sessions[fromNumber].tenants;
+
           if (tenantIndex >= 0 && tenantIndex < tenants.length) {
             const selectedTenant = tenants[tenantIndex];
+            console.log(`Selected tenant: ${selectedTenant.name} (ID: ${selectedTenant._id})`);
             await sendTenantInfo(fromNumber, selectedTenant);
             sessions[fromNumber].action = null;
             delete sessions[fromNumber].tenants;
@@ -441,7 +450,7 @@ router.post('/', async (req, res) => {
         } else if (selectedOption === 'maintenance') {
           await sendMessage(fromNumber, '🔧 *Maintenance* \nMaintenance features coming soon!');
         } else if (selectedOption === 'info') {
-          await sendInfoSubmenu(fromNumber); // New Info submenu
+          await sendInfoSubmenu(fromNumber);
         } else if (selectedOption === 'property_info') {
           await promptPropertyInfoSelection(fromNumber);
         } else if (selectedOption === 'unit_info') {
@@ -553,7 +562,7 @@ async function sendToolsSubmenu(phoneNumber) {
         buttons: [
           { type: 'reply', reply: { id: 'reports', title: '📊 Reports' } },
           { type: 'reply', reply: { id: 'maintenance', title: '🔧 Maintenance' } },
-          { type: 'reply', reply: { id: 'info', title: 'ℹ️ Info' } }, // New Info option
+          { type: 'reply', reply: { id: 'info', title: 'ℹ️ Info' } },
         ],
       },
     },
@@ -645,23 +654,37 @@ async function promptPropertyInfoSelection(phoneNumber) {
   });
   propertyList += `━━━━━━━━━━━━━━━`;
   await sendMessage(phoneNumber, propertyList);
+  console.log(`Property list sent to ${phoneNumber}: ${propertyList}`);
 
   sessions[phoneNumber] = { action: 'select_property_for_info', properties };
 }
 
 // Helper function to send property info
 async function sendPropertyInfo(phoneNumber, property) {
-  const imageUrl = property.imageUrl || 'https://via.placeholder.com/150'; // Default image if none exists
+  console.log(`Sending property info for ${property.name} to ${phoneNumber}`);
+  // Assuming images contains direct URLs; if it references an Image model, uncomment the below
+  // const Image = require('../models/Image');
+  // let imageUrl = 'https://via.placeholder.com/150';
+  // if (property.images && property.images.length > 0) {
+  //   const imageDoc = await Image.findById(property.images[0]);
+  //   imageUrl = imageDoc ? imageDoc.url : imageUrl;
+  // }
+  const imageUrl = property.images && property.images.length > 0 
+    ? property.images[0] // Direct URL assumption
+    : 'https://via.placeholder.com/150';
+
   const caption = `
 *🏠 Property Details*
 ━━━━━━━━━━━━━━━
 *Name*: ${property.name}
 *Address*: ${property.address}
-*Description*: ${property.description || 'N/A'}
+*Units*: ${property.units}
+*Total Amount*: $${property.totalAmount}
 *ID*: ${property._id}
-*Created At*: ${property.createdAt ? property.createdAt.toLocaleDateString() : 'N/A'}
+*Created At*: ${property.createdAt ? new Date(property.createdAt).toLocaleDateString() : 'N/A'}
 ━━━━━━━━━━━━━━━
   `;
+
   await sendImageMessage(phoneNumber, imageUrl, caption);
 }
 
@@ -691,16 +714,27 @@ async function promptUnitInfoSelection(phoneNumber) {
 
 // Helper function to send unit info
 async function sendUnitInfo(phoneNumber, unit) {
-  const imageUrl = unit.imageUrl || 'https://via.placeholder.com/150'; // Default image if none exists
+  // Assuming images contains direct URLs; if it references an Image model, uncomment the below
+  // const Image = require('../models/Image');
+  // let imageUrl = 'https://via.placeholder.com/150';
+  // if (unit.images && unit.images.length > 0) {
+  //   const imageDoc = await Image.findById(unit.images[0]);
+  //   imageUrl = imageDoc ? imageDoc.url : imageUrl;
+  // }
+  const imageUrl = unit.images && unit.images.length > 0 
+    ? unit.images[0] // Direct URL assumption
+    : 'https://via.placeholder.com/150';
+
   const caption = `
 *🚪 Unit Details*
 ━━━━━━━━━━━━━━━
 *Unit Number*: ${unit.unitNumber}
 *Property*: ${unit.property ? unit.property.name : 'N/A'}
-*Rent*: $${unit.rent || 'N/A'}
-*Status*: ${unit.status || 'N/A'}
+*Rent Amount*: $${unit.rentAmount}
+*Floor*: ${unit.floor || 'N/A'}
+*Size*: ${unit.size ? unit.size + ' sq ft' : 'N/A'}
 *ID*: ${unit._id}
-*Created At*: ${unit.createdAt ? unit.createdAt.toLocaleDateString() : 'N/A'}
+*Created At*: ${unit.createdAt ? new Date(unit.createdAt).toLocaleDateString() : 'N/A'}
 ━━━━━━━━━━━━━━━
   `;
   await sendImageMessage(phoneNumber, imageUrl, caption);
@@ -732,16 +766,21 @@ async function promptTenantInfoSelection(phoneNumber) {
 
 // Helper function to send tenant info
 async function sendTenantInfo(phoneNumber, tenant) {
-  const imageUrl = tenant.imageUrl || 'https://via.placeholder.com/150'; // Default image if none exists
+  const imageUrl = tenant.photo || 'https://via.placeholder.com/150';
   const caption = `
 *👥 Tenant Details*
 ━━━━━━━━━━━━━━━
 *Name*: ${tenant.name}
+*Phone Number*: ${tenant.phoneNumber}
 *Unit*: ${tenant.unitAssigned ? tenant.unitAssigned.unitNumber : 'N/A'}
-*Contact*: ${tenant.contact || 'N/A'}
-*Status*: ${tenant.status || 'N/A'}
-*Tenant ID*: ${tenant.tenant_id || tenant._id}
-*Move-in Date*: ${tenant.moveInDate ? tenant.moveInDate.toLocaleDateString() : 'N/A'}
+*Property*: ${tenant.propertyName}
+*Lease Start*: ${tenant.lease_start ? new Date(tenant.lease_start).toLocaleDateString() : 'N/A'}
+*Deposit*: $${tenant.deposit}
+*Rent Amount*: $${tenant.rent_amount}
+*Tenant ID*: ${tenant.tenant_id}
+*Email*: ${tenant.email || 'N/A'}
+*ID Proof*: ${tenant.idProof ? 'Available' : 'N/A'}
+*Created At*: ${tenant.createdAt ? new Date(tenant.createdAt).toLocaleDateString() : 'N/A'}
 ━━━━━━━━━━━━━━━
   `;
   await sendImageMessage(phoneNumber, imageUrl, caption);
@@ -1008,7 +1047,7 @@ async function promptUnitRemoval(phoneNumber) {
 
   let unitList = `*🚪 Select a Unit to Remove* \nReply with the number of the unit:\n━━━━━━━━━━━━━━━\n`;
   units.forEach((unit, index) => {
-    unitList += `${index + 1}. *${unit.unitNumber}* \n   _ID_: ${unit.unit_id || unit._id}\n`;
+    unitList += `${index + 1}. *${unit.unitNumber}* \n   _ID_: ${unit._id}\n`;
   });
   unitList += `━━━━━━━━━━━━━━━`;
   await sendMessage(phoneNumber, unitList);
