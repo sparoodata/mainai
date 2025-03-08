@@ -182,11 +182,11 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
       };
 
       const uploadResult = await s3.upload(uploadParams).promise();
-      if (!process.env.R2_PUBLIC_URL) {
-        console.error('R2_PUBLIC_URL is not set in .env');
-        throw new Error('R2_PUBLIC_URL is not configured');
+      if (!process.env.R2_ENDPOINT) {
+        console.error('R2_ENDPOINT is not set in .env');
+        throw new Error('R2_ENDPOINT is not configured');
       }
-      const imageUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
+      const imageUrl = `${process.env.R2_ENDPOINT}/${key}`;
       console.log(`Generated imageUrl: ${imageUrl}`); // Debug log
 
       const image = new Image({ propertyId: property._id, imageUrl: imageUrl });

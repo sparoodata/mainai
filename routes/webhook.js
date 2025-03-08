@@ -665,26 +665,26 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 async function sendPropertyInfo(phoneNumber, property) {
   console.log(`Sending property info for ${property.name} to ${phoneNumber}`);
 
-  // Populate the images field to get the actual Image documents
   const populatedProperty = await Property.findById(property._id).populate('images');
-  let imageUrl = 'https://via.placeholder.com/150'; // Default fallback image
+  if (!populatedProperty) {
+    console.error(`Property ${property._id} not found in database`);
+    await sendMessage(phoneNumber, '⚠️ *Error* \nProperty not found.');
+    return;
+  }
 
+  let imageUrl = 'https://via.placeholder.com/150'; // Default fallback
   if (populatedProperty.images && populatedProperty.images.length > 0) {
-    imageUrl = populatedProperty.images[0].imageUrl; // Direct URL from R2
-    console.log(`Property image URL: ${imageUrl}`);
-
-    // Optional: Generate a signed URL if your R2 bucket is private
-    /*
-    const key = imageUrl.split('/').pop(); // Extract key from URL
-    const command = new GetObjectCommand({
-      Bucket: process.env.R2_BUCKET,
-      Key: key,
-    });
-    imageUrl = await getSignedUrl(s3, command, { expiresIn: 3600 }); // 1-hour expiration
-    console.log(`Signed URL generated: ${imageUrl}`);
-    */
+    const imageDoc = populatedProperty.images[0];
+    console.log(`Image document: ${JSON.stringify(imageDoc)}`);
+    
+    if (imageDoc && imageDoc.imageUrl && !imageDoc.imageUrl.startsWith('undefined')) {
+      imageUrl = imageDoc.imageUrl;
+      console.log(`Using image URL: ${imageUrl}`);
+    } else {
+      console.warn(`Invalid or missing imageUrl for property ${property._id}: ${imageDoc?.imageUrl}`);
+    }
   } else {
-    console.log(`No images found for property ${property._id}`);
+    console.log(`No images for property ${property._id}`);
   }
 
   const caption = `
@@ -699,7 +699,13 @@ async function sendPropertyInfo(phoneNumber, property) {
 ━━━━━━━━━━━━━━━
   `;
 
-  await sendImageMessage(phoneNumber, imageUrl, caption);
+  try {
+    await sendImageMessage(phoneNumber, imageUrl, caption);
+    console.log(`Image message sent to ${phoneNumber} with URL: ${imageUrl}`);
+  } catch (error) {
+    console.error(`Error sending image: ${JSON.stringify(error.response ? error.response.data : error.message)}`);
+    await sendMessage(phoneNumber, `⚠️ *Image Error* \nFailed to load image. Here’s the info:\n${caption}`);
+  }
 }
 
 // Helper function to prompt unit info selection
