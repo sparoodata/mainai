@@ -248,7 +248,7 @@ router.post('/', async (req, res) => {
                   buttons: [
                     { type: 'reply', reply: { id: 'account_info', title: '👤 Account Info' } },
                     { type: 'reply', reply: { id: 'manage', title: '🛠️ Manage' } },
-                    { type: 'reply', reply: { id: 'transactions', title: '💰 Transactions' } },
+                    { type: 'reply', reply: { id: 'tools', title: '🧰 Tools' } }, // Replaced 'transactions' with 'tools'
                   ],
                 },
               },
@@ -378,6 +378,18 @@ router.post('/', async (req, res) => {
           await sendMessage(fromNumber, '💰 *Confirm Rent Payment* \nPlease provide the *Tenant ID* to mark their rent as paid.');
         } else if (selectedOption === 'manage') {
           await sendManageSubmenu(fromNumber);
+        } else if (selectedOption === 'tools') {
+          await sendToolsSubmenu(fromNumber); // New Tools submenu
+        } else if (selectedOption === 'reports') {
+          await sendReportsSubmenu(fromNumber); // New Reports submenu
+        } else if (selectedOption === 'maintenance') {
+          await sendMessage(fromNumber, '🔧 *Maintenance* \nMaintenance features coming soon!'); // Placeholder
+        } else if (selectedOption === 'financial_summary') {
+          await sendMessage(fromNumber, '💵 *Financial Summary* \nGenerating financial report... (Coming soon!)');
+        } else if (selectedOption === 'occupancy_report') {
+          await sendMessage(fromNumber, '🏠 *Occupancy Report* \nGenerating occupancy report... (Coming soon!)');
+        } else if (selectedOption === 'maintenance_trends') {
+          await sendMessage(fromNumber, '🔧 *Maintenance Trends* \nGenerating maintenance trends report... (Coming soon!)');
         } else if (selectedOption === 'manage_properties') {
           await sendPropertyOptions(fromNumber);
         } else if (selectedOption === 'manage_units') {
@@ -449,6 +461,63 @@ async function sendManageSubmenu(phoneNumber) {
           { type: 'reply', reply: { id: 'manage_properties', title: '🏠 Properties' } },
           { type: 'reply', reply: { id: 'manage_units', title: '🚪 Units' } },
           { type: 'reply', reply: { id: 'manage_tenants', title: '👥 Tenants' } },
+        ],
+      },
+    },
+  };
+
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: {
+      'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+  });
+}
+
+// Helper function to send the tools submenu
+async function sendToolsSubmenu(phoneNumber) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '🧰 Tools' },
+      body: { text: '*Select a tool:*' },
+      footer: { text: 'Rental Management App' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'reports', title: '📊 Reports' } },
+          { type: 'reply', reply: { id: 'maintenance', title: '🔧 Maintenance' } },
+        ],
+      },
+    },
+  };
+
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: {
+      'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+  });
+}
+
+// Helper function to send the reports submenu
+async function sendReportsSubmenu(phoneNumber) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '📊 Reports' },
+      body: { text: '*Select a report type:*' },
+      footer: { text: 'Rental Management App' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'financial_summary', title: '💵 Financial Summary' } },
+          { type: 'reply', reply: { id: 'occupancy_report', title: '🏠 Occupancy Report' } },
+          { type: 'reply', reply: { id: 'maintenance_trends', title: '🔧 Maintenance Trends' } },
         ],
       },
     },
