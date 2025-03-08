@@ -661,15 +661,22 @@ async function promptPropertyInfoSelection(phoneNumber) {
 }
 
 // Helper function to send property info
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+
 async function sendPropertyInfo(phoneNumber, property) {
   console.log(`Sending property info for ${property.name} to ${phoneNumber}`);
-  // Use the first image URL from the images array (stored as R2 URLs)
-  const imageUrl = property.images && property.images.length > 0 
-    ? property.images[0] // Direct R2 URL
+  let imageUrl = property.images && property.images.length > 0 
+    ? property.images[0] 
     : 'https://via.placeholder.com/150';
 
-  // If R2 requires signed URLs, implement here (e.g., using AWS SDK for S3-compatible R2)
-  // const signedUrl = await getSignedUrl(imageUrl); // Placeholder for signed URL logic
+  // Generate signed URL if R2 requires it
+  if (property.images && property.images.length > 0) {
+    const command = new GetObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: property.images[0].split('/').pop(), // Extract key from URL
+    });
+    imageUrl = await getSignedUrl(s3, command, { expiresIn: 3600 }); // 1-hour expiration
+  }
 
   const caption = `
 *🏠 Property Details*
