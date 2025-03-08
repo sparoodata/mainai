@@ -55,7 +55,7 @@ async function getGroqAIResponse(message, phoneNumber, isAssistanceMode) {
   }
 }
 
-// Helper function to send a WhatsApp message
+// Helper function to send a WhatsApp message (text only)
 async function sendMessage(phoneNumber, message) {
   try {
     await axios.post(WHATSAPP_API_URL, {
@@ -71,6 +71,29 @@ async function sendMessage(phoneNumber, message) {
     });
   } catch (err) {
     console.error('Error sending WhatsApp message:', err.response ? err.response.data : err);
+  }
+}
+
+// Helper function to send an image with a caption
+async function sendImageMessage(phoneNumber, imageUrl, caption) {
+  try {
+    await axios.post(WHATSAPP_API_URL, {
+      messaging_product: 'whatsapp',
+      to: phoneNumber,
+      type: 'image',
+      image: {
+        link: imageUrl,
+        caption: caption,
+      },
+    }, {
+      headers: {
+        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+    });
+  } catch (err) {
+    console.error('Error sending image message:', err.response ? err.response.data : err);
+    await sendMessage(phoneNumber, '⚠️ *Error* \nFailed to send image. Here’s the info without the image:\n' + caption);
   }
 }
 
@@ -231,6 +254,39 @@ router.post('/', async (req, res) => {
             console.error('Error updating rent status:', error);
             await sendMessage(fromNumber, '❌ *Error* \nFailed to confirm rent payment. Please try again.');
           }
+        } else if (sessions[fromNumber].action === 'select_property_for_info') {
+          const propertyIndex = parseInt(text) - 1;
+          const properties = sessions[fromNumber].properties;
+          if (propertyIndex >= 0 && propertyIndex < properties.length) {
+            const selectedProperty = properties[propertyIndex];
+            await sendPropertyInfo(fromNumber, selectedProperty);
+            sessions[fromNumber].action = null;
+            delete sessions[fromNumber].properties;
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid property number.');
+          }
+        } else if (sessions[fromNumber].action === 'select_unit_for_info') {
+          const unitIndex = parseInt(text) - 1;
+          const units = sessions[fromNumber].units;
+          if (unitIndex >= 0 && unitIndex < units.length) {
+            const selectedUnit = units[unitIndex];
+            await sendUnitInfo(fromNumber, selectedUnit);
+            sessions[fromNumber].action = null;
+            delete sessions[fromNumber].units;
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid unit number.');
+          }
+        } else if (sessions[fromNumber].action === 'select_tenant_for_info') {
+          const tenantIndex = parseInt(text) - 1;
+          const tenants = sessions[fromNumber].tenants;
+          if (tenantIndex >= 0 && tenantIndex < tenants.length) {
+            const selectedTenant = tenants[tenantIndex];
+            await sendTenantInfo(fromNumber, selectedTenant);
+            sessions[fromNumber].action = null;
+            delete sessions[fromNumber].tenants;
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid tenant number.');
+          }
         } else if (text.toLowerCase() === 'help') {
           try {
             sessions[fromNumber].action = null;
@@ -248,7 +304,7 @@ router.post('/', async (req, res) => {
                   buttons: [
                     { type: 'reply', reply: { id: 'account_info', title: '👤 Account Info' } },
                     { type: 'reply', reply: { id: 'manage', title: '🛠️ Manage' } },
-                    { type: 'reply', reply: { id: 'tools', title: '🧰 Tools' } }, // Replaced 'transactions' with 'tools'
+                    { type: 'reply', reply: { id: 'tools', title: '🧰 Tools' } },
                   ],
                 },
               },
@@ -379,11 +435,19 @@ router.post('/', async (req, res) => {
         } else if (selectedOption === 'manage') {
           await sendManageSubmenu(fromNumber);
         } else if (selectedOption === 'tools') {
-          await sendToolsSubmenu(fromNumber); // New Tools submenu
+          await sendToolsSubmenu(fromNumber);
         } else if (selectedOption === 'reports') {
-          await sendReportsSubmenu(fromNumber); // New Reports submenu
+          await sendReportsSubmenu(fromNumber);
         } else if (selectedOption === 'maintenance') {
-          await sendMessage(fromNumber, '🔧 *Maintenance* \nMaintenance features coming soon!'); // Placeholder
+          await sendMessage(fromNumber, '🔧 *Maintenance* \nMaintenance features coming soon!');
+        } else if (selectedOption === 'info') {
+          await sendInfoSubmenu(fromNumber); // New Info submenu
+        } else if (selectedOption === 'property_info') {
+          await promptPropertyInfoSelection(fromNumber);
+        } else if (selectedOption === 'unit_info') {
+          await promptUnitInfoSelection(fromNumber);
+        } else if (selectedOption === 'tenant_info') {
+          await promptTenantInfoSelection(fromNumber);
         } else if (selectedOption === 'financial_summary') {
           await sendMessage(fromNumber, '💵 *Financial Summary* \nGenerating financial report... (Coming soon!)');
         } else if (selectedOption === 'occupancy_report') {
@@ -489,6 +553,7 @@ async function sendToolsSubmenu(phoneNumber) {
         buttons: [
           { type: 'reply', reply: { id: 'reports', title: '📊 Reports' } },
           { type: 'reply', reply: { id: 'maintenance', title: '🔧 Maintenance' } },
+          { type: 'reply', reply: { id: 'info', title: 'ℹ️ Info' } }, // New Info option
         ],
       },
     },
@@ -529,6 +594,157 @@ async function sendReportsSubmenu(phoneNumber) {
       'Content-Type': 'application/json',
     },
   });
+}
+
+// Helper function to send the info submenu
+async function sendInfoSubmenu(phoneNumber) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: 'ℹ️ Info' },
+      body: { text: '*Select what you want info about:*' },
+      footer: { text: 'Rental Management App' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'property_info', title: '🏠 Property Info' } },
+          { type: 'reply', reply: { id: 'unit_info', title: '🚪 Unit Info' } },
+          { type: 'reply', reply: { id: 'tenant_info', title: '👥 Tenant Info' } },
+        ],
+      },
+    },
+  };
+
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: {
+      'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+  });
+}
+
+// Helper function to prompt property info selection
+async function promptPropertyInfoSelection(phoneNumber) {
+  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+  if (!user) {
+    await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
+    return;
+  }
+
+  const properties = await Property.find({ userId: user._id });
+  if (!properties.length) {
+    await sendMessage(phoneNumber, 'ℹ️ *No Properties Found* \nNo properties available to display.');
+    return;
+  }
+
+  let propertyList = `*🏠 Select a Property for Info* \nReply with the number of the property:\n━━━━━━━━━━━━━━━\n`;
+  properties.forEach((property, index) => {
+    propertyList += `${index + 1}. *${property.name}* \n   _Address_: ${property.address}\n`;
+  });
+  propertyList += `━━━━━━━━━━━━━━━`;
+  await sendMessage(phoneNumber, propertyList);
+
+  sessions[phoneNumber] = { action: 'select_property_for_info', properties };
+}
+
+// Helper function to send property info
+async function sendPropertyInfo(phoneNumber, property) {
+  const imageUrl = property.imageUrl || 'https://via.placeholder.com/150'; // Default image if none exists
+  const caption = `
+*🏠 Property Details*
+━━━━━━━━━━━━━━━
+*Name*: ${property.name}
+*Address*: ${property.address}
+*Description*: ${property.description || 'N/A'}
+*ID*: ${property._id}
+*Created At*: ${property.createdAt ? property.createdAt.toLocaleDateString() : 'N/A'}
+━━━━━━━━━━━━━━━
+  `;
+  await sendImageMessage(phoneNumber, imageUrl, caption);
+}
+
+// Helper function to prompt unit info selection
+async function promptUnitInfoSelection(phoneNumber) {
+  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+  if (!user) {
+    await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
+    return;
+  }
+
+  const units = await Unit.find({ userId: user._id }).populate('property');
+  if (!units.length) {
+    await sendMessage(phoneNumber, 'ℹ️ *No Units Found* \nNo units available to display.');
+    return;
+  }
+
+  let unitList = `*🚪 Select a Unit for Info* \nReply with the number of the unit:\n━━━━━━━━━━━━━━━\n`;
+  units.forEach((unit, index) => {
+    unitList += `${index + 1}. *${unit.unitNumber}* \n   _Property_: ${unit.property ? unit.property.name : 'N/A'}\n`;
+  });
+  unitList += `━━━━━━━━━━━━━━━`;
+  await sendMessage(phoneNumber, unitList);
+
+  sessions[phoneNumber] = { action: 'select_unit_for_info', units };
+}
+
+// Helper function to send unit info
+async function sendUnitInfo(phoneNumber, unit) {
+  const imageUrl = unit.imageUrl || 'https://via.placeholder.com/150'; // Default image if none exists
+  const caption = `
+*🚪 Unit Details*
+━━━━━━━━━━━━━━━
+*Unit Number*: ${unit.unitNumber}
+*Property*: ${unit.property ? unit.property.name : 'N/A'}
+*Rent*: $${unit.rent || 'N/A'}
+*Status*: ${unit.status || 'N/A'}
+*ID*: ${unit._id}
+*Created At*: ${unit.createdAt ? unit.createdAt.toLocaleDateString() : 'N/A'}
+━━━━━━━━━━━━━━━
+  `;
+  await sendImageMessage(phoneNumber, imageUrl, caption);
+}
+
+// Helper function to prompt tenant info selection
+async function promptTenantInfoSelection(phoneNumber) {
+  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+  if (!user) {
+    await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
+    return;
+  }
+
+  const tenants = await Tenant.find({ userId: user._id }).populate('unitAssigned');
+  if (!tenants.length) {
+    await sendMessage(phoneNumber, 'ℹ️ *No Tenants Found* \nNo tenants available to display.');
+    return;
+  }
+
+  let tenantList = `*👥 Select a Tenant for Info* \nReply with the number of the tenant:\n━━━━━━━━━━━━━━━\n`;
+  tenants.forEach((tenant, index) => {
+    tenantList += `${index + 1}. *${tenant.name}* \n   _Unit_: ${tenant.unitAssigned ? tenant.unitAssigned.unitNumber : 'N/A'}\n`;
+  });
+  tenantList += `━━━━━━━━━━━━━━━`;
+  await sendMessage(phoneNumber, tenantList);
+
+  sessions[phoneNumber] = { action: 'select_tenant_for_info', tenants };
+}
+
+// Helper function to send tenant info
+async function sendTenantInfo(phoneNumber, tenant) {
+  const imageUrl = tenant.imageUrl || 'https://via.placeholder.com/150'; // Default image if none exists
+  const caption = `
+*👥 Tenant Details*
+━━━━━━━━━━━━━━━
+*Name*: ${tenant.name}
+*Unit*: ${tenant.unitAssigned ? tenant.unitAssigned.unitNumber : 'N/A'}
+*Contact*: ${tenant.contact || 'N/A'}
+*Status*: ${tenant.status || 'N/A'}
+*Tenant ID*: ${tenant.tenant_id || tenant._id}
+*Move-in Date*: ${tenant.moveInDate ? tenant.moveInDate.toLocaleDateString() : 'N/A'}
+━━━━━━━━━━━━━━━
+  `;
+  await sendImageMessage(phoneNumber, imageUrl, caption);
 }
 
 // Helper function for Property Options (Add, Edit, Remove)
