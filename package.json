@@ -30,7 +30,8 @@
     "isomorphic-fetch": "^3.0.0",
     "aws-sdk": "^2.1692.0",
     "groq-sdk": "^0.15.0",
-    "csurf": "^1.11.0"
+    "csurf": "^1.11.0",
+    "@aws-sdk/client-s3": "^3.758.0"
   },
   "engines": {
     "node": "16.x"

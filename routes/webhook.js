@@ -636,6 +636,7 @@ async function sendInfoSubmenu(phoneNumber) {
 }
 
 // Helper function to prompt property info selection
+// promptPropertyInfoSelection
 async function promptPropertyInfoSelection(phoneNumber) {
   const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
   if (!user) {
@@ -643,7 +644,7 @@ async function promptPropertyInfoSelection(phoneNumber) {
     return;
   }
 
-  const properties = await Property.find({ userId: user._id });
+  const properties = await Property.find({ userId: user._id }).populate('images');
   if (!properties.length) {
     await sendMessage(phoneNumber, 'ℹ️ *No Properties Found* \nNo properties available to display.');
     return;
@@ -655,8 +656,6 @@ async function promptPropertyInfoSelection(phoneNumber) {
   });
   propertyList += `━━━━━━━━━━━━━━━`;
   await sendMessage(phoneNumber, propertyList);
-  console.log(`Property list sent to ${phoneNumber}: ${propertyList}`);
-
   sessions[phoneNumber] = { action: 'select_property_for_info', properties };
 }
 
@@ -665,17 +664,27 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 async function sendPropertyInfo(phoneNumber, property) {
   console.log(`Sending property info for ${property.name} to ${phoneNumber}`);
-  let imageUrl = property.images && property.images.length > 0 
-    ? property.images[0] 
-    : 'https://via.placeholder.com/150';
 
-  // Generate signed URL if R2 requires it
-  if (property.images && property.images.length > 0) {
+  // Populate the images field to get the actual Image documents
+  const populatedProperty = await Property.findById(property._id).populate('images');
+  let imageUrl = 'https://via.placeholder.com/150'; // Default fallback image
+
+  if (populatedProperty.images && populatedProperty.images.length > 0) {
+    imageUrl = populatedProperty.images[0].imageUrl; // Direct URL from R2
+    console.log(`Property image URL: ${imageUrl}`);
+
+    // Optional: Generate a signed URL if your R2 bucket is private
+    /*
+    const key = imageUrl.split('/').pop(); // Extract key from URL
     const command = new GetObjectCommand({
-      Bucket: process.env.R2_BUCKET_NAME,
-      Key: property.images[0].split('/').pop(), // Extract key from URL
+      Bucket: process.env.R2_BUCKET,
+      Key: key,
     });
     imageUrl = await getSignedUrl(s3, command, { expiresIn: 3600 }); // 1-hour expiration
+    console.log(`Signed URL generated: ${imageUrl}`);
+    */
+  } else {
+    console.log(`No images found for property ${property._id}`);
   }
 
   const caption = `
@@ -701,7 +710,7 @@ async function promptUnitInfoSelection(phoneNumber) {
     return;
   }
 
-  const units = await Unit.find({ userId: user._id }).populate('property');
+  const units = await Unit.find({ userId: user._id }).populate('images').populate('property');
   if (!units.length) {
     await sendMessage(phoneNumber, 'ℹ️ *No Units Found* \nNo units available to display.');
     return;
@@ -713,21 +722,38 @@ async function promptUnitInfoSelection(phoneNumber) {
   });
   unitList += `━━━━━━━━━━━━━━━`;
   await sendMessage(phoneNumber, unitList);
-
   sessions[phoneNumber] = { action: 'select_unit_for_info', units };
 }
 
 // Helper function to send unit info
 async function sendUnitInfo(phoneNumber, unit) {
-  const imageUrl = unit.images && unit.images.length > 0 
-    ? unit.images[0] // Direct R2 URL
-    : 'https://via.placeholder.com/150';
+  // Populate the images and property fields
+  const populatedUnit = await Unit.findById(unit._id).populate('images').populate('property');
+  let imageUrl = 'https://via.placeholder.com/150'; // Default fallback image
+
+  if (populatedUnit.images && populatedUnit.images.length > 0) {
+    imageUrl = populatedUnit.images[0].imageUrl; // Direct URL from R2
+    console.log(`Unit image URL: ${imageUrl}`);
+
+    // Optional: Generate a signed URL if your R2 bucket is private
+    /*
+    const key = imageUrl.split('/').pop();
+    const command = new GetObjectCommand({
+      Bucket: process.env.R2_BUCKET,
+      Key: key,
+    });
+    imageUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+    console.log(`Signed URL generated: ${imageUrl}`);
+    */
+  } else {
+    console.log(`No images found for unit ${unit._id}`);
+  }
 
   const caption = `
 *🚪 Unit Details*
 ━━━━━━━━━━━━━━━
 *Unit Number*: ${unit.unitNumber}
-*Property*: ${unit.property ? unit.property.name : 'N/A'}
+*Property*: ${populatedUnit.property ? populatedUnit.property.name : 'N/A'}
 *Rent Amount*: $${unit.rentAmount}
 *Floor*: ${unit.floor || 'N/A'}
 *Size*: ${unit.size ? unit.size + ' sq ft' : 'N/A'}
@@ -737,7 +763,6 @@ async function sendUnitInfo(phoneNumber, unit) {
   `;
   await sendImageMessage(phoneNumber, imageUrl, caption);
 }
-
 // Helper function to prompt tenant info selection
 async function promptTenantInfoSelection(phoneNumber) {
   const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
@@ -758,19 +783,35 @@ async function promptTenantInfoSelection(phoneNumber) {
   });
   tenantList += `━━━━━━━━━━━━━━━`;
   await sendMessage(phoneNumber, tenantList);
-
   sessions[phoneNumber] = { action: 'select_tenant_for_info', tenants };
 }
-
 // Helper function to send tenant info
 async function sendTenantInfo(phoneNumber, tenant) {
-  const imageUrl = tenant.photo || 'https://via.placeholder.com/150';
+  // Populate the unitAssigned field
+  const populatedTenant = await Tenant.findById(tenant._id).populate('unitAssigned');
+  let imageUrl = populatedTenant.photo || 'https://via.placeholder.com/150'; // Use tenant photo or fallback
+
+  console.log(`Tenant photo URL: ${imageUrl}`);
+
+  // Optional: Generate a signed URL if your R2 bucket is private
+  if (populatedTenant.photo) {
+    /*
+    const key = populatedTenant.photo.split('/').pop();
+    const command = new GetObjectCommand({
+      Bucket: process.env.R2_BUCKET,
+      Key: key,
+    });
+    imageUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+    console.log(`Signed URL generated: ${imageUrl}`);
+    */
+  }
+
   const caption = `
 *👥 Tenant Details*
 ━━━━━━━━━━━━━━━
 *Name*: ${tenant.name}
 *Phone Number*: ${tenant.phoneNumber}
-*Unit*: ${tenant.unitAssigned ? tenant.unitAssigned.unitNumber : 'N/A'}
+*Unit*: ${populatedTenant.unitAssigned ? populatedTenant.unitAssigned.unitNumber : 'N/A'}
 *Property*: ${tenant.propertyName}
 *Lease Start*: ${tenant.lease_start ? new Date(tenant.lease_start).toLocaleDateString() : 'N/A'}
 *Deposit*: $${tenant.deposit}

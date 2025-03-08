@@ -23,12 +23,16 @@ const port = process.env.PORT || 3000; // Glitch uses dynamic port
 const AWS = require('aws-sdk');
 
 // Configure the S3 client to use Cloudflare R2 settings
+const { GetObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+
+// Configure S3 client for Cloudflare R2
 const s3 = new AWS.S3({
-  endpoint: process.env.R2_ENDPOINT, // e.g., https://<account-id>.r2.cloudflarestorage.com
+  endpoint: process.env.R2_ENDPOINT,
   accessKeyId: process.env.R2_ACCESS_KEY_ID,
   secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
   Bucket: process.env.R2_BUCKET,
-  region: 'auto', // R2 doesn’t require a region but "auto" works for S3 compatibility
+  region: 'auto',
   signatureVersion: 'v4',
 });
 
