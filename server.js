@@ -23,10 +23,13 @@ const port = process.env.PORT || 3000; // Glitch uses dynamic port
 const AWS = require('aws-sdk');
 
 // Configure the S3 client to use Cloudflare R2 settings
+const { S3Client } = require('@aws-sdk/client-s3');
 const { GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
-// Configure S3 client for Cloudflare R2
+// Configure R2 client
+
+// Configure the S3 client to use Cloudflare R2 settings
 const s3 = new AWS.S3({
   endpoint: process.env.R2_ENDPOINT,
   accessKeyId: process.env.R2_ACCESS_KEY_ID,
@@ -35,7 +38,6 @@ const s3 = new AWS.S3({
   region: 'auto',
   signatureVersion: 'v4',
 });
-
 // Trust the first proxy
 app.set('trust proxy', 1);
 
@@ -181,13 +183,14 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
         ContentType: req.file.mimetype,
       };
 
+      // Ensure s3 is used here
       const uploadResult = await s3.upload(uploadParams).promise();
-      if (!process.env.R2_ENDPOINT) {
-        console.error('R2_ENDPOINT is not set in .env');
-        throw new Error('R2_ENDPOINT is not configured');
+      if (!process.env.R2_PUBLIC_URL) {
+        console.error('R2_PUBLIC_URL is not set in .env');
+        throw new Error('R2_PUBLIC_URL is not configured');
       }
-      const imageUrl = `${process.env.R2_ENDPOINT}/${key}`;
-      console.log(`Generated imageUrl: ${imageUrl}`); // Debug log
+      const imageUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
+      console.log(`Generated imageUrl: ${imageUrl}`);
 
       const image = new Image({ propertyId: property._id, imageUrl: imageUrl });
       await image.save();
@@ -206,7 +209,6 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
     res.status(500).send('An error occurred while adding the property and image.');
   }
 });
-
 // Handle form submission and image upload to Dropbox (add unit)
 app.post('/addunit/:id', upload.single('image'), async (req, res) => {
   const { property, unit_number, rent_amount, floor, size } = req.body;

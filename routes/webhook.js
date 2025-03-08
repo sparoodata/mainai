@@ -676,12 +676,24 @@ async function sendPropertyInfo(phoneNumber, property) {
   if (populatedProperty.images && populatedProperty.images.length > 0) {
     const imageDoc = populatedProperty.images[0];
     console.log(`Image document: ${JSON.stringify(imageDoc)}`);
-    
-    if (imageDoc && imageDoc.imageUrl && !imageDoc.imageUrl.startsWith('undefined')) {
-      imageUrl = imageDoc.imageUrl;
-      console.log(`Using image URL: ${imageUrl}`);
+
+    if (imageDoc && imageDoc.imageUrl) {
+      // Extract the key from the imageUrl (e.g., "images/1741467333425-92hFJ.png")
+      const key = imageDoc.imageUrl.split('/').slice(-2).join('/'); // Assumes format "<base>/images/..."
+      console.log(`Extracted key from imageUrl: ${key}`);
+
+      try {
+        const command = new GetObjectCommand({
+          Bucket: process.env.R2_BUCKET,
+          Key: key,
+        });
+        imageUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 }); // 1-hour expiration
+        console.log(`Generated signed URL: ${imageUrl}`);
+      } catch (error) {
+        console.error(`Error generating signed URL for key ${key}: ${error.message}`);
+      }
     } else {
-      console.warn(`Invalid or missing imageUrl for property ${property._id}: ${imageDoc?.imageUrl}`);
+      console.warn(`No valid imageUrl in Image document for property ${property._id}`);
     }
   } else {
     console.log(`No images for property ${property._id}`);
@@ -707,7 +719,6 @@ async function sendPropertyInfo(phoneNumber, property) {
     await sendMessage(phoneNumber, `⚠️ *Image Error* \nFailed to load image. Here’s the info:\n${caption}`);
   }
 }
-
 // Helper function to prompt unit info selection
 async function promptUnitInfoSelection(phoneNumber) {
   const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
