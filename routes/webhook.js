@@ -242,6 +242,7 @@ router.post('/', async (req, res) => {
           try {
             const tenant = await Tenant.findOne({ tenant_id: tenantId });
             if (tenant) {
+              // Assuming status field is added to Tenant model
               tenant.status = 'paid';
               await tenant.save();
               await sendMessage(fromNumber, `✅ *Rent Payment Confirmed* \nTenant ID: *${tenantId}*\nStatus updated to *Paid*.`);
@@ -662,16 +663,13 @@ async function promptPropertyInfoSelection(phoneNumber) {
 // Helper function to send property info
 async function sendPropertyInfo(phoneNumber, property) {
   console.log(`Sending property info for ${property.name} to ${phoneNumber}`);
-  // Assuming images contains direct URLs; if it references an Image model, uncomment the below
-  // const Image = require('../models/Image');
-  // let imageUrl = 'https://via.placeholder.com/150';
-  // if (property.images && property.images.length > 0) {
-  //   const imageDoc = await Image.findById(property.images[0]);
-  //   imageUrl = imageDoc ? imageDoc.url : imageUrl;
-  // }
+  // Use the first image URL from the images array (stored as R2 URLs)
   const imageUrl = property.images && property.images.length > 0 
-    ? property.images[0] // Direct URL assumption
+    ? property.images[0] // Direct R2 URL
     : 'https://via.placeholder.com/150';
+
+  // If R2 requires signed URLs, implement here (e.g., using AWS SDK for S3-compatible R2)
+  // const signedUrl = await getSignedUrl(imageUrl); // Placeholder for signed URL logic
 
   const caption = `
 *🏠 Property Details*
@@ -714,15 +712,8 @@ async function promptUnitInfoSelection(phoneNumber) {
 
 // Helper function to send unit info
 async function sendUnitInfo(phoneNumber, unit) {
-  // Assuming images contains direct URLs; if it references an Image model, uncomment the below
-  // const Image = require('../models/Image');
-  // let imageUrl = 'https://via.placeholder.com/150';
-  // if (unit.images && unit.images.length > 0) {
-  //   const imageDoc = await Image.findById(unit.images[0]);
-  //   imageUrl = imageDoc ? imageDoc.url : imageUrl;
-  // }
   const imageUrl = unit.images && unit.images.length > 0 
-    ? unit.images[0] // Direct URL assumption
+    ? unit.images[0] // Direct R2 URL
     : 'https://via.placeholder.com/150';
 
   const caption = `
@@ -956,8 +947,8 @@ async function sendPropertyLink(phoneNumber, action, tenantId = null) {
     const shortUrl = await shortenUrl(longUrl);
     console.log(`Short URL generated: ${shortUrl}`);
 
-    await sendMessage(phoneNumber, `🔗 *Action Link* \nPlease proceed using this link: *${shortUrl}*`);
-    console.log(`OTP verification link sent to ${phoneNumber} for action: ${action}`);
+    await sendMessage(phoneNumber, `🔗 *Action Link* \nPlease proceed using this link to ${action === 'addproperty' ? 'add a property' : 'edit'}: *${shortUrl}*`);
+    console.log(`Link sent to ${phoneNumber} for action: ${action}`);
   } catch (error) {
     console.error('Error in sendPropertyLink:', error);
     await sendMessage(phoneNumber, '❌ *Error* \nFailed to generate the action link. Please try again.');
