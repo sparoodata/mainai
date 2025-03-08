@@ -140,23 +140,25 @@ function generateTenantId() {
 
 // Route to get units for a selected property
 
-// Handle form submission and image upload to Dropbox (add property)
 app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
   const { property_name, units, address, totalAmount } = req.body;
   const id = req.params.id;
 
   try {
+    // Check if the authorization record exists
     const authorizeRecord = await Authorize.findById(id);
     if (!authorizeRecord) {
       console.error('Authorization record not found for ID:', id);
       return res.status(404).send('Authorization record not found.');
     }
 
+    // Check if the authorization link has already been used
     if (authorizeRecord.used) {
       console.error('Authorization already used for ID:', id);
       return res.status(403).send('This link has already been used.');
     }
 
+    // Find the user by phone number
     const phoneNumber = authorizeRecord.phoneNumber;
     const user = await User.findOne({ phoneNumber });
     if (!user) {
@@ -164,6 +166,7 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
       return res.status(404).send('User not found.');
     }
 
+    // Create and save the new property
     const property = new Property({
       name: property_name,
       units,
@@ -172,7 +175,9 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
       userId: user._id,
     });
     await property.save();
+    console.log(`Property saved with ID: ${property._id}`);
 
+    // Handle image upload if a file is provided
     if (req.file) {
       const key = 'images/' + Date.now() + '-' + req.file.originalname;
       const uploadParams = {
@@ -182,21 +187,35 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
         ContentType: req.file.mimetype,
       };
 
+      // Upload to R2
       const uploadResult = await s3.upload(uploadParams).promise();
       console.log(`Uploaded image to R2 with key: ${key}`);
 
-      // Store only the key (bucket path) in imageUrl
-      const image = new Image({ propertyId: property._id, imageUrl: key });
+      // Store only the bucket path (key) in the Image model
+      const image = new Image({
+        propertyId: property._id,
+        imageUrl: key, // e.g., "images/1741467333425-92hFJ.png"
+      });
       await image.save();
       console.log(`Saved image with ID: ${image._id} and path: ${key}`);
+
+      // Associate the image with the property
       property.images.push(image._id);
       await property.save();
+      console.log(`Image ${image._id} associated with property ${property._id}`);
+    } else {
+      console.log('No image file provided for property');
     }
 
+    // Send confirmation message via WhatsApp
     await sendMessage(authorizeRecord.phoneNumber, `Property *${property_name}* has been successfully added.`);
+    console.log(`Confirmation message sent to ${authorizeRecord.phoneNumber}`);
+
+    // Delete the used authorization record
     await Authorize.findByIdAndDelete(id);
     console.log(`Authorization record deleted for ID: ${id}`);
 
+    // Send success response
     res.send('Property and image added successfully!');
   } catch (error) {
     console.error('Error adding property and image:', error);

@@ -20,13 +20,13 @@ const { GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 // Configure R2 client
-const s3Client = new S3Client({
-  region: 'auto',
+const AWS = require('aws-sdk');
+const s3 = new AWS.S3({
   endpoint: process.env.R2_ENDPOINT,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-  },
+  accessKeyId: process.env.R2_ACCESS_KEY_ID,
+  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  region: 'auto',
+  signatureVersion: 'v4',
 });
 // Session management to track user interactions
 const sessions = {};
@@ -674,43 +674,24 @@ async function promptPropertyInfoSelection(phoneNumber) {
 // Helper function to send property info
 
 async function sendPropertyInfo(phoneNumber, property) {
-  console.log(`Sending property info for ${property.name} to ${phoneNumber}`);
-
   const populatedProperty = await Property.findById(property._id).populate('images');
-  if (!populatedProperty) {
-    console.error(`Property ${property._id} not found in database`);
-    await sendMessage(phoneNumber, '⚠️ *Error* \nProperty not found.');
-    return;
-  }
+  let imageUrl = 'https://via.placeholder.com/150';
 
-  let imageUrl = 'https://via.placeholder.com/150'; // Default fallback
   if (populatedProperty.images && populatedProperty.images.length > 0) {
     const imageDoc = populatedProperty.images[0];
-    console.log(`Image document: ${JSON.stringify(imageDoc)}`);
-
     if (imageDoc && imageDoc.imageUrl) {
-      const key = imageDoc.imageUrl; // Already the bucket path (e.g., "images/1741467333425-92hFJ.png")
-      console.log(`Using key from imageUrl: ${key}`);
-
-      try {
-        const command = new GetObjectCommand({
-          Bucket: process.env.R2_BUCKET,
-          Key: key,
-        });
-        imageUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 }); // 1-hour expiration
-        console.log(`Generated signed URL: ${imageUrl}`);
-      } catch (error) {
-        console.error(`Error generating signed URL for key ${key}: ${error.message}`);
-      }
-    } else {
-      console.warn(`No valid imageUrl in Image document for property ${property._id}`);
+      const key = imageDoc.imageUrl; // e.g., "images/1741467333425-92hFJ.png"
+      const params = {
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Expires: 60,
+      };
+      imageUrl = await s3.getSignedUrlPromise('getObject', params);
+      console.log(`Generated signed URL: ${imageUrl}`);
     }
-  } else {
-    console.log(`No images for property ${property._id}`);
   }
 
-  const caption = `
-*🏠 Property Details*
+  const caption = `*🏠 Property Details*
 ━━━━━━━━━━━━━━━
 *Name*: ${property.name}
 *Address*: ${property.address}
@@ -719,15 +700,8 @@ async function sendPropertyInfo(phoneNumber, property) {
 *ID*: ${property._id}
 *Created At*: ${property.createdAt ? new Date(property.createdAt).toLocaleDateString() : 'N/A'}
 ━━━━━━━━━━━━━━━
-  `;
-
-  try {
-    await sendImageMessage(phoneNumber, imageUrl, caption);
-    console.log(`Image message sent to ${phoneNumber} with URL: ${imageUrl}`);
-  } catch (error) {
-    console.error(`Error sending image: ${JSON.stringify(error.response ? error.response.data : error.message)}`);
-    await sendMessage(phoneNumber, `⚠️ *Image Error* \nFailed to load image. Here’s the info:\n${caption}`);
-  }
+ `; // Property details
+  await sendImageMessage(phoneNumber, imageUrl, caption);
 }
 // Helper function to prompt unit info selection
 async function promptUnitInfoSelection(phoneNumber) {
