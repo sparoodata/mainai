@@ -141,78 +141,70 @@ function generateTenantId() {
 
 // Handle form submission and image upload to Dropbox (add property)
 app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
-    const { property_name, units, address, totalAmount } = req.body;
-    const id = req.params.id;
+  const { property_name, units, address, totalAmount } = req.body;
+  const id = req.params.id;
 
-    try {
-        // Find the authorization record
-        const authorizeRecord = await Authorize.findById(id);
-        if (!authorizeRecord) {
-            console.error('Authorization record not found for ID:', id);
-            return res.status(404).send('Authorization record not found.');
-        }
-
-        // Check if the authorization has already been used
-        if (authorizeRecord.used) {
-            console.error('Authorization already used for ID:', id);
-            return res.status(403).send('This link has already been used.');
-        }
-
-        // Use the phone number directly (no need to add '+')
-        const phoneNumber = authorizeRecord.phoneNumber;
-        console.log(`Querying User collection for phoneNumber: ${phoneNumber}`);
-
-        // Find the user
-        const user = await User.findOne({ phoneNumber });
-        if (!user) {
-            console.error('User not found for phoneNumber:', phoneNumber);
-            return res.status(404).send('User not found.');
-        }
-
-        // Log the user ID
-        console.log(`User found with ID: ${user._id}`);
-
-        // Create the property
-        const property = new Property({
-            name: property_name,
-            units,
-            address,
-            totalAmount,
-            userId: user._id,
-        });
-        await property.save();
-
-        // Upload image to Cloudflare R2 if provided
-        if (req.file) {
-            const key = 'images/' + Date.now() + '-' + req.file.originalname;
-            const uploadParams = {
-                Bucket: process.env.R2_BUCKET,
-                Key: key,
-                Body: req.file.buffer,
-                ContentType: req.file.mimetype,
-            };
-
-            await s3.upload(uploadParams).promise();
-            const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
-
-            const image = new Image({ propertyId: property._id, imageUrl: imageUrl });
-            await image.save();
-            property.images.push(image._id);
-            await property.save();
-        }
-
-        // Send WhatsApp confirmation message
-        await sendMessage(authorizeRecord.phoneNumber, `Property *${property_name}* has been successfully added.`);
-
-        // Delete the authorization record after successful property addition
-        await Authorize.findByIdAndDelete(id);
-        console.log(`Authorization record deleted for ID: ${id}`);
-
-        res.send('Property and image added successfully!');
-    } catch (error) {
-        console.error('Error adding property and image:', error);
-        res.status(500).send('An error occurred while adding the property and image.');
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      console.error('Authorization record not found for ID:', id);
+      return res.status(404).send('Authorization record not found.');
     }
+
+    if (authorizeRecord.used) {
+      console.error('Authorization already used for ID:', id);
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      console.error('User not found for phoneNumber:', phoneNumber);
+      return res.status(404).send('User not found.');
+    }
+
+    const property = new Property({
+      name: property_name,
+      units,
+      address,
+      totalAmount,
+      userId: user._id,
+    });
+    await property.save();
+
+    if (req.file) {
+      const key = 'images/' + Date.now() + '-' + req.file.originalname;
+      const uploadParams = {
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype,
+      };
+
+      const uploadResult = await s3.upload(uploadParams).promise();
+      if (!process.env.R2_PUBLIC_URL) {
+        console.error('R2_PUBLIC_URL is not set in .env');
+        throw new Error('R2_PUBLIC_URL is not configured');
+      }
+      const imageUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
+      console.log(`Generated imageUrl: ${imageUrl}`); // Debug log
+
+      const image = new Image({ propertyId: property._id, imageUrl: imageUrl });
+      await image.save();
+      console.log(`Saved image with ID: ${image._id} and URL: ${imageUrl}`);
+      property.images.push(image._id);
+      await property.save();
+    }
+
+    await sendMessage(authorizeRecord.phoneNumber, `Property *${property_name}* has been successfully added.`);
+    await Authorize.findByIdAndDelete(id);
+    console.log(`Authorization record deleted for ID: ${id}`);
+
+    res.send('Property and image added successfully!');
+  } catch (error) {
+    console.error('Error adding property and image:', error);
+    res.status(500).send('An error occurred while adding the property and image.');
+  }
 });
 
 // Handle form submission and image upload to Dropbox (add unit)
