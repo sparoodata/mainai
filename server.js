@@ -34,7 +34,6 @@ const s3 = new AWS.S3({
   endpoint: process.env.R2_ENDPOINT,
   accessKeyId: process.env.R2_ACCESS_KEY_ID,
   secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-  Bucket: process.env.R2_BUCKET,
   region: 'auto',
   signatureVersion: 'v4',
 });
@@ -183,18 +182,13 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
         ContentType: req.file.mimetype,
       };
 
-      // Ensure s3 is used here
       const uploadResult = await s3.upload(uploadParams).promise();
-      if (!process.env.R2_PUBLIC_URL) {
-        console.error('R2_PUBLIC_URL is not set in .env');
-        throw new Error('R2_PUBLIC_URL is not configured');
-      }
-      const imageUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
-      console.log(`Generated imageUrl: ${imageUrl}`);
+      console.log(`Uploaded image to R2 with key: ${key}`);
 
-      const image = new Image({ propertyId: property._id, imageUrl: imageUrl });
+      // Store only the key (bucket path) in imageUrl
+      const image = new Image({ propertyId: property._id, imageUrl: key });
       await image.save();
-      console.log(`Saved image with ID: ${image._id} and URL: ${imageUrl}`);
+      console.log(`Saved image with ID: ${image._id} and path: ${key}`);
       property.images.push(image._id);
       await property.save();
     }

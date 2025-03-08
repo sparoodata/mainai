@@ -15,7 +15,19 @@ const router = express.Router();
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const GLITCH_HOST = process.env.GLITCH_HOST;
+const { S3Client } = require('@aws-sdk/client-s3');
+const { GetObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
+// Configure R2 client
+const s3Client = new S3Client({
+  region: 'auto',
+  endpoint: process.env.R2_ENDPOINT,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  },
+});
 // Session management to track user interactions
 const sessions = {};
 let userResponses = {};
@@ -660,7 +672,6 @@ async function promptPropertyInfoSelection(phoneNumber) {
 }
 
 // Helper function to send property info
-const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 async function sendPropertyInfo(phoneNumber, property) {
   console.log(`Sending property info for ${property.name} to ${phoneNumber}`);
@@ -678,9 +689,8 @@ async function sendPropertyInfo(phoneNumber, property) {
     console.log(`Image document: ${JSON.stringify(imageDoc)}`);
 
     if (imageDoc && imageDoc.imageUrl) {
-      // Extract the key from the imageUrl (e.g., "images/1741467333425-92hFJ.png")
-      const key = imageDoc.imageUrl.split('/').slice(-2).join('/'); // Assumes format "<base>/images/..."
-      console.log(`Extracted key from imageUrl: ${key}`);
+      const key = imageDoc.imageUrl; // Already the bucket path (e.g., "images/1741467333425-92hFJ.png")
+      console.log(`Using key from imageUrl: ${key}`);
 
       try {
         const command = new GetObjectCommand({
