@@ -337,11 +337,11 @@ router.post('/', async (req, res) => {
               const accountInfoMessage = `
 *👤 Account Information*
 ━━━━━━━━━━━━━━━
-📞 *Phone Number*: ${user.phoneNumber}
+📞 *Phone*: ${user.phoneNumber}
 ✅ *Verified*: ${user.verified ? 'Yes' : 'No'}
 🧑 *Profile Name*: ${user.profileName || 'N/A'}
-📅 *Registration Date*: ${user.registrationDate ? user.registrationDate.toLocaleString() : 'N/A'}
-📅 *Verified Date*: ${user.verifiedDate ? user.verifiedDate.toLocaleString() : 'N/A'}
+📅 *Registration Date*: ${user.registrationDate ? user.registrationDate.toLocaleDateString() : 'N/A'}
+💰 *Subscription*: ${user.subscription}
 ━━━━━━━━━━━━━━━
               `;
               await axios.post(WHATSAPP_API_URL, {
