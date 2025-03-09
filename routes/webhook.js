@@ -1233,6 +1233,31 @@ async function promptTenantRemoval(phoneNumber) {
   sessions[phoneNumber] = { action: 'select_tenant_to_remove', tenants };
 }
 
+  
+async function promptPropertySelectionWithUnitCheck(phoneNumber, action) {
+  console.log(`Prompting property selection with unit check for ${phoneNumber}, action: ${action}`);
+  const user = await User.findOne({ phoneNumber }); // No "+" since database doesn’t use it
+  if (!user) {
+    await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
+    return;
+  }
+
+  const properties = await Property.find({ userId: user._id });
+  if (!properties.length) {
+    await sendMessage(phoneNumber, 'ℹ️ *No Properties Found* \nAdd a property first to proceed.');
+    return;
+  }
+
+  let propertyList = `*🏠 Select a Property* \nReply with the number of the property to ${action === 'editunit' ? 'edit' : 'delete'} a unit:\n━━━━━━━━━━━━━━━\n`;
+  properties.forEach((property, index) => {
+    propertyList += `${index + 1}. *${property.name}* \n   _Address_: ${property.address}\n`;
+  });
+  propertyList += `━━━━━━━━━━━━━━━`;
+  await sendMessage(phoneNumber, propertyList);
+  console.log(`Property list sent to ${phoneNumber}: ${propertyList}`);
+
+  sessions[phoneNumber] = { action: `select_property_for_${action}_with_check`, properties };
+}
 // Helper function to confirm tenant removal
 async function confirmTenantRemoval(phoneNumber, tenant) {
   const confirmationMessage = {
@@ -1250,6 +1275,10 @@ async function confirmTenantRemoval(phoneNumber, tenant) {
       },
     },
   };
+  
+
+
+// Export the new function
 
   await axios.post(WHATSAPP_API_URL, confirmationMessage, {
     headers: {
@@ -1267,5 +1296,6 @@ module.exports = {
   userResponses,
   sessions,
   sendMessage,
-  promptPropertySelection, // Add this line
+  promptPropertySelection,
+  promptPropertySelectionWithUnitCheck
 };
