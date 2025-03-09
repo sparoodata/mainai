@@ -965,37 +965,6 @@ app.get('/removeproperty/:id', checkOTPValidation, async (req, res) => {
   }
 });
 
-app.get('/removeunit/:id', checkOTPValidation, async (req, res) => {
-  const id = req.params.id;
-
-  try {
-    const authorizeRecord = await Authorize.findById(id);
-    if (!authorizeRecord) {
-      return res.status(404).send('Authorization record not found.');
-    }
-
-    if (authorizeRecord.used) {
-      return res.status(403).send('This link has already been used.');
-    }
-
-    const phoneNumber = authorizeRecord.phoneNumber;
-    const user = await User.findOne({ phoneNumber });
-    if (!user) {
-      return res.status(404).send('User not found.');
-    }
-
-    const units = await Unit.find({ userId: user._id });
-    if (!units.length) {
-      return res.status(404).send('No units found to remove.');
-    }
-
-    const properties = await Property.find({ userId: user._id }); // For property names
-    res.render('removeUnit', { id, units, properties });
-  } catch (error) {
-    console.error('Error rendering remove unit form:', error);
-    res.status(500).send('An error occurred while rendering the form.');
-  }
-});
 
 app.get('/removetenant/:id', checkOTPValidation, async (req, res) => {
   const id = req.params.id;
@@ -1059,8 +1028,14 @@ app.get('/addunit/:id', checkOTPValidation, async (req, res) => {
   }
 });
 
+// server.js (relevant sections only)
+
+// ... (previous imports and setup remain unchanged)
+
+// GET route to render the edit unit form
 app.get('/editunit/:id', checkOTPValidation, async (req, res) => {
   const id = req.params.id;
+  const propertyId = req.query.propertyId; // Optional propertyId from WhatsApp flow
 
   try {
     const authorizeRecord = await Authorize.findById(id);
@@ -1078,18 +1053,84 @@ app.get('/editunit/:id', checkOTPValidation, async (req, res) => {
       return res.status(404).send('User not found.');
     }
 
-    const units = await Unit.find({ userId: user._id });
-    if (!units.length) {
-      return res.status(404).send('No units found to edit.');
+    const properties = await Property.find({ userId: user._id });
+    if (!properties.length) {
+      return res.status(404).send('No properties found. Please add a property first.');
     }
 
-    const properties = await Property.find({ userId: user._id });
-    res.render('editUnit', { id, units, properties });
+    let units;
+    if (propertyId) {
+      // If a propertyId is provided (e.g., from WhatsApp), filter units by that property
+      units = await Unit.find({ property: propertyId });
+      if (!units.length) {
+        return res.status(404).send('No units found for the selected property.');
+      }
+    } else {
+      // Otherwise, fetch all units across all properties owned by the user
+      const propertyIds = properties.map(p => p._id);
+      units = await Unit.find({ property: { $in: propertyIds } });
+      if (!units.length) {
+        return res.status(404).send('No units found to edit.');
+      }
+    }
+
+    res.render('editUnit', { id, units, properties, selectedPropertyId: propertyId || null });
   } catch (error) {
     console.error('Error rendering edit unit form:', error);
     res.status(500).send('An error occurred while rendering the form.');
   }
 });
+
+// GET route to render the remove unit form
+app.get('/removeunit/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+  const propertyId = req.query.propertyId; // Optional propertyId from WhatsApp flow
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const properties = await Property.find({ userId: user._id });
+    if (!properties.length) {
+      return res.status(404).send('No properties found. Please add a property first.');
+    }
+
+    let units;
+    if (propertyId) {
+      // If a propertyId is provided (e.g., from WhatsApp), filter units by that property
+      units = await Unit.find({ property: propertyId });
+      if (!units.length) {
+        return res.status(404).send('No units found for the selected property.');
+      }
+    } else {
+      // Otherwise, fetch all units across all properties owned by the user
+      const propertyIds = properties.map(p => p._id);
+      units = await Unit.find({ property: { $in: propertyIds } });
+      if (!units.length) {
+        return res.status(404).send('No units found to remove.');
+      }
+    }
+
+    res.render('removeUnit', { id, units, properties, selectedPropertyId: propertyId || null });
+  } catch (error) {
+    console.error('Error rendering remove unit form:', error);
+    res.status(500).send('An error occurred while rendering the form.');
+  }
+});
+
+
 
 app.get('/addtenant/:id', checkOTPValidation, async (req, res) => {
   const id = req.params.id;

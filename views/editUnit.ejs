@@ -14,65 +14,43 @@
 
     <!-- Form Container -->
     <div class="container">
-        <h2>Edit Unit</h2>
-        <form action="/editunit/<%= id %>" method="POST" enctype="multipart/form-data" onsubmit="return validateForm()">
-            
-            <!-- Unit Selection -->
-            <label for="unitId">Select Unit:</label>
-            <select name="unitId" id="unitId" required onchange="populateFields(this)">
-                <option value="">-- Select Unit --</option>
-                <% units.forEach(unit => { %>
-                    <% const property = properties.find(p => p._id.toString() === unit.property.toString()); %>
-                    <option value="<%= unit._id %>" 
-                            data-property="<%= unit.property %>" 
-                            data-unit-number="<%= unit.unitNumber %>"
-                            data-rent-amount="<%= unit.rentAmount %>"
-                            data-floor="<%= unit.floor %>"
-                            data-size="<%= unit.size %>">
-                        <%= unit.unitNumber %> (Property: <%= property ? property.name : 'Unknown' %>)
-                    </option>
-                <% }) %>
-            </select>
-            <small id="unitIdError" class="error-message"></small>
+     <h1>Edit Unit</h1>
+<form action="/editunit/<%= id %>" method="POST" enctype="multipart/form-data">
+  <label for="property">Select Property:</label>
+  <select name="property" id="property" onchange="this.form.submit()">
+    <option value="">-- Select Property --</option>
+    <% properties.forEach(property => { %>
+      <option value="<%= property._id %>" <%= selectedPropertyId === property._id.toString() ? 'selected' : '' %>>
+        <%= property.name %>
+      </option>
+    <% }) %>
+  </select>
 
-            <!-- Property -->
-            <label for="property">Property:</label>
-            <select id="property" name="property" required>
-                <option value="">-- Select Property --</option>
-                <% properties.forEach(property => { %>
-                    <option value="<%= property._id %>"><%= property.name %></option>
-                <% }) %>
-            </select>
-            <small id="propertyError" class="error-message"></small>
+  <label for="unitId">Select Unit:</label>
+  <select name="unitId" id="unitId" required>
+    <option value="">-- Select Unit --</option>
+    <% units.forEach(unit => { %>
+      <option value="<%= unit._id %>"><%= unit.unitNumber %> (Property: <%= unit.property.name || 'N/A' %>)</option>
+    <% }) %>
+  </select>
 
-            <!-- Unit Number -->
-            <label for="unit_number">Unit Number:</label>
-            <input type="text" id="unit_number" name="unit_number" maxlength="50" required>
-            <small id="unitNumberError" class="error-message"></small>
+  <label for="unit_number">Unit Number:</label>
+  <input type="text" name="unit_number" id="unit_number" required>
 
-            <!-- Rent Amount -->
-            <label for="rent_amount">Rent Amount:</label>
-            <input type="number" id="rent_amount" name="rent_amount" required min="0">
-            <small id="rentAmountError" class="error-message"></small>
+  <label for="rent_amount">Rent Amount:</label>
+  <input type="number" name="rent_amount" id="rent_amount" required>
 
-            <!-- Floor -->
-            <label for="floor">Floor:</label>
-            <input type="text" id="floor" name="floor" maxlength="20">
-            <small id="floorError" class="error-message"></small>
+  <label for="floor">Floor:</label>
+  <input type="text" name="floor" id="floor">
 
-            <!-- Size -->
-            <label for="size">Size (sq ft):</label>
-            <input type="number" id="size" name="size" min="0">
-            <small id="sizeError" class="error-message"></small>
+  <label for="size">Size (sq ft):</label>
+  <input type="number" name="size" id="size">
 
-            <!-- Image -->
-            <label for="image">Update Image (Max 5MB):</label>
-            <input type="file" id="image" name="image" accept="image/*">
-            <small id="imageError" class="error-message"></small>
+  <label for="image">Upload New Image (optional):</label>
+  <input type="file" name="image" id="image" accept="image/*">
 
-            <!-- Submit Button -->
-            <button type="submit">Update Unit</button>
-        </form>
+  <button type="submit">Update Unit</button>
+</form>
     </div>
 
     <!-- Script for Validation and Pre-filling -->
