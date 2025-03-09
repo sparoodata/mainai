@@ -338,7 +338,7 @@ router.post('/', async (req, res) => {
             const selectedUnit = units[unitIndex];
             console.log(`Selected unit: ${selectedUnit.unitNumber} (ID: ${selectedUnit._id})`);
             await sendUnitManagementOptions(fromNumber, selectedUnit);
-            sessions[fromNumber].action = null;
+            sessions[fromNumber].action = null; // Clear action after showing options
             delete sessions[fromNumber].propertyId;
             delete sessions[fromNumber].units;
           } else {
@@ -512,7 +512,7 @@ router.post('/', async (req, res) => {
         } else if (selectedOption === 'manage_properties') {
           await sendPropertyOptions(fromNumber);
         } else if (selectedOption === 'manage_units') {
-          await sendUnitOptions(fromNumber);
+          await sendUnitOptions(fromNumber); // Triggers property selection
         } else if (selectedOption === 'manage_tenants') {
           await sendTenantOptions(fromNumber);
         } else if (selectedOption === 'add_property') {
@@ -535,8 +535,10 @@ router.post('/', async (req, res) => {
         } else if (selectedOption === 'remove_tenant') {
           await promptTenantRemoval(fromNumber);
         } else if (selectedOption === 'edit_unit_from_list') {
-          await sendPropertyLink(fromNumber, 'editunit');
+          console.log(`Edit Unit selected for ${fromNumber}`);
+          await sendPropertyLink(fromNumber, 'editunit'); // Correctly sends editunit link
         } else if (selectedOption === 'remove_unit_from_list') {
+          console.log(`Remove Unit selected for ${fromNumber}`);
           await sendPropertyLink(fromNumber, 'removeunit');
         }
       }

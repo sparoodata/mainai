@@ -545,17 +545,25 @@ app.post('/editunit/:id', upload.single('image'), async (req, res) => {
       return res.status(404).send('User not found.');
     }
 
-    const unit = await Unit.findOne({ _id: unitId, userId: user._id });
+    // Find the unit and populate its property to check ownership
+    const unit = await Unit.findById(unitId).populate('property');
     if (!unit) {
-      return res.status(404).send('Unit not found or you do not have permission to edit it.');
+      return res.status(404).send('Unit not found.');
     }
 
+    // Check if the user owns the property associated with the unit
+    if (!unit.property || unit.property.userId.toString() !== user._id.toString()) {
+      return res.status(403).send('You do not have permission to edit this unit.');
+    }
+
+    // Update unit fields
     unit.property = property;
     unit.unitNumber = unit_number;
     unit.rentAmount = rent_amount;
     unit.floor = floor;
     unit.size = size;
 
+    // Handle image upload if provided
     if (req.file) {
       const key = 'images/' + Date.now() + '-' + req.file.originalname;
       const uploadParams = {
@@ -566,17 +574,8 @@ app.post('/editunit/:id', upload.single('image'), async (req, res) => {
       };
 
       await s3.upload(uploadParams).promise();
-      const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
-
-      if (unit.images.length > 0) {
-        const image = await Image.findById(unit.images[0]);
-        image.imageUrl = imageUrl;
-        await image.save();
-      } else {
-        const image = new Image({ unitId: unit._id, imageUrl });
-        await image.save();
-        unit.images.push(image._id);
-      }
+      unit.images = unit.images || [];
+      unit.images.push(key); // Add new image to the array
     }
 
     await unit.save();
@@ -589,8 +588,6 @@ app.post('/editunit/:id', upload.single('image'), async (req, res) => {
     );
 
     // Mark authorization as used and delete it
-    authorizeRecord.used = true;
-    await authorizeRecord.save();
     await Authorize.findByIdAndDelete(id);
 
     res.send('Unit updated successfully!');
@@ -845,7 +842,7 @@ app.post('/validate-otp/:id', async (req, res) => {
           redirectUrl = `/addtenant/${id}`;
           break;
         default:
-          redirectUrl = `/editproperty/${id}`; // Default case
+          redirectUrl = `/editunit/${id}`; // Default to editunit for safety
       }
 
       console.log(`Redirecting to: ${redirectUrl}`);
