@@ -750,41 +750,56 @@ async function promptUnitInfoSelection(phoneNumber) {
 
 // Helper function to send unit info
 async function sendUnitInfo(phoneNumber, unit) {
-  // Populate the images and property fields
-  const populatedUnit = await Unit.findById(unit._id).populate('images').populate('property');
-  let imageUrl = 'https://via.placeholder.com/150'; // Default fallback image
+  console.log(`Sending unit info for ${unit.unitNumber} to ${phoneNumber}`);
 
-  if (populatedUnit.images && populatedUnit.images.length > 0) {
-    imageUrl = populatedUnit.images[0].imageUrl; // Direct URL from R2
-    console.log(`Unit image URL: ${imageUrl}`);
+  const unitDoc = await Unit.findById(unit._id).populate('property');
+  if (!unitDoc) {
+    console.error(`Unit ${unit._id} not found`);
+    await sendMessage(phoneNumber, '⚠️ *Error* \nUnit not found.');
+    return;
+  }
 
-    // Optional: Generate a signed URL if your R2 bucket is private
-    /*
-    const key = imageUrl.split('/').pop();
-    const command = new GetObjectCommand({
+  console.log('Unit document:', JSON.stringify(unitDoc, null, 2));
+
+  let imageUrl = 'https://via.placeholder.com/150';
+  if (unitDoc.images && unitDoc.images.length > 0) {
+    const key = unitDoc.images[0]; // Use the first image
+    console.log(`Using key from images[0]: ${key}`);
+
+    const params = {
       Bucket: process.env.R2_BUCKET,
       Key: key,
-    });
-    imageUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
-    console.log(`Signed URL generated: ${imageUrl}`);
-    */
+      Expires: 60,
+    };
+
+    try {
+      imageUrl = await s3.getSignedUrlPromise('getObject', params);
+      console.log(`Generated signed URL: ${imageUrl}`);
+    } catch (error) {
+      console.error(`Error generating signed URL for key ${key}: ${error.message}`);
+    }
   } else {
     console.log(`No images found for unit ${unit._id}`);
   }
 
-  const caption = `
-*🚪 Unit Details*
+  const caption = `*🚪 Unit Details*
 ━━━━━━━━━━━━━━━
-*Unit Number*: ${unit.unitNumber}
-*Property*: ${populatedUnit.property ? populatedUnit.property.name : 'N/A'}
-*Rent Amount*: $${unit.rentAmount}
-*Floor*: ${unit.floor || 'N/A'}
-*Size*: ${unit.size ? unit.size + ' sq ft' : 'N/A'}
-*ID*: ${unit._id}
-*Created At*: ${unit.createdAt ? new Date(unit.createdAt).toLocaleDateString() : 'N/A'}
-━━━━━━━━━━━━━━━
-  `;
-  await sendImageMessage(phoneNumber, imageUrl, caption);
+*Unit Number*: ${unitDoc.unitNumber}
+*Property*: ${unitDoc.property ? unitDoc.property.name : 'N/A'}
+*Rent Amount*: $${unitDoc.rentAmount}
+*Floor*: ${unitDoc.floor || 'N/A'}
+*Size*: ${unitDoc.size ? unitDoc.size + ' sq ft' : 'N/A'}
+*ID*: ${unitDoc._id}
+*Created At*: ${unitDoc.createdAt ? new Date(unitDoc.createdAt).toLocaleDateString() : 'N/A'}
+━━━━━━━━━━━━━━━`;
+
+  try {
+    await sendImageMessage(phoneNumber, imageUrl, caption);
+    console.log(`Image message sent to ${phoneNumber} with URL: ${imageUrl}`);
+  } catch (error) {
+    console.error(`Error sending image: ${JSON.stringify(error.response ? error.response.data : error.message)}`);
+    await sendMessage(phoneNumber, `⚠️ *Image Error* \nFailed to load image. Here’s the info:\n${caption}`);
+  }
 }
 // Helper function to prompt tenant info selection
 async function promptTenantInfoSelection(phoneNumber) {
@@ -810,44 +825,61 @@ async function promptTenantInfoSelection(phoneNumber) {
 }
 // Helper function to send tenant info
 async function sendTenantInfo(phoneNumber, tenant) {
-  // Populate the unitAssigned field
-  const populatedTenant = await Tenant.findById(tenant._id).populate('unitAssigned');
-  let imageUrl = populatedTenant.photo || 'https://via.placeholder.com/150'; // Use tenant photo or fallback
+  console.log(`Sending tenant info for ${tenant.name} to ${phoneNumber}`);
 
-  console.log(`Tenant photo URL: ${imageUrl}`);
-
-  // Optional: Generate a signed URL if your R2 bucket is private
-  if (populatedTenant.photo) {
-    /*
-    const key = populatedTenant.photo.split('/').pop();
-    const command = new GetObjectCommand({
-      Bucket: process.env.R2_BUCKET,
-      Key: key,
-    });
-    imageUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
-    console.log(`Signed URL generated: ${imageUrl}`);
-    */
+  const tenantDoc = await Tenant.findById(tenant._id).populate('unitAssigned');
+  if (!tenantDoc) {
+    console.error(`Tenant ${tenant._id} not found`);
+    await sendMessage(phoneNumber, '⚠️ *Error* \nTenant not found.');
+    return;
   }
 
-  const caption = `
-*👥 Tenant Details*
-━━━━━━━━━━━━━━━
-*Name*: ${tenant.name}
-*Phone Number*: ${tenant.phoneNumber}
-*Unit*: ${populatedTenant.unitAssigned ? populatedTenant.unitAssigned.unitNumber : 'N/A'}
-*Property*: ${tenant.propertyName}
-*Lease Start*: ${tenant.lease_start ? new Date(tenant.lease_start).toLocaleDateString() : 'N/A'}
-*Deposit*: $${tenant.deposit}
-*Rent Amount*: $${tenant.rent_amount}
-*Tenant ID*: ${tenant.tenant_id}
-*Email*: ${tenant.email || 'N/A'}
-*ID Proof*: ${tenant.idProof ? 'Available' : 'N/A'}
-*Created At*: ${tenant.createdAt ? new Date(tenant.createdAt).toLocaleDateString() : 'N/A'}
-━━━━━━━━━━━━━━━
-  `;
-  await sendImageMessage(phoneNumber, imageUrl, caption);
-}
+  console.log('Tenant document:', JSON.stringify(tenantDoc, null, 2));
 
+  let imageUrl = 'https://via.placeholder.com/150';
+  if (tenantDoc.images && tenantDoc.images.length > 0) {
+    const key = tenantDoc.images[0]; // Use the first image (photo)
+    console.log(`Using key from images[0]: ${key}`);
+
+    const params = {
+      Bucket: process.env.R2_BUCKET,
+      Key: key,
+      Expires: 60,
+    };
+
+    try {
+      imageUrl = await s3.getSignedUrlPromise('getObject', params);
+      console.log(`Generated signed URL: ${imageUrl}`);
+    } catch (error) {
+      console.error(`Error generating signed URL for key ${key}: ${error.message}`);
+    }
+  } else {
+    console.log(`No images found for tenant ${tenant._id}`);
+  }
+
+  const caption = `*👥 Tenant Details*
+━━━━━━━━━━━━━━━
+*Name*: ${tenantDoc.name}
+*Phone Number*: ${tenantDoc.phoneNumber}
+*Unit*: ${tenantDoc.unitAssigned ? tenantDoc.unitAssigned.unitNumber : 'N/A'}
+*Property*: ${tenantDoc.propertyName}
+*Lease Start*: ${tenantDoc.lease_start ? new Date(tenantDoc.lease_start).toLocaleDateString() : 'N/A'}
+*Deposit*: $${tenantDoc.deposit}
+*Rent Amount*: $${tenantDoc.rent_amount}
+*Tenant ID*: ${tenantDoc.tenant_id}
+*Email*: ${tenantDoc.email || 'N/A'}
+*ID Proof*: ${tenantDoc.idProof ? 'Available' : 'N/A'}
+*Created At*: ${tenantDoc.createdAt ? new Date(tenantDoc.createdAt).toLocaleDateString() : 'N/A'}
+━━━━━━━━━━━━━━━`;
+
+  try {
+    await sendImageMessage(phoneNumber, imageUrl, caption);
+    console.log(`Image message sent to ${phoneNumber} with URL: ${imageUrl}`);
+  } catch (error) {
+    console.error(`Error sending image: ${JSON.stringify(error.response ? error.response.data : error.message)}`);
+    await sendMessage(phoneNumber, `⚠️ *Image Error* \nFailed to load image. Here’s the info:\n${caption}`);
+  }
+}
 // Helper function for Property Options (Add, Edit, Remove)
 async function sendPropertyOptions(phoneNumber) {
   const buttonMenu = {

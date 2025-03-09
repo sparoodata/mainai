@@ -207,34 +207,42 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
 });
 // Handle form submission and image upload to Dropbox (add unit)
 app.post('/addunit/:id', upload.single('image'), async (req, res) => {
-  const { property, unit_number, rent_amount, floor, size } = req.body;
+  const { unit_number, property_id, rent_amount, floor, size } = req.body;
   const id = req.params.id;
 
   try {
     const authorizeRecord = await Authorize.findById(id);
     if (!authorizeRecord) {
+      console.error('Authorization record not found for ID:', id);
       return res.status(404).send('Authorization record not found.');
     }
 
     if (authorizeRecord.used) {
+      console.error('Authorization already used for ID:', id);
       return res.status(403).send('This link has already been used.');
     }
 
     const phoneNumber = authorizeRecord.phoneNumber;
     const user = await User.findOne({ phoneNumber });
     if (!user) {
+      console.error('User not found for phoneNumber:', phoneNumber);
       return res.status(404).send('User not found.');
     }
 
-    const unit = new Unit({
-      property,
+    const property = await Property.findById(property_id);
+    if (!property) {
+      console.error('Property not found for ID:', property_id);
+      return res.status(404).send('Property not found.');
+    }
+
+    const unitData = {
       unitNumber: unit_number,
+      property: property_id,
       rentAmount: rent_amount,
       floor,
       size,
-      userId: user._id,
-    });
-    await unit.save();
+      images: [],
+    };
 
     if (req.file) {
       const key = 'images/' + Date.now() + '-' + req.file.originalname;
@@ -245,110 +253,96 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
         ContentType: req.file.mimetype,
       };
 
-      await s3.upload(uploadParams).promise();
-      const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
-
-      const image = new Image({ unitId: unit._id, imageUrl: imageUrl });
-      await image.save();
-      unit.images.push(image._id);
-      await unit.save();
+      const uploadResult = await s3.upload(uploadParams).promise();
+      console.log(`Uploaded image to R2 with key: ${key}`);
+      unitData.images.push(key);
     }
 
-    // Send WhatsApp confirmation
-    const propertyDoc = await Property.findById(property);
-    await sendMessage(
-      phoneNumber,
-      `Unit "${unit_number}" has been added to property "${propertyDoc ? propertyDoc.name : 'Unknown'}".`
-    );
+    const unit = new Unit(unitData);
+    await unit.save();
+    console.log(`Unit saved with ID: ${unit._id} and images: ${JSON.stringify(unit.images)}`);
 
-    // Mark authorization as used and delete it
-    authorizeRecord.used = true;
-    await authorizeRecord.save();
+    await sendMessage(phoneNumber, `Unit *${unit_number}* has been successfully added to property *${property.name}*.`);
     await Authorize.findByIdAndDelete(id);
+    console.log(`Authorization record deleted for ID: ${id}`);
 
-    res.send('Unit and image added successfully!');
+    res.send('Unit added successfully!');
   } catch (error) {
-    console.error('Error adding unit and image:', error);
-    res.status(500).send('An error occurred while adding the unit and image.');
+    console.error('Error adding unit:', error);
+    res.status(500).send('An error occurred while adding the unit.');
   }
 });
-
 // Add tenant route that waits for WhatsApp authorization
 app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
-  const { name, propertyName, unitAssigned, lease_start, deposit, rent_amount, tenant_id } = req.body;
+  const { name, phone_number, unit_id, property_name, lease_start, deposit, rent_amount, tenant_id, email } = req.body;
   const id = req.params.id;
 
   try {
     const authorizeRecord = await Authorize.findById(id);
     if (!authorizeRecord) {
+      console.error('Authorization record not found for ID:', id);
       return res.status(404).send('Authorization record not found.');
     }
 
     if (authorizeRecord.used) {
+      console.error('Authorization already used for ID:', id);
       return res.status(403).send('This link has already been used.');
     }
 
     const phoneNumber = authorizeRecord.phoneNumber;
     const user = await User.findOne({ phoneNumber });
     if (!user) {
+      console.error('User not found for phoneNumber:', phoneNumber);
       return res.status(404).send('User not found.');
     }
 
-    // Debug: Log the incoming unitAssigned value
-    console.log('unitAssigned from form:', unitAssigned);
-
-    // Find the unit by _id (expects a valid ObjectId)
-    const unit = await Unit.findById(unitAssigned);
-    if (!unit) {
-      return res.status(400).send(`No unit found with ID: ${unitAssigned}`);
-    }
-
-    const tenant = new Tenant({
+    const tenantData = {
       name,
-      phoneNumber: user.phoneNumber,
-      userId: user._id,
-      propertyName,
-      unitAssigned: unit._id, // Use the Unit's _id (ObjectId) for the reference
-      lease_start: new Date(lease_start),
+      phoneNumber: phone_number,
+      unitAssigned: unit_id || null,
+      propertyName: property_name,
+      lease_start: lease_start ? new Date(lease_start) : null,
       deposit,
       rent_amount,
-      tenant_id: tenant_id || await generateTenantId(), // Use provided ID or generate one
-    });
+      tenant_id,
+      email,
+      images: [],
+    };
 
-    if (req.files.photo) {
-      const key = 'images/' + Date.now() + '-' + req.files.photo[0].originalname;
-      const uploadParams = {
+    if (req.files['photo']) {
+      const photoKey = 'images/' + Date.now() + '-' + req.files['photo'][0].originalname;
+      const photoParams = {
         Bucket: process.env.R2_BUCKET,
-        Key: key,
-        Body: req.files.photo[0].buffer,
-        ContentType: req.files.photo[0].mimetype,
+        Key: photoKey,
+        Body: req.files['photo'][0].buffer,
+        ContentType: req.files['photo'][0].mimetype,
       };
-      await s3.upload(uploadParams).promise();
-      tenant.photo = process.env.R2_PUBLIC_URL + '/' + key;
+      await s3.upload(photoParams).promise();
+      console.log(`Uploaded tenant photo to R2 with key: ${photoKey}`);
+      tenantData.images.push(photoKey);
     }
 
-    if (req.files.idProof) {
-      const key = 'images/' + Date.now() + '-' + req.files.idProof[0].originalname;
-      const uploadParams = {
+    if (req.files['idProof']) {
+      const idProofKey = 'images/' + Date.now() + '-' + req.files['idProof'][0].originalname;
+      const idProofParams = {
         Bucket: process.env.R2_BUCKET,
-        Key: key,
-        Body: req.files.idProof[0].buffer,
-        ContentType: req.files.idProof[0].mimetype,
+        Key: idProofKey,
+        Body: req.files['idProof'][0].buffer,
+        ContentType: req.files['idProof'][0].mimetype,
       };
-      await s3.upload(uploadParams).promise();
-      tenant.idProof = process.env.R2_PUBLIC_URL + '/' + key;
+      await s3.upload(idProofParams).promise();
+      console.log(`Uploaded tenant ID proof to R2 with key: ${idProofKey}`);
+      tenantData.images.push(idProofKey); // Store ID proof in images array
+      tenantData.idProof = idProofKey; // Optionally keep idProof separate
     }
 
+    const tenant = new Tenant(tenantData);
     await tenant.save();
+    console.log(`Tenant saved with ID: ${tenant._id} and images: ${JSON.stringify(tenant.images)}`);
 
-    // Send WhatsApp confirmation
-    await sendMessage(
-      phoneNumber,
-      `Tenant "${name}" has been added to unit "${unit.unitNumber}" (ID: ${unit.unit_id}) at property "${propertyName}".`
-    );
-
-    // Mark authorization as used and delete it
+    await sendMessage(phoneNumber, `Tenant *${name}* has been successfully added.`);
     await Authorize.findByIdAndDelete(id);
+    console.log(`Authorization record deleted for ID: ${id}`);
 
     res.send('Tenant added successfully!');
   } catch (error) {
