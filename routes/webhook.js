@@ -686,10 +686,10 @@ async function sendPropertyInfo(phoneNumber, property) {
 
   console.log('Property document:', JSON.stringify(propertyDoc, null, 2));
 
-  let imageUrl = 'https://via.placeholder.com/150'; // Default fallback
-  if (propertyDoc.imageUrls && propertyDoc.imageUrls.length > 0) {
-    const key = propertyDoc.imageUrls[0]; // Use the first image
-    console.log(`Using key from imageUrls[0]: ${key}`);
+  let images = 'https://via.placeholder.com/150'; // Default fallback
+  if (propertyDoc.images && propertyDoc.images.length > 0) {
+    const key = propertyDoc.images[0]; // Use the first image
+    console.log(`Using key from images[0]: ${key}`);
 
     const params = {
       Bucket: process.env.R2_BUCKET,
@@ -698,13 +698,13 @@ async function sendPropertyInfo(phoneNumber, property) {
     };
 
     try {
-      imageUrl = await s3.getSignedUrlPromise('getObject', params);
-      console.log(`Generated signed URL: ${imageUrl}`);
+      images = await s3.getSignedUrlPromise('getObject', params);
+      console.log(`Generated signed URL: ${images}`);
     } catch (error) {
       console.error(`Error generating signed URL for key ${key}: ${error.message}`);
     }
   } else {
-    console.log(`No imageUrls found for property ${property._id}`);
+    console.log(`No images found for property ${property._id}`);
   }
 
   const caption = `*🏠 Property Details*
@@ -718,8 +718,8 @@ async function sendPropertyInfo(phoneNumber, property) {
 ━━━━━━━━━━━━━━━`;
 
   try {
-    await sendImageMessage(phoneNumber, imageUrl, caption);
-    console.log(`Image message sent to ${phoneNumber} with URL: ${imageUrl}`);
+    await sendImageMessage(phoneNumber, images, caption);
+    console.log(`Image message sent to ${phoneNumber} with URL: ${images}`);
   } catch (error) {
     console.error(`Error sending image: ${JSON.stringify(error.response ? error.response.data : error.message)}`);
     await sendMessage(phoneNumber, `⚠️ *Image Error* \nFailed to load image. Here’s the info:\n${caption}`);

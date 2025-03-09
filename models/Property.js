@@ -5,7 +5,7 @@ const propertySchema = new mongoose.Schema({
   units: { type: Number, required: true },
   address: { type: String, required: true },
   totalAmount: { type: Number, required: true },
-  imageUrls: [{ type: String }], // Array of bucket paths
+  images: [{ type: String }], // Array of bucket paths
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   createdAt: { type: Date, default: Date.now },
 });
