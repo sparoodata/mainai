@@ -172,7 +172,7 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
       address,
       totalAmount,
       userId: user._id,
-      imageUrls: [], // Initialize as empty array
+      images: [], // Initialize as empty array
     };
 
     if (req.file) {
@@ -186,12 +186,12 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
 
       const uploadResult = await s3.upload(uploadParams).promise();
       console.log(`Uploaded image to R2 with key: ${key}`);
-      propertyData.imageUrls.push(key); // Add the bucket path to the array
+      propertyData.images.push(key); // Add the bucket path to the array
     }
 
     const property = new Property(propertyData);
     await property.save();
-    console.log(`Property saved with ID: ${property._id} and imageUrls: ${JSON.stringify(property.imageUrls)}`);
+    console.log(`Property saved with ID: ${property._id} and images: ${JSON.stringify(property.imageUrls)}`);
 
     await sendMessage(authorizeRecord.phoneNumber, `Property *${property_name}* has been successfully added.`);
     console.log(`Confirmation message sent to ${authorizeRecord.phoneNumber}`);
