@@ -138,6 +138,7 @@ router.post('/', async (req, res) => {
     const changes = entry.changes[0];
     const value = changes.value;
 
+    // Handle contact information updates
     if (value.contacts) {
       const contact = value.contacts[0];
       const contactPhoneNumber = `+${contact.wa_id}`;
@@ -156,19 +157,22 @@ router.post('/', async (req, res) => {
       }
     }
 
+    // Handle incoming messages
     if (value.messages) {
       const message = value.messages[0];
-      const fromNumber = message.from;
-      const phoneNumber = `+${fromNumber}`;
+      const fromNumber = message.from; // e.g., "918885305097"
+      const phoneNumber = `+${fromNumber}`; // e.g., "+918885305097"
       const text = message.text ? message.text.body.trim() : null;
       const interactive = message.interactive || null;
 
+      // Handle button replies
       if (interactive && interactive.type === 'button_reply') {
         const buttonReplyId = interactive.button_reply.id;
         console.log(`Button reply received: ${buttonReplyId} from ${fromNumber}`);
         userResponses[fromNumber] = buttonReplyId;
       }
 
+      // Initialize session if not exists
       if (!sessions[fromNumber]) {
         sessions[fromNumber] = { action: null };
       }
@@ -176,6 +180,7 @@ router.post('/', async (req, res) => {
       console.log(`Received message from ${phoneNumber}: ${text}`);
       console.log(`Current session state for ${fromNumber}: ${JSON.stringify(sessions[fromNumber])}`);
 
+      // Process text input
       if (text) {
         console.log(`Processing text input: ${text} for ${fromNumber}`);
         if (sessions[fromNumber].action === 'select_property') {
@@ -186,48 +191,11 @@ router.post('/', async (req, res) => {
           if (propertyIndex >= 0 && propertyIndex < properties.length) {
             const selectedProperty = properties[propertyIndex];
             console.log(`Selected property: ${selectedProperty.name} (ID: ${selectedProperty._id})`);
-            if (sessions[fromNumber].nextAction === 'editunit') {
-              await promptUnitSelection(fromNumber, 'editunit', selectedProperty._id);
-              sessions[fromNumber].action = 'select_unit_to_edit';
-            } else if (sessions[fromNumber].nextAction === 'removeunit') {
-              await promptUnitSelection(fromNumber, 'removeunit', selectedProperty._id);
-              sessions[fromNumber].action = 'select_unit_to_remove';
-            } else if (sessions[fromNumber].nextAction === 'edittenant') {
-              await promptTenantSelection(fromNumber, 'edittenant', selectedProperty._id);
-              sessions[fromNumber].action = 'select_tenant_to_edit';
-            }
+            await promptTenantSelection(fromNumber, 'edittenant', selectedProperty._id);
+            sessions[fromNumber].action = 'select_tenant_to_edit';
             sessions[fromNumber].propertyId = selectedProperty._id;
           } else {
             await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid property number.');
-          }
-        } else if (sessions[fromNumber].action === 'select_unit_to_edit') {
-          console.log(`Unit selection received: ${text} from ${fromNumber}`);
-          const unitIndex = parseInt(text) - 1;
-          const units = sessions[fromNumber].units;
-
-          if (unitIndex >= 0 && unitIndex < units.length) {
-            const selectedUnit = units[unitIndex];
-            console.log(`Selected unit: ${selectedUnit.unitNumber} (ID: ${selectedUnit._id})`);
-            await sendPropertyLink(fromNumber, 'editunit', null, sessions[fromNumber].propertyId);
-            sessions[fromNumber].action = null;
-            delete sessions[fromNumber].propertyId;
-            delete sessions[fromNumber].units;
-          } else {
-            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid unit number.');
-          }
-        } else if (sessions[fromNumber].action === 'select_unit_to_remove') {
-          console.log(`Unit to remove selection received: ${text} from ${fromNumber}`);
-          const unitIndex = parseInt(text) - 1;
-          const units = sessions[fromNumber].units;
-
-          if (unitIndex >= 0 && unitIndex < units.length) {
-            const selectedUnit = units[unitIndex];
-            console.log(`Selected unit to remove: ${selectedUnit.unitNumber} (ID: ${selectedUnit._id})`);
-            await confirmUnitRemoval(fromNumber, selectedUnit);
-            sessions[fromNumber].action = 'confirm_unit_removal';
-            sessions[fromNumber].unitToRemove = selectedUnit;
-          } else {
-            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid unit number.');
           }
         } else if (sessions[fromNumber].action === 'select_tenant_to_edit') {
           console.log(`Tenant selection received: ${text} from ${fromNumber}`);
@@ -245,30 +213,203 @@ router.post('/', async (req, res) => {
             await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid tenant number.');
           }
         } else if (sessions[fromNumber].action === 'select_property_to_remove') {
-          // ... (unchanged)
+          console.log(`Property to remove selection received: ${text} from ${fromNumber}`);
+          const propertyIndex = parseInt(text) - 1;
+          const properties = sessions[fromNumber].properties;
+
+          if (propertyIndex >= 0 && propertyIndex < properties.length) {
+            const selectedProperty = properties[propertyIndex];
+            console.log(`Selected property to remove: ${selectedProperty.name} (ID: ${selectedProperty._id})`);
+            await confirmPropertyRemoval(fromNumber, selectedProperty);
+            sessions[fromNumber].action = 'confirm_property_removal';
+            sessions[fromNumber].propertyToRemove = selectedProperty;
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid property number.');
+          }
+        } else if (sessions[fromNumber].action === 'select_unit_to_remove') {
+          console.log(`Unit to remove selection received: ${text} from ${fromNumber}`);
+          const unitIndex = parseInt(text) - 1;
+          const units = sessions[fromNumber].units;
+
+          if (unitIndex >= 0 && unitIndex < units.length) {
+            const selectedUnit = units[unitIndex];
+            console.log(`Selected unit to remove: ${selectedUnit.unitNumber} (ID: ${selectedUnit._id})`);
+            await confirmUnitRemoval(fromNumber, selectedUnit);
+            sessions[fromNumber].action = 'confirm_unit_removal';
+            sessions[fromNumber].unitToRemove = selectedUnit;
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid unit number.');
+          }
         } else if (sessions[fromNumber].action === 'select_tenant_to_remove') {
-          // ... (unchanged)
+          console.log(`Tenant to remove selection received: ${text} from ${fromNumber}`);
+          const tenantIndex = parseInt(text) - 1;
+          const tenants = sessions[fromNumber].tenants;
+
+          if (tenantIndex >= 0 && tenantIndex < tenants.length) {
+            const selectedTenant = tenants[tenantIndex];
+            console.log(`Selected tenant to remove: ${selectedTenant.name} (ID: ${selectedTenant._id})`);
+            await confirmTenantRemoval(fromNumber, selectedTenant);
+            sessions[fromNumber].action = 'confirm_tenant_removal';
+            sessions[fromNumber].tenantToRemove = selectedTenant;
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid tenant number.');
+          }
         } else if (sessions[fromNumber].action === 'rent_paid') {
-          // ... (unchanged)
+          const tenantId = text.trim();
+          try {
+            const tenant = await Tenant.findOne({ tenant_id: tenantId });
+            if (tenant) {
+              tenant.status = 'paid';
+              await tenant.save();
+              await sendMessage(fromNumber, `✅ *Rent Payment Confirmed* \nTenant ID: *${tenantId}*\nStatus updated to *Paid*.`);
+              console.log(`Tenant rent status updated to paid for Tenant ID: ${tenantId}`);
+              sessions[fromNumber].action = null;
+            } else {
+              await sendMessage(fromNumber, `⚠️ *Tenant Not Found* \nNo tenant found with ID: *${tenantId}*.`);
+            }
+          } catch (error) {
+            console.error('Error updating rent status:', error);
+            await sendMessage(fromNumber, '❌ *Error* \nFailed to confirm rent payment. Please try again.');
+          }
         } else if (sessions[fromNumber].action === 'select_property_for_info') {
-          // ... (unchanged)
+          console.log(`Property info selection received: ${text} from ${fromNumber}`);
+          const propertyIndex = parseInt(text) - 1;
+          const properties = sessions[fromNumber].properties;
+
+          if (propertyIndex >= 0 && propertyIndex < properties.length) {
+            const selectedProperty = properties[propertyIndex];
+            console.log(`Selected property: ${selectedProperty.name} (ID: ${selectedProperty._id})`);
+            await sendPropertyInfo(fromNumber, selectedProperty);
+            sessions[fromNumber].action = null;
+            delete sessions[fromNumber].properties;
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid property number.');
+          }
         } else if (sessions[fromNumber].action === 'select_unit_for_info') {
-          // ... (unchanged)
+          console.log(`Unit info selection received: ${text} from ${fromNumber}`);
+          const unitIndex = parseInt(text) - 1;
+          const units = sessions[fromNumber].units;
+
+          if (unitIndex >= 0 && unitIndex < units.length) {
+            const selectedUnit = units[unitIndex];
+            console.log(`Selected unit: ${selectedUnit.unitNumber} (ID: ${selectedUnit._id})`);
+            await sendUnitInfo(fromNumber, selectedUnit);
+            sessions[fromNumber].action = null;
+            delete sessions[fromNumber].units;
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid unit number.');
+          }
         } else if (sessions[fromNumber].action === 'select_tenant_for_info') {
-          // ... (unchanged)
+          console.log(`Tenant info selection received: ${text} from ${fromNumber}`);
+          const tenantIndex = parseInt(text) - 1;
+          const tenants = sessions[fromNumber].tenants;
+
+          if (tenantIndex >= 0 && tenantIndex < tenants.length) {
+            const selectedTenant = tenants[tenantIndex];
+            console.log(`Selected tenant: ${selectedTenant.name} (ID: ${selectedTenant._id})`);
+            await sendTenantInfo(fromNumber, selectedTenant);
+            sessions[fromNumber].action = null;
+            delete sessions[fromNumber].tenants;
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid tenant number.');
+          }
+        } else if (sessions[fromNumber].action === 'select_property_for_units') {
+          console.log(`Property selection for units received: ${text} from ${fromNumber}`);
+          const propertyIndex = parseInt(text) - 1;
+          const properties = sessions[fromNumber].properties;
+
+          if (propertyIndex >= 0 && propertyIndex < properties.length) {
+            const selectedProperty = properties[propertyIndex];
+            console.log(`Selected property: ${selectedProperty.name} (ID: ${selectedProperty._id})`);
+            if (sessions[fromNumber].nextAction === 'manage_units') {
+              await promptUnitSelection(fromNumber, selectedProperty._id);
+              sessions[fromNumber].action = 'select_unit_to_manage';
+              sessions[fromNumber].propertyId = selectedProperty._id;
+            }
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid property number.');
+          }
+        } else if (sessions[fromNumber].action === 'select_unit_to_manage') {
+          console.log(`Unit selection received: ${text} from ${fromNumber}`);
+          const unitIndex = parseInt(text) - 1;
+          const units = sessions[fromNumber].units;
+
+          if (unitIndex >= 0 && unitIndex < units.length) {
+            const selectedUnit = units[unitIndex];
+            console.log(`Selected unit: ${selectedUnit.unitNumber} (ID: ${selectedUnit._id})`);
+            await sendUnitManagementOptions(fromNumber, selectedUnit);
+            sessions[fromNumber].action = null;
+            delete sessions[fromNumber].propertyId;
+            delete sessions[fromNumber].units;
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid unit number.');
+          }
         } else if (text.toLowerCase() === 'help') {
-          // ... (unchanged)
+          try {
+            sessions[fromNumber].action = null;
+
+            const buttonMenu = {
+              messaging_product: 'whatsapp',
+              to: fromNumber,
+              type: 'interactive',
+              interactive: {
+                type: 'button',
+                header: { type: 'text', text: '🏠 Rental Management' },
+                body: { text: '*Welcome!* Please select an option below:' },
+                footer: { text: 'Powered by Your Rental App' },
+                action: {
+                  buttons: [
+                    { type: 'reply', reply: { id: 'account_info', title: '👤 Account Info' } },
+                    { type: 'reply', reply: { id: 'manage', title: '🛠️ Manage' } },
+                    { type: 'reply', reply: { id: 'tools', title: '🧰 Tools' } },
+                  ],
+                },
+              },
+            };
+
+            await axios.post(WHATSAPP_API_URL, buttonMenu, {
+              headers: {
+                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json',
+              },
+            });
+
+            console.log('Button menu sent to:', fromNumber);
+          } catch (error) {
+            console.error('Error sending button menu:', error.response ? error.response.data : error);
+          }
         } else if (text.startsWith('\\')) {
-          // ... (unchanged)
+          const query = text.substring(1).trim();
+          const aiResponse = await getGroqAIResponse(query, phoneNumber, true);
+          await sendMessage(fromNumber, aiResponse);
         } else if (!sessions[fromNumber].action) {
-          // ... (unchanged)
+          const aiResponse = await getGroqAIResponse(text, phoneNumber, false);
+          await sendMessage(fromNumber, aiResponse);
         }
       }
 
+      // Process interactive button replies
       if (interactive) {
         const selectedOption = interactive.button_reply.id;
 
-        if (sessions[fromNumber].action === 'confirm_unit_removal' && selectedOption === 'yes_remove_unit') {
+        // Handle Yes/No confirmation for removals
+        if (sessions[fromNumber].action === 'confirm_property_removal' && selectedOption === 'yes_remove_property') {
+          const property = sessions[fromNumber].propertyToRemove;
+          try {
+            await Property.findByIdAndDelete(property._id);
+            await sendMessage(fromNumber, `✅ *Success* \nProperty *${property.name}* has been deleted successfully!`);
+            console.log(`Property ${property._id} deleted`);
+          } catch (error) {
+            console.error(`Error deleting property ${property._id}:`, error);
+            await sendMessage(fromNumber, `❌ *Error* \nFailed to delete property *${property.name}*. Please try again.`);
+          }
+          sessions[fromNumber].action = null;
+          delete sessions[fromNumber].propertyToRemove;
+        } else if (sessions[fromNumber].action === 'confirm_property_removal' && selectedOption === 'no_remove_property') {
+          await sendMessage(fromNumber, `ℹ️ *Canceled* \nRemoval of property *${sessions[fromNumber].propertyToRemove.name}* has been canceled.`);
+          sessions[fromNumber].action = null;
+          delete sessions[fromNumber].propertyToRemove;
+        } else if (sessions[fromNumber].action === 'confirm_unit_removal' && selectedOption === 'yes_remove_unit') {
           const unit = sessions[fromNumber].unitToRemove;
           try {
             await Unit.findByIdAndDelete(unit._id);
@@ -284,66 +425,119 @@ router.post('/', async (req, res) => {
           await sendMessage(fromNumber, `ℹ️ *Canceled* \nRemoval of unit *${sessions[fromNumber].unitToRemove.unitNumber}* has been canceled.`);
           sessions[fromNumber].action = null;
           delete sessions[fromNumber].unitToRemove;
-        } else if (sessions[fromNumber].action === 'confirm_property_removal' && selectedOption === 'yes_remove_property') {
-          // ... (unchanged)
-        } else if (sessions[fromNumber].action === 'confirm_property_removal' && selectedOption === 'no_remove_property') {
-          // ... (unchanged)
         } else if (sessions[fromNumber].action === 'confirm_tenant_removal' && selectedOption === 'yes_remove_tenant') {
-          // ... (unchanged)
+          const tenant = sessions[fromNumber].tenantToRemove;
+          try {
+            await Tenant.findByIdAndDelete(tenant._id);
+            await sendMessage(fromNumber, `✅ *Success* \nTenant *${tenant.name}* has been deleted successfully!`);
+            console.log(`Tenant ${tenant._id} deleted`);
+          } catch (error) {
+            console.error(`Error deleting tenant ${tenant._id}:`, error);
+            await sendMessage(fromNumber, `❌ *Error* \nFailed to delete tenant *${tenant.name}*. Please try again.`);
+          }
+          sessions[fromNumber].action = null;
+          delete sessions[fromNumber].tenantToRemove;
         } else if (sessions[fromNumber].action === 'confirm_tenant_removal' && selectedOption === 'no_remove_tenant') {
-          // ... (unchanged)
+          await sendMessage(fromNumber, `ℹ️ *Canceled* \nRemoval of tenant *${sessions[fromNumber].tenantToRemove.name}* has been canceled.`);
+          sessions[fromNumber].action = null;
+          delete sessions[fromNumber].tenantToRemove;
         } else if (selectedOption === 'account_info') {
-          // ... (unchanged)
+          try {
+            const user = await User.findOne({ phoneNumber });
+            if (user) {
+              const accountInfoMessage = `
+*👤 Account Information*
+━━━━━━━━━━━━━━━
+📞 *Phone*: ${user.phoneNumber}
+✅ *Verified*: ${user.verified ? 'Yes' : 'No'}
+🧑 *Profile Name*: ${user.profileName || 'N/A'}
+📅 *Registration Date*: ${user.registrationDate ? user.registrationDate.toLocaleDateString() : 'N/A'}
+💰 *Subscription*: ${user.subscription}
+━━━━━━━━━━━━━━━
+              `;
+              await axios.post(WHATSAPP_API_URL, {
+                messaging_product: 'whatsapp',
+                to: fromNumber,
+                type: 'text',
+                text: { body: accountInfoMessage },
+              }, {
+                headers: {
+                  'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                  'Content-Type': 'application/json',
+                },
+              });
+              console.log('Account info sent to:', phoneNumber);
+            } else {
+              await axios.post(WHATSAPP_API_URL, {
+                messaging_product: 'whatsapp',
+                to: fromNumber,
+                type: 'text',
+                text: { body: '⚠️ *No Account Found* \nNo account information is available for this number.' },
+              }, {
+                headers: {
+                  'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                  'Content-Type': 'application/json',
+                },
+              });
+              console.log('No account information found for:', phoneNumber);
+            }
+          } catch (error) {
+            console.error('Error fetching account info:', error.response ? error.response.data : error);
+          }
         } else if (selectedOption === 'rent_paid') {
-          // ... (unchanged)
+          sessions[fromNumber].action = 'rent_paid';
+          await sendMessage(fromNumber, '💰 *Confirm Rent Payment* \nPlease provide the *Tenant ID* to mark their rent as paid.');
         } else if (selectedOption === 'manage') {
-          // ... (unchanged)
+          await sendManageSubmenu(fromNumber);
         } else if (selectedOption === 'tools') {
-          // ... (unchanged)
+          await sendToolsSubmenu(fromNumber);
         } else if (selectedOption === 'reports') {
-          // ... (unchanged)
+          await sendReportsSubmenu(fromNumber);
         } else if (selectedOption === 'maintenance') {
-          // ... (unchanged)
+          await sendMessage(fromNumber, '🔧 *Maintenance* \nMaintenance features coming soon!');
         } else if (selectedOption === 'info') {
-          // ... (unchanged)
+          await sendInfoSubmenu(fromNumber);
         } else if (selectedOption === 'property_info') {
-          // ... (unchanged)
+          await promptPropertyInfoSelection(fromNumber);
         } else if (selectedOption === 'unit_info') {
-          // ... (unchanged)
+          await promptUnitInfoSelection(fromNumber);
         } else if (selectedOption === 'tenant_info') {
-          // ... (unchanged)
+          await promptTenantInfoSelection(fromNumber);
         } else if (selectedOption === 'financial_summary') {
-          // ... (unchanged)
+          await sendMessage(fromNumber, '💵 *Financial Summary* \nGenerating financial report... (Coming soon!)');
         } else if (selectedOption === 'occupancy_report') {
-          // ... (unchanged)
+          await sendMessage(fromNumber, '🏠 *Occupancy Report* \nGenerating occupancy report... (Coming soon!)');
         } else if (selectedOption === 'maintenance_trends') {
-          // ... (unchanged)
+          await sendMessage(fromNumber, '🔧 *Maintenance Trends* \nGenerating maintenance trends report... (Coming soon!)');
         } else if (selectedOption === 'manage_properties') {
-          // ... (unchanged)
+          await sendPropertyOptions(fromNumber);
         } else if (selectedOption === 'manage_units') {
-          // ... (unchanged)
+          await sendUnitOptions(fromNumber);
         } else if (selectedOption === 'manage_tenants') {
-          // ... (unchanged)
+          await sendTenantOptions(fromNumber);
         } else if (selectedOption === 'add_property') {
-          // ... (unchanged)
+          await sendPropertyLink(fromNumber, 'addproperty');
         } else if (selectedOption === 'edit_property') {
-          // ... (unchanged)
+          await sendPropertyLink(fromNumber, 'editproperty');
         } else if (selectedOption === 'remove_property') {
-          // ... (unchanged)
+          await promptPropertyRemoval(fromNumber);
         } else if (selectedOption === 'add_unit') {
-          // ... (unchanged)
+          await sendPropertyLink(fromNumber, 'addunit');
         } else if (selectedOption === 'edit_unit') {
-          console.log(`Edit Unit selected by ${fromNumber}`);
-          await promptPropertySelection(fromNumber, 'editunit');
+          await sendPropertyLink(fromNumber, 'editunit');
         } else if (selectedOption === 'remove_unit') {
-          console.log(`Remove Unit selected by ${fromNumber}`);
-          await promptPropertySelection(fromNumber, 'removeunit');
+          await promptUnitRemoval(fromNumber);
         } else if (selectedOption === 'add_tenant') {
-          // ... (unchanged)
+          await sendPropertyLink(fromNumber, 'addtenant');
         } else if (selectedOption === 'edit_tenant') {
-          // ... (unchanged)
+          console.log(`Edit Tenant selected by ${fromNumber}`);
+          await promptPropertySelection(fromNumber, 'edittenant');
         } else if (selectedOption === 'remove_tenant') {
-          // ... (unchanged)
+          await promptTenantRemoval(fromNumber);
+        } else if (selectedOption === 'edit_unit_from_list') {
+          await sendPropertyLink(fromNumber, 'editunit');
+        } else if (selectedOption === 'remove_unit_from_list') {
+          await sendPropertyLink(fromNumber, 'removeunit');
         }
       }
     }
@@ -355,21 +549,15 @@ router.post('/', async (req, res) => {
 });
 
 // Helper function to prompt unit selection
-async function promptUnitSelection(phoneNumber, action, propertyId) {
+async function promptUnitSelection(phoneNumber, propertyId) {
   console.log(`Prompting unit selection for property ${propertyId} for ${phoneNumber}`);
-  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
-  if (!user) {
-    await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
-    return;
-  }
-
   const units = await Unit.find({ property: propertyId });
   if (!units.length) {
-    await sendMessage(phoneNumber, 'ℹ️ *No Units Found* \nNo units are assigned to this property.');
+    await sendMessage(phoneNumber, 'ℹ️ *No Units Found* \nNo units available for this property.');
     return;
   }
 
-  let unitList = `*🚪 Select a Unit to ${action === 'editunit' ? 'Edit' : 'Remove'}* \nReply with the number of the unit:\n━━━━━━━━━━━━━━━\n`;
+  let unitList = `*🚪 Select a Unit* \nReply with the number of the unit:\n━━━━━━━━━━━━━━━\n`;
   units.forEach((unit, index) => {
     unitList += `${index + 1}. *${unit.unitNumber}* \n   _Rent_: $${unit.rentAmount}\n`;
   });
@@ -379,6 +567,35 @@ async function promptUnitSelection(phoneNumber, action, propertyId) {
 
   sessions[phoneNumber].units = units;
 }
+
+async function sendUnitManagementOptions(phoneNumber, unit) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: `🚪 Unit: ${unit.unitNumber}` },
+      body: { text: '*What would you like to do with this unit?*' },
+      footer: { text: 'Rental Management App' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'edit_unit_from_list', title: '✏️ Edit Unit' } },
+          { type: 'reply', reply: { id: 'remove_unit_from_list', title: '🗑️ Remove Unit' } },
+        ],
+      },
+    },
+  };
+
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: {
+      'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  console.log(`Unit management options sent to ${phoneNumber} for unit: ${unit.unitNumber}`);
+}
+
 // Helper function to wait for the user response (polling every second)
 async function waitForUserResponse(phoneNumber, timeout = 30000) {
   return new Promise((resolve, reject) => {
@@ -776,9 +993,33 @@ async function sendPropertyOptions(phoneNumber) {
     },
   });
 }
+async function promptPropertySelectionForUnits(phoneNumber, action) {
+  console.log(`Prompting property selection for units for ${phoneNumber}`);
+  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+  if (!user) {
+    await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
+    return;
+  }
 
+  const properties = await Property.find({ userId: user._id });
+  if (!properties.length) {
+    await sendMessage(phoneNumber, 'ℹ️ *No Properties Found* \nNo properties available to manage units.');
+    return;
+  }
+
+  let propertyList = `*🏠 Select a Property* \nReply with the number of the property to manage its units:\n━━━━━━━━━━━━━━━\n`;
+  properties.forEach((property, index) => {
+    propertyList += `${index + 1}. *${property.name}* \n   _Address_: ${property.address}\n`;
+  });
+  propertyList += `━━━━━━━━━━━━━━━`;
+  await sendMessage(phoneNumber, propertyList);
+  console.log(`Property list sent to ${phoneNumber} for unit management: ${propertyList}`);
+
+  sessions[phoneNumber] = { action: 'select_property_for_units', properties, nextAction: action };
+}
 // Helper function for Unit Options (Add, Edit, Remove)
 async function sendUnitOptions(phoneNumber) {
+  await promptPropertySelectionForUnits(phoneNumber, 'manage_units');
   const buttonMenu = {
     messaging_product: 'whatsapp',
     to: phoneNumber,
@@ -836,8 +1077,8 @@ async function sendTenantOptions(phoneNumber) {
 }
 
 // Helper function to prompt property selection (for editing)
-async function promptPropertySelection(phoneNumber, nextAction) {
-  console.log(`Prompting property selection for ${phoneNumber} with nextAction: ${nextAction}`);
+async function promptPropertySelection(phoneNumber, action) {
+  console.log(`Prompting property selection for ${phoneNumber}`);
   const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
   if (!user) {
     await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
@@ -846,7 +1087,7 @@ async function promptPropertySelection(phoneNumber, nextAction) {
 
   const properties = await Property.find({ userId: user._id });
   if (!properties.length) {
-    await sendMessage(phoneNumber, 'ℹ️ *No Properties Found* \nAdd a property first to proceed.');
+    await sendMessage(phoneNumber, 'ℹ️ *No Properties Found* \nAdd a property first to manage tenants.');
     return;
   }
 
@@ -858,7 +1099,11 @@ async function promptPropertySelection(phoneNumber, nextAction) {
   await sendMessage(phoneNumber, propertyList);
   console.log(`Property list sent to ${phoneNumber}: ${propertyList}`);
 
-  sessions[phoneNumber] = { action: 'select_property', properties, nextAction };
+   sessions[phoneNumber] = { 
+    action: 'select_property_for_unit_action',
+    properties,
+    unitAction: action 
+  };
 }
 
 // Helper function to prompt tenant selection (for editing)
