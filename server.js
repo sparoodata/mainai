@@ -99,7 +99,7 @@ const upload = multer({
 });
 
 // Routes and webhook handling
-const { router, waitForUserResponse, userResponses, sendMessage } = require('./routes/webhook');
+const { router, waitForUserResponse, userResponses, sendMessage, promptPropertySelection } = require('./routes/webhook');
 app.use('/webhook', router);
 
 
@@ -544,12 +544,11 @@ app.post('/editunit/:id', upload.single('image'), async (req, res) => {
       return res.status(404).send('User not found.');
     }
 
-    const unit = await Unit.findOne({ _id: unitId, userId: user._id });
+    const unit = await Unit.findOne({ _id: unitId, property });
     if (!unit) {
-      return res.status(404).send('Unit not found or you do not have permission to edit it.');
+      return res.status(404).send('Unit not found or does not belong to the selected property.');
     }
 
-    unit.property = property;
     unit.unitNumber = unit_number;
     unit.rentAmount = rent_amount;
     unit.floor = floor;
@@ -565,33 +564,16 @@ app.post('/editunit/:id', upload.single('image'), async (req, res) => {
       };
 
       await s3.upload(uploadParams).promise();
-      const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
-
-      if (unit.images.length > 0) {
-        const image = await Image.findById(unit.images[0]);
-        image.imageUrl = imageUrl;
-        await image.save();
-      } else {
-        const image = new Image({ unitId: unit._id, imageUrl });
-        await image.save();
-        unit.images.push(image._id);
-      }
+      unit.images = unit.images || [];
+      unit.images.push(key);
     }
 
     await unit.save();
 
-    // Send WhatsApp confirmation
     const propertyDoc = await Property.findById(property);
-    await sendMessage(
-      phoneNumber,
-      `Unit "${unit_number}" in property "${propertyDoc ? propertyDoc.name : 'Unknown'}" has been updated.`
-    );
+    await sendMessage(phoneNumber, `Unit "${unit_number}" in property "${propertyDoc ? propertyDoc.name : 'Unknown'}" has been updated.`);
 
-    // Mark authorization as used and delete it
-    authorizeRecord.used = true;
-    await authorizeRecord.save();
     await Authorize.findByIdAndDelete(id);
-
     res.send('Unit updated successfully!');
   } catch (error) {
     console.error('Error updating unit:', error);
@@ -601,7 +583,7 @@ app.post('/editunit/:id', upload.single('image'), async (req, res) => {
 
 app.post('/deleteunit/:id', checkOTPValidation, async (req, res) => {
   const id = req.params.id;
-  const { unitId } = req.body; // Expect unitId from the form
+  const { unitId, propertyId } = req.body;
 
   try {
     const authorizeRecord = await Authorize.findById(id);
@@ -619,26 +601,52 @@ app.post('/deleteunit/:id', checkOTPValidation, async (req, res) => {
       return res.status(404).send('User not found.');
     }
 
-    const unit = await Unit.findOneAndDelete({ _id: unitId, userId: user._id });
+    const unit = await Unit.findOneAndDelete({ _id: unitId, property: propertyId });
     if (!unit) {
-      return res.status(404).send('Unit not found or you do not have permission to delete it.');
+      return res.status(404).send('Unit not found or does not belong to the selected property.');
     }
 
-    // Send WhatsApp confirmation message
-    await sendMessage(
-      phoneNumber,
-      `Unit "${unit.unitNumber}" has been successfully deleted.`
-    );
-
-    // Mark authorization as used and delete it
-    authorizeRecord.used = true;
-    await authorizeRecord.save();
+    await sendMessage(phoneNumber, `Unit "${unit.unitNumber}" has been successfully deleted.`);
     await Authorize.findByIdAndDelete(id);
 
     res.send('Unit deleted successfully!');
   } catch (error) {
     console.error('Error deleting unit:', error);
     res.status(500).send('Error deleting unit.');
+  }
+});
+
+
+app.get('/deleteunit/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const properties = await Property.find({ userId: user._id });
+    if (!properties.length) {
+      return res.status(404).send('No properties found. Please add a property first.');
+    }
+
+    // Trigger WhatsApp property selection
+    await promptPropertySelection(phoneNumber, 'deleteunit');
+    res.send('Please select a property via WhatsApp to proceed with deleting a unit.');
+  } catch (error) {
+    console.error('Error in deleteunit route:', error);
+    res.status(500).send('An error occurred while processing your request.');
   }
 });
 // GET route to render the edit tenant form with current data
@@ -1090,6 +1098,7 @@ app.get('/editunit/:id', checkOTPValidation, async (req, res) => {
     res.status(500).send('An error occurred while processing your request.');
   }
 });
+
 app.get('/addtenant/:id', checkOTPValidation, async (req, res) => {
   const id = req.params.id;
 
