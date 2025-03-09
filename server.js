@@ -1080,19 +1080,23 @@ app.get('/editunit/:id', checkOTPValidation, async (req, res) => {
     }
 
     const phoneNumber = authorizeRecord.phoneNumber;
+    console.log(`Phone number from authorizeRecord: ${phoneNumber}`);
+
     const user = await User.findOne({ phoneNumber });
+    console.log(`User query result: ${user ? 'Found' : 'Not found'} for phoneNumber: ${phoneNumber}`);
     if (!user) {
       return res.status(404).send('User not found.');
     }
 
     const properties = await Property.find({ userId: user._id });
     if (!properties.length) {
+      await sendMessage(phoneNumber, 'ℹ️ *No Properties Found* \nPlease add a property first to edit units.');
       return res.status(404).send('No properties found. Please add a property first.');
     }
 
-    // Instead of rendering immediately, trigger WhatsApp property selection
-    await promptPropertySelection(phoneNumber, 'editunit');
-    res.send('Please select a property via WhatsApp to proceed with editing a unit.');
+    // Trigger property selection and unit check in WhatsApp
+    await promptPropertySelectionWithUnitCheck(phoneNumber, 'editunit');
+    res.send('Please check WhatsApp for further instructions.');
   } catch (error) {
     console.error('Error in editunit route:', error);
     res.status(500).send('An error occurred while processing your request.');

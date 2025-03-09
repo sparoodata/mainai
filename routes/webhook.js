@@ -972,7 +972,7 @@ async function sendTenantOptions(phoneNumber) {
 // Helper function to prompt property selection (for editing)
 async function promptPropertySelection(phoneNumber, action) {
   console.log(`Prompting property selection for ${phoneNumber}, action: ${action}`);
-  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+  const user = await User.findOne({ phoneNumber: `${phoneNumber}` });
   if (!user) {
     await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
     return;
