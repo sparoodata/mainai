@@ -207,8 +207,11 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
 });
 // Handle form submission and image upload to Dropbox (add unit)
 app.post('/addunit/:id', upload.single('image'), async (req, res) => {
-  const { unit_number, property_id, rent_amount, floor, size } = req.body;
+  const { unit_number, property, property_id, rent_amount, floor, size } = req.body; // Accept both 'property' and 'property_id'
   const id = req.params.id;
+
+  console.log('Request body:', req.body);
+  console.log('Request files:', req.file ? req.file : 'No file uploaded');
 
   try {
     const authorizeRecord = await Authorize.findById(id);
@@ -229,15 +232,22 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
       return res.status(404).send('User not found.');
     }
 
-    const property = await Property.findById(property_id);
-    if (!property) {
-      console.error('Property not found for ID:', property_id);
+    // Use 'property' if provided, otherwise fall back to 'property_id'
+    const propertyId = property || property_id;
+    if (!propertyId) {
+      console.error('Property ID is missing in request body');
+      return res.status(400).send('Property ID is required.');
+    }
+
+    const propertyDoc = await Property.findById(propertyId);
+    if (!propertyDoc) {
+      console.error('Property not found for ID:', propertyId);
       return res.status(404).send('Property not found.');
     }
 
     const unitData = {
       unitNumber: unit_number,
-      property: property_id,
+      property: propertyId,
       rentAmount: rent_amount,
       floor,
       size,
@@ -262,7 +272,7 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
     await unit.save();
     console.log(`Unit saved with ID: ${unit._id} and images: ${JSON.stringify(unit.images)}`);
 
-    await sendMessage(phoneNumber, `Unit *${unit_number}* has been successfully added to property *${property.name}*.`);
+    await sendMessage(phoneNumber, `Unit *${unit_number}* has been successfully added to property *${propertyDoc.name}*.`);
     await Authorize.findByIdAndDelete(id);
     console.log(`Authorization record deleted for ID: ${id}`);
 
@@ -272,6 +282,7 @@ app.post('/addunit/:id', upload.single('image'), async (req, res) => {
     res.status(500).send('An error occurred while adding the unit.');
   }
 });
+
 // Add tenant route that waits for WhatsApp authorization
 app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
   const { name, phone_number, unit_id, property_name, lease_start, deposit, rent_amount, tenant_id, email } = req.body;
