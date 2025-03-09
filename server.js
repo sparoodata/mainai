@@ -30,6 +30,8 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 // Configure R2 client
 
 // Configure the S3 client to use Cloudflare R2 settings
+
+// Configure the S3 client to use Cloudflare R2 settings
 const s3 = new AWS.S3({
   endpoint: process.env.R2_ENDPOINT,
   accessKeyId: process.env.R2_ACCESS_KEY_ID,
@@ -145,20 +147,17 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
   const id = req.params.id;
 
   try {
-    // Check if the authorization record exists
     const authorizeRecord = await Authorize.findById(id);
     if (!authorizeRecord) {
       console.error('Authorization record not found for ID:', id);
       return res.status(404).send('Authorization record not found.');
     }
 
-    // Check if the authorization link has already been used
     if (authorizeRecord.used) {
       console.error('Authorization already used for ID:', id);
       return res.status(403).send('This link has already been used.');
     }
 
-    // Find the user by phone number
     const phoneNumber = authorizeRecord.phoneNumber;
     const user = await User.findOne({ phoneNumber });
     if (!user) {
@@ -166,18 +165,16 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
       return res.status(404).send('User not found.');
     }
 
-    // Create and save the new property
-    const property = new Property({
+    // Create the property with imageUrls array
+    const propertyData = {
       name: property_name,
       units,
       address,
       totalAmount,
       userId: user._id,
-    });
-    await property.save();
-    console.log(`Property saved with ID: ${property._id}`);
+      imageUrls: [], // Initialize as empty array
+    };
 
-    // Handle image upload if a file is provided
     if (req.file) {
       const key = 'images/' + Date.now() + '-' + req.file.originalname;
       const uploadParams = {
@@ -187,39 +184,25 @@ app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
         ContentType: req.file.mimetype,
       };
 
-      // Upload to R2
       const uploadResult = await s3.upload(uploadParams).promise();
       console.log(`Uploaded image to R2 with key: ${key}`);
-
-      // Store only the bucket path (key) in the Image model
-      const image = new Image({
-        propertyId: property._id,
-        imageUrl: key, // e.g., "images/1741467333425-92hFJ.png"
-      });
-      await image.save();
-      console.log(`Saved image with ID: ${image._id} and path: ${key}`);
-
-      // Associate the image with the property
-      property.images.push(image._id);
-      await property.save();
-      console.log(`Image ${image._id} associated with property ${property._id}`);
-    } else {
-      console.log('No image file provided for property');
+      propertyData.imageUrls.push(key); // Add the bucket path to the array
     }
 
-    // Send confirmation message via WhatsApp
+    const property = new Property(propertyData);
+    await property.save();
+    console.log(`Property saved with ID: ${property._id} and imageUrls: ${JSON.stringify(property.imageUrls)}`);
+
     await sendMessage(authorizeRecord.phoneNumber, `Property *${property_name}* has been successfully added.`);
     console.log(`Confirmation message sent to ${authorizeRecord.phoneNumber}`);
 
-    // Delete the used authorization record
     await Authorize.findByIdAndDelete(id);
     console.log(`Authorization record deleted for ID: ${id}`);
 
-    // Send success response
-    res.send('Property and image added successfully!');
+    res.send('Property added successfully!');
   } catch (error) {
-    console.error('Error adding property and image:', error);
-    res.status(500).send('An error occurred while adding the property and image.');
+    console.error('Error adding property:', error);
+    res.status(500).send('An error occurred while adding the property.');
   }
 });
 // Handle form submission and image upload to Dropbox (add unit)

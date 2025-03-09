@@ -676,53 +676,45 @@ async function promptPropertyInfoSelection(phoneNumber) {
 async function sendPropertyInfo(phoneNumber, property) {
   console.log(`Sending property info for ${property.name} to ${phoneNumber}`);
 
-  // Fetch and populate the property
-  const populatedProperty = await Property.findById(property._id).populate('images');
-
-  if (!populatedProperty) {
-    console.error(`Property ${property._id} not found in database`);
+  // Fetch the property without populating 'images'
+  const propertyDoc = await Property.findById(property._id);
+  if (!propertyDoc) {
+    console.error(`Property ${property._id} not found`);
     await sendMessage(phoneNumber, '⚠️ *Error* \nProperty not found.');
     return;
   }
 
+  console.log('Property document:', JSON.stringify(propertyDoc, null, 2));
+
   let imageUrl = 'https://via.placeholder.com/150'; // Default fallback
-  console.log('Populated images array:', JSON.stringify(populatedProperty.images));
+  if (propertyDoc.imageUrls && propertyDoc.imageUrls.length > 0) {
+    const key = propertyDoc.imageUrls[0]; // Use the first image
+    console.log(`Using key from imageUrls[0]: ${key}`);
 
-  if (populatedProperty.images && populatedProperty.images.length > 0) {
-    const imageDoc = populatedProperty.images[0];
-    console.log('First image document:', JSON.stringify(imageDoc));
+    const params = {
+      Bucket: process.env.R2_BUCKET,
+      Key: key,
+      Expires: 60,
+    };
 
-    if (imageDoc && imageDoc.imageUrl) {
-      const key = imageDoc.imageUrl; // e.g., "images/1741474825521-HEIF Image.jpeg"
-      console.log(`Using key from imageUrl: ${key}`);
-
-      const params = {
-        Bucket: process.env.R2_BUCKET,
-        Key: key,
-        Expires: 60, // URL expires in 60 seconds
-      };
-
-      try {
-        imageUrl = await s3.getSignedUrlPromise('getObject', params);
-        console.log(`Generated signed URL: ${imageUrl}`);
-      } catch (error) {
-        console.error(`Error generating signed URL for key ${key}: ${error.message}`);
-      }
-    } else {
-      console.warn(`No valid imageUrl in image document for property ${property._id}`);
+    try {
+      imageUrl = await s3.getSignedUrlPromise('getObject', params);
+      console.log(`Generated signed URL: ${imageUrl}`);
+    } catch (error) {
+      console.error(`Error generating signed URL for key ${key}: ${error.message}`);
     }
   } else {
-    console.log(`No images found for property ${property._id}`);
+    console.log(`No imageUrls found for property ${property._id}`);
   }
 
   const caption = `*🏠 Property Details*
 ━━━━━━━━━━━━━━━
-*Name*: ${property.name}
-*Address*: ${property.address}
-*Units*: ${property.units}
-*Total Amount*: $${property.totalAmount}
-*ID*: ${property._id}
-*Created At*: ${property.createdAt ? new Date(property.createdAt).toLocaleDateString() : 'N/A'}
+*Name*: ${propertyDoc.name}
+*Address*: ${propertyDoc.address}
+*Units*: ${propertyDoc.units}
+*Total Amount*: $${propertyDoc.totalAmount}
+*ID*: ${propertyDoc._id}
+*Created At*: ${propertyDoc.createdAt ? new Date(propertyDoc.createdAt).toLocaleDateString() : 'N/A'}
 ━━━━━━━━━━━━━━━`;
 
   try {
