@@ -676,6 +676,7 @@ async function promptPropertyInfoSelection(phoneNumber) {
 async function sendPropertyInfo(phoneNumber, property) {
   const populatedProperty = await Property.findById(property._id).populate('images');
   let imageUrl = 'https://via.placeholder.com/150';
+  console.log(populatedProperty.images);
 
   if (populatedProperty.images && populatedProperty.images.length > 0) {
     const imageDoc = populatedProperty.images[0];
@@ -686,6 +687,7 @@ async function sendPropertyInfo(phoneNumber, property) {
         Key: key,
         Expires: 60,
       };
+      
       imageUrl = await s3.getSignedUrlPromise('getObject', params);
       console.log(`Generated signed URL: ${imageUrl}`);
     }
