@@ -1077,19 +1077,19 @@ app.get('/editunit/:id', checkOTPValidation, async (req, res) => {
       return res.status(404).send('User not found.');
     }
 
-    const units = await Unit.find({ userId: user._id });
-    if (!units.length) {
-      return res.status(404).send('No units found to edit.');
+    const properties = await Property.find({ userId: user._id });
+    if (!properties.length) {
+      return res.status(404).send('No properties found. Please add a property first.');
     }
 
-    const properties = await Property.find({ userId: user._id });
-    res.render('editUnit', { id, units, properties });
+    // Instead of rendering immediately, trigger WhatsApp property selection
+    await promptPropertySelection(phoneNumber, 'editunit');
+    res.send('Please select a property via WhatsApp to proceed with editing a unit.');
   } catch (error) {
-    console.error('Error rendering edit unit form:', error);
-    res.status(500).send('An error occurred while rendering the form.');
+    console.error('Error in editunit route:', error);
+    res.status(500).send('An error occurred while processing your request.');
   }
 });
-
 app.get('/addtenant/:id', checkOTPValidation, async (req, res) => {
   const id = req.params.id;
 
