@@ -325,6 +325,10 @@ router.post('/', async (req, res) => {
               await promptUnitSelection(fromNumber, selectedProperty._id);
               sessions[fromNumber].action = 'select_unit_to_manage';
               sessions[fromNumber].propertyId = selectedProperty._id;
+            } else if (sessions[fromNumber].nextAction === 'unit_info') {
+              await promptUnitSelection(fromNumber, selectedProperty._id);
+              sessions[fromNumber].action = 'select_unit_for_info';
+              sessions[fromNumber].propertyId = selectedProperty._id;
             }
           } else {
             await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid property number.');
@@ -500,7 +504,7 @@ router.post('/', async (req, res) => {
         } else if (selectedOption === 'property_info') {
           await promptPropertyInfoSelection(fromNumber);
         } else if (selectedOption === 'unit_info') {
-          await promptUnitInfoSelection(fromNumber);
+          await promptUnitInfoSelection(fromNumber); // Updated to trigger property selection
         } else if (selectedOption === 'tenant_info') {
           await promptTenantInfoSelection(fromNumber);
         } else if (selectedOption === 'financial_summary') {
@@ -512,7 +516,7 @@ router.post('/', async (req, res) => {
         } else if (selectedOption === 'manage_properties') {
           await sendPropertyOptions(fromNumber);
         } else if (selectedOption === 'manage_units') {
-          await sendUnitOptions(fromNumber); // Triggers property selection
+          await sendUnitOptions(fromNumber); // Triggers property selection for manage_units
         } else if (selectedOption === 'manage_tenants') {
           await sendTenantOptions(fromNumber);
         } else if (selectedOption === 'add_property') {
@@ -526,7 +530,7 @@ router.post('/', async (req, res) => {
         } else if (selectedOption === 'edit_unit') {
           await sendPropertyLink(fromNumber, 'editunit');
         } else if (selectedOption === 'remove_unit') {
-          await promptUnitRemoval(fromNumber);
+          await promptUnitRemoval(fromNumber); // Updated to trigger property selection
         } else if (selectedOption === 'add_tenant') {
           await sendPropertyLink(fromNumber, 'addtenant');
         } else if (selectedOption === 'edit_tenant') {
@@ -536,10 +540,10 @@ router.post('/', async (req, res) => {
           await promptTenantRemoval(fromNumber);
         } else if (selectedOption === 'edit_unit_from_list') {
           console.log(`Edit Unit selected for ${fromNumber}`);
-          await sendPropertyLink(fromNumber, 'editunit'); // Correctly sends editunit link
+          await sendPropertyLink(fromNumber, 'editunit');
         } else if (selectedOption === 'remove_unit_from_list') {
           console.log(`Remove Unit selected for ${fromNumber}`);
-          await sendPropertyLink(fromNumber, 'removeunit');
+          await sendPropertyLink(fromNumber, 'removeunit'); // Sends link for removal
         }
       }
     }
@@ -814,6 +818,7 @@ async function sendPropertyInfo(phoneNumber, property) {
 }
 // Helper function to prompt unit info selection
 async function promptUnitInfoSelection(phoneNumber) {
+  await promptPropertySelectionForUnits(phoneNumber, 'unit_info');
   const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
   if (!user) {
     await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
@@ -1021,7 +1026,6 @@ async function promptPropertySelectionForUnits(phoneNumber, action) {
 }
 // Helper function for Unit Options (Add, Edit, Remove)
 async function sendUnitOptions(phoneNumber) {
-  await promptPropertySelectionForUnits(phoneNumber, 'manage_units');
   const buttonMenu = {
     messaging_product: 'whatsapp',
     to: phoneNumber,
@@ -1241,6 +1245,7 @@ async function confirmPropertyRemoval(phoneNumber, property) {
 
 // Helper function to prompt unit removal
 async function promptUnitRemoval(phoneNumber) {
+  await promptPropertySelectionForUnits(phoneNumber, 'manage_units');
   console.log(`Prompting unit removal selection for ${phoneNumber}`);
   const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
   if (!user) {
