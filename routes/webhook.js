@@ -138,7 +138,6 @@ router.post('/', async (req, res) => {
     const changes = entry.changes[0];
     const value = changes.value;
 
-    // Handle contact info (profile name update)
     if (value.contacts) {
       const contact = value.contacts[0];
       const contactPhoneNumber = `+${contact.wa_id}`;
@@ -157,7 +156,6 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // Handle incoming messages
     if (value.messages) {
       const message = value.messages[0];
       const fromNumber = message.from; // e.g., "918885305097"
@@ -165,14 +163,12 @@ router.post('/', async (req, res) => {
       const text = message.text ? message.text.body.trim() : null;
       const interactive = message.interactive || null;
 
-      // Handle button replies
       if (interactive && interactive.type === 'button_reply') {
         const buttonReplyId = interactive.button_reply.id;
         console.log(`Button reply received: ${buttonReplyId} from ${fromNumber}`);
         userResponses[fromNumber] = buttonReplyId;
       }
 
-      // Initialize session if not present
       if (!sessions[fromNumber]) {
         sessions[fromNumber] = { action: null };
       }
@@ -180,7 +176,6 @@ router.post('/', async (req, res) => {
       console.log(`Received message from ${phoneNumber}: ${text}`);
       console.log(`Current session state for ${fromNumber}: ${JSON.stringify(sessions[fromNumber])}`);
 
-      // Process text input
       if (text) {
         console.log(`Processing text input: ${text} for ${fromNumber}`);
         if (sessions[fromNumber].action === 'select_property') {
@@ -259,6 +254,7 @@ router.post('/', async (req, res) => {
           try {
             const tenant = await Tenant.findOne({ tenant_id: tenantId });
             if (tenant) {
+              // Assuming status field is added to Tenant model
               tenant.status = 'paid';
               await tenant.save();
               await sendMessage(fromNumber, `✅ *Rent Payment Confirmed* \nTenant ID: *${tenantId}*\nStatus updated to *Paid*.`);
@@ -357,7 +353,6 @@ router.post('/', async (req, res) => {
         }
       }
 
-      // Process interactive button replies (now properly scoped)
       if (interactive) {
         const selectedOption = interactive.button_reply.id;
 
@@ -410,7 +405,10 @@ router.post('/', async (req, res) => {
           await sendMessage(fromNumber, `ℹ️ *Canceled* \nRemoval of tenant *${sessions[fromNumber].tenantToRemove.name}* has been canceled.`);
           sessions[fromNumber].action = null;
           delete sessions[fromNumber].tenantToRemove;
-        } else if (selectedOption === 'account_info') {
+        }
+
+        // Handle menu options
+        else if (selectedOption === 'account_info') {
           try {
             const user = await User.findOne({ phoneNumber });
             if (user) {
@@ -492,10 +490,10 @@ router.post('/', async (req, res) => {
           await promptPropertyRemoval(fromNumber);
         } else if (selectedOption === 'add_unit') {
           await sendPropertyLink(fromNumber, 'addunit');
-        } else if (selectedOption === 'edit_unit') {
-          await sendPropertyLink(fromNumber, 'editunit');
-        } else if (selectedOption === 'remove_unit') {
-          await promptUnitRemoval(fromNumber);
+} else if (selectedOption === 'edit_unit') {
+  await promptPropertySelection(fromNumber, 'edit_unit');
+} else if (selectedOption === 'remove_unit') {
+  await promptPropertySelection(fromNumber, 'remove_unit');
         } else if (selectedOption === 'add_tenant') {
           await sendPropertyLink(fromNumber, 'addtenant');
         } else if (selectedOption === 'edit_tenant') {
@@ -971,8 +969,8 @@ async function sendTenantOptions(phoneNumber) {
 
 // Helper function to prompt property selection (for editing)
 async function promptPropertySelection(phoneNumber, action) {
-  console.log(`Prompting property selection for ${phoneNumber}, action: ${action}`);
-  const user = await User.findOne({ phoneNumber: `${phoneNumber}` });
+  console.log(`Prompting property selection for ${phoneNumber}`);
+  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
   if (!user) {
     await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
     return;
@@ -980,11 +978,11 @@ async function promptPropertySelection(phoneNumber, action) {
 
   const properties = await Property.find({ userId: user._id });
   if (!properties.length) {
-    await sendMessage(phoneNumber, 'ℹ️ *No Properties Found* \nAdd a property first to proceed.');
+    await sendMessage(phoneNumber, 'ℹ️ *No Properties Found* \nAdd a property first to manage tenants.');
     return;
   }
 
-  let propertyList = `*🏠 Select a Property* \nReply with the number of the property to ${action === 'editunit' ? 'edit' : 'delete'} a unit:\n━━━━━━━━━━━━━━━\n`;
+  let propertyList = `*🏠 Select a Property* \nReply with the number of the property:\n━━━━━━━━━━━━━━━\n`;
   properties.forEach((property, index) => {
     propertyList += `${index + 1}. *${property.name}* \n   _Address_: ${property.address}\n`;
   });
@@ -992,30 +990,13 @@ async function promptPropertySelection(phoneNumber, action) {
   await sendMessage(phoneNumber, propertyList);
   console.log(`Property list sent to ${phoneNumber}: ${propertyList}`);
 
-  sessions[phoneNumber] = { action: `select_property_for_${action}`, properties };
+   sessions[phoneNumber] = { 
+    action: 'select_property_for_unit_action',
+    properties,
+    unitAction: action 
+  };
 }
 
-async function promptUnitSelection(phoneNumber, action, propertyId) {
-  console.log(`Prompting unit selection for property ${propertyId} for ${phoneNumber}`);
-  const units = await Unit.find({ property: propertyId });
-  if (!units.length) {
-    await sendMessage(phoneNumber, 'ℹ️ *No Units Found* \nNo units available for this property.');
-    sessions[phoneNumber].action = null;
-    return;
-  }
-
-  let unitList = `*🚪 Select a Unit to ${action === 'editunit' ? 'Edit' : 'Delete'}* \nReply with the number of the unit:\n━━━━━━━━━━━━━━━\n`;
-  units.forEach((unit, index) => {
-    unitList += `${index + 1}. *${unit.unitNumber}* \n   _Rent_: $${unit.rentAmount}\n`;
-  });
-  unitList += `━━━━━━━━━━━━━━━`;
-  await sendMessage(phoneNumber, unitList);
-  console.log(`Unit list sent to ${phoneNumber}: ${unitList}`);
-
-  sessions[phoneNumber].action = `select_unit_to_${action === 'editunit' ? 'edit' : 'delete'}`;
-  sessions[phoneNumber].units = units;
-  sessions[phoneNumber].propertyId = propertyId;
-}
 // Helper function to prompt tenant selection (for editing)
 async function promptTenantSelection(phoneNumber, action, propertyId) {
   console.log(`Prompting tenant selection for property ${propertyId} for ${phoneNumber}`);
@@ -1046,8 +1027,8 @@ async function promptTenantSelection(phoneNumber, action, propertyId) {
 }
 
 // Helper function to send property link (for add/edit actions)
-async function sendPropertyLink(phoneNumber, action, tenantId = null, unitId = null) {
-  console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}, tenantId: ${tenantId}, unitId: ${unitId}`);
+async function sendPropertyLink(phoneNumber, action, tenantId = null) {
+  console.log(`sendPropertyLink called for phoneNumber: ${phoneNumber}, action: ${action}, tenantId: ${tenantId}`);
   try {
     let authorizeRecord = await Authorize.findOne({ phoneNumber: `+${phoneNumber}` });
     if (!authorizeRecord) {
@@ -1058,23 +1039,29 @@ async function sendPropertyLink(phoneNumber, action, tenantId = null, unitId = n
         createdAt: new Date(),
       });
       await authorizeRecord.save();
+      console.log(`New authorization record created with ID: ${authorizeRecord._id}, action: ${action}`);
     } else {
       authorizeRecord.action = action;
       authorizeRecord.used = false;
       await authorizeRecord.save();
+      console.log(`Updated authorization record with ID: ${authorizeRecord._id}, action: ${action}`);
     }
 
-    let longUrl = `${GLITCH_HOST}/authorize/${authorizeRecord._id}`;
-    if (tenantId) longUrl += `?tenantId=${tenantId}`;
-    if (unitId) longUrl += `${tenantId ? '&' : '?'}unitId=${unitId}`;
+    const baseUrl = `${GLITCH_HOST}/authorize/${authorizeRecord._id}`;
+    const longUrl = tenantId ? `${baseUrl}?tenantId=${tenantId}` : baseUrl;
+    console.log(`Long URL generated: ${longUrl}`);
 
     const shortUrl = await shortenUrl(longUrl);
-    await sendMessage(phoneNumber, `🔗 *Action Link* \nPlease proceed using this link to ${action === 'addproperty' ? 'add a property' : action === 'editunit' ? 'edit a unit' : 'delete a unit'}: *${shortUrl}*`);
+    console.log(`Short URL generated: ${shortUrl}`);
+
+    await sendMessage(phoneNumber, `🔗 *Action Link* \nPlease proceed using this link to ${action === 'addproperty' ? 'add a property' : 'edit'}: *${shortUrl}*`);
+    console.log(`Link sent to ${phoneNumber} for action: ${action}`);
   } catch (error) {
     console.error('Error in sendPropertyLink:', error);
     await sendMessage(phoneNumber, '❌ *Error* \nFailed to generate the action link. Please try again.');
   }
 }
+
 // Helper function to prompt property removal
 async function promptPropertyRemoval(phoneNumber) {
   console.log(`Prompting property removal selection for ${phoneNumber}`);
@@ -1233,31 +1220,6 @@ async function promptTenantRemoval(phoneNumber) {
   sessions[phoneNumber] = { action: 'select_tenant_to_remove', tenants };
 }
 
-  
-async function promptPropertySelectionWithUnitCheck(phoneNumber, action) {
-  console.log(`Prompting property selection with unit check for ${phoneNumber}, action: ${action}`);
-  const user = await User.findOne({ phoneNumber }); // No "+" since database doesn’t use it
-  if (!user) {
-    await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
-    return;
-  }
-
-  const properties = await Property.find({ userId: user._id });
-  if (!properties.length) {
-    await sendMessage(phoneNumber, 'ℹ️ *No Properties Found* \nAdd a property first to proceed.');
-    return;
-  }
-
-  let propertyList = `*🏠 Select a Property* \nReply with the number of the property to ${action === 'editunit' ? 'edit' : 'delete'} a unit:\n━━━━━━━━━━━━━━━\n`;
-  properties.forEach((property, index) => {
-    propertyList += `${index + 1}. *${property.name}* \n   _Address_: ${property.address}\n`;
-  });
-  propertyList += `━━━━━━━━━━━━━━━`;
-  await sendMessage(phoneNumber, propertyList);
-  console.log(`Property list sent to ${phoneNumber}: ${propertyList}`);
-
-  sessions[phoneNumber] = { action: `select_property_for_${action}_with_check`, properties };
-}
 // Helper function to confirm tenant removal
 async function confirmTenantRemoval(phoneNumber, tenant) {
   const confirmationMessage = {
@@ -1275,10 +1237,6 @@ async function confirmTenantRemoval(phoneNumber, tenant) {
       },
     },
   };
-  
-
-
-// Export the new function
 
   await axios.post(WHATSAPP_API_URL, confirmationMessage, {
     headers: {
@@ -1296,6 +1254,4 @@ module.exports = {
   userResponses,
   sessions,
   sendMessage,
-  promptPropertySelection,
-  promptPropertySelectionWithUnitCheck
 };
