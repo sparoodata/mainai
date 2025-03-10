@@ -28,6 +28,7 @@ const s3 = new AWS.S3({
   region: 'auto',
   signatureVersion: 'v4',
 });
+
 // Session management to track user interactions
 const sessions = {};
 let userResponses = {};
@@ -191,11 +192,30 @@ router.post('/', async (req, res) => {
           if (propertyIndex >= 0 && propertyIndex < properties.length) {
             const selectedProperty = properties[propertyIndex];
             console.log(`Selected property: ${selectedProperty.name} (ID: ${selectedProperty._id})`);
-            await promptTenantSelection(fromNumber, 'edittenant', selectedProperty._id);
-            sessions[fromNumber].action = 'select_tenant_to_edit';
-            sessions[fromNumber].propertyId = selectedProperty._id;
+            if (sessions[fromNumber].nextAction === 'editunit') {
+              await promptUnitEditSelection(fromNumber, selectedProperty._id);
+            } else if (sessions[fromNumber].nextAction === 'edittenant') {
+              await promptTenantSelection(fromNumber, 'edittenant', selectedProperty._id);
+              sessions[fromNumber].action = 'select_tenant_to_edit';
+              sessions[fromNumber].propertyId = selectedProperty._id;
+            }
           } else {
             await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid property number.');
+          }
+        } else if (sessions[fromNumber].action === 'select_unit_to_edit') {
+          console.log(`Unit edit selection received: ${text} from ${fromNumber}`);
+          const unitIndex = parseInt(text) - 1;
+          const units = sessions[fromNumber].units;
+
+          if (unitIndex >= 0 && unitIndex < units.length) {
+            const selectedUnit = units[unitIndex];
+            console.log(`Selected unit to edit: ${selectedUnit.unitNumber} (ID: ${selectedUnit._id})`);
+            await sendPropertyLink(fromNumber, 'editunit');
+            sessions[fromNumber].action = null;
+            delete sessions[fromNumber].propertyId;
+            delete sessions[fromNumber].units;
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid unit number.');
           }
         } else if (sessions[fromNumber].action === 'select_tenant_to_edit') {
           console.log(`Tenant selection received: ${text} from ${fromNumber}`);
@@ -338,7 +358,7 @@ router.post('/', async (req, res) => {
             const selectedUnit = units[unitIndex];
             console.log(`Selected unit: ${selectedUnit.unitNumber} (ID: ${selectedUnit._id})`);
             await sendUnitManagementOptions(fromNumber, selectedUnit);
-            sessions[fromNumber].action = null; // Clear action after showing options
+            sessions[fromNumber].action = null;
             delete sessions[fromNumber].propertyId;
             delete sessions[fromNumber].units;
           } else {
@@ -512,7 +532,7 @@ router.post('/', async (req, res) => {
         } else if (selectedOption === 'manage_properties') {
           await sendPropertyOptions(fromNumber);
         } else if (selectedOption === 'manage_units') {
-          await sendUnitOptions(fromNumber); // Triggers property selection
+          await sendUnitOptions(fromNumber);
         } else if (selectedOption === 'manage_tenants') {
           await sendTenantOptions(fromNumber);
         } else if (selectedOption === 'add_property') {
@@ -524,7 +544,8 @@ router.post('/', async (req, res) => {
         } else if (selectedOption === 'add_unit') {
           await sendPropertyLink(fromNumber, 'addunit');
         } else if (selectedOption === 'edit_unit') {
-          await sendPropertyLink(fromNumber, 'editunit');
+          console.log(`Edit Unit option selected by ${fromNumber}`);
+          await promptPropertySelection(fromNumber, 'editunit');
         } else if (selectedOption === 'remove_unit') {
           await promptUnitRemoval(fromNumber);
         } else if (selectedOption === 'add_tenant') {
@@ -536,7 +557,7 @@ router.post('/', async (req, res) => {
           await promptTenantRemoval(fromNumber);
         } else if (selectedOption === 'edit_unit_from_list') {
           console.log(`Edit Unit selected for ${fromNumber}`);
-          await sendPropertyLink(fromNumber, 'editunit'); // Correctly sends editunit link
+          await sendPropertyLink(fromNumber, 'editunit');
         } else if (selectedOption === 'remove_unit_from_list') {
           console.log(`Remove Unit selected for ${fromNumber}`);
           await sendPropertyLink(fromNumber, 'removeunit');
@@ -596,6 +617,35 @@ async function sendUnitManagementOptions(phoneNumber, unit) {
     },
   });
   console.log(`Unit management options sent to ${phoneNumber} for unit: ${unit.unitNumber}`);
+}
+
+// Helper function to prompt unit edit selection
+async function promptUnitEditSelection(phoneNumber, propertyId) {
+  console.log(`Prompting unit edit selection for property ${propertyId} for ${phoneNumber}`);
+  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+  if (!user) {
+    await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
+    return;
+  }
+
+  const units = await Unit.find({ property: propertyId, userId: user._id });
+  if (!units.length) {
+    await sendMessage(phoneNumber, 'ℹ️ *No Units to Edit* \nNo units available for this property to edit.');
+    sessions[phoneNumber].action = null;
+    return;
+  }
+
+  let unitList = `*🚪 Select a Unit to Edit* \nReply with the number of the unit:\n━━━━━━━━━━━━━━━\n`;
+  units.forEach((unit, index) => {
+    unitList += `${index + 1}. *${unit.unitNumber}* \n   _Rent_: $${unit.rentAmount}\n`;
+  });
+  unitList += `━━━━━━━━━━━━━━━`;
+  await sendMessage(phoneNumber, unitList);
+  console.log(`Unit list sent to ${phoneNumber}: ${unitList}`);
+
+  sessions[phoneNumber].units = units;
+  sessions[phoneNumber].action = 'select_unit_to_edit';
+  sessions[phoneNumber].propertyId = propertyId;
 }
 
 // Helper function to wait for the user response (polling every second)
@@ -735,7 +785,6 @@ async function sendInfoSubmenu(phoneNumber) {
 }
 
 // Helper function to prompt property info selection
-// promptPropertyInfoSelection
 async function promptPropertyInfoSelection(phoneNumber) {
   const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
   if (!user) {
@@ -759,11 +808,9 @@ async function promptPropertyInfoSelection(phoneNumber) {
 }
 
 // Helper function to send property info
-
 async function sendPropertyInfo(phoneNumber, property) {
   console.log(`Sending property info for ${property.name} to ${phoneNumber}`);
 
-  // Fetch the property without populating 'images'
   const propertyDoc = await Property.findById(property._id);
   if (!propertyDoc) {
     console.error(`Property ${property._id} not found`);
@@ -773,9 +820,9 @@ async function sendPropertyInfo(phoneNumber, property) {
 
   console.log('Property document:', JSON.stringify(propertyDoc, null, 2));
 
-  let images = 'https://via.placeholder.com/150'; // Default fallback
+  let images = 'https://via.placeholder.com/150';
   if (propertyDoc.images && propertyDoc.images.length > 0) {
-    const key = propertyDoc.images[0]; // Use the first image
+    const key = propertyDoc.images[0];
     console.log(`Using key from images[0]: ${key}`);
 
     const params = {
@@ -812,6 +859,7 @@ async function sendPropertyInfo(phoneNumber, property) {
     await sendMessage(phoneNumber, `⚠️ *Image Error* \nFailed to load image. Here’s the info:\n${caption}`);
   }
 }
+
 // Helper function to prompt unit info selection
 async function promptUnitInfoSelection(phoneNumber) {
   const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
@@ -850,7 +898,7 @@ async function sendUnitInfo(phoneNumber, unit) {
 
   let imageUrl = 'https://via.placeholder.com/150';
   if (unitDoc.images && unitDoc.images.length > 0) {
-    const key = unitDoc.images[0]; // Use the first image
+    const key = unitDoc.images[0];
     console.log(`Using key from images[0]: ${key}`);
 
     const params = {
@@ -888,6 +936,7 @@ async function sendUnitInfo(phoneNumber, unit) {
     await sendMessage(phoneNumber, `⚠️ *Image Error* \nFailed to load image. Here’s the info:\n${caption}`);
   }
 }
+
 // Helper function to prompt tenant info selection
 async function promptTenantInfoSelection(phoneNumber) {
   const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
@@ -910,6 +959,7 @@ async function promptTenantInfoSelection(phoneNumber) {
   await sendMessage(phoneNumber, tenantList);
   sessions[phoneNumber] = { action: 'select_tenant_for_info', tenants };
 }
+
 // Helper function to send tenant info
 async function sendTenantInfo(phoneNumber, tenant) {
   console.log(`Sending tenant info for ${tenant.name} to ${phoneNumber}`);
@@ -925,7 +975,7 @@ async function sendTenantInfo(phoneNumber, tenant) {
 
   let imageUrl = 'https://via.placeholder.com/150';
   if (tenantDoc.images && tenantDoc.images.length > 0) {
-    const key = tenantDoc.images[0]; // Use the first image (photo)
+    const key = tenantDoc.images[0];
     console.log(`Using key from images[0]: ${key}`);
 
     const params = {
@@ -967,6 +1017,7 @@ async function sendTenantInfo(phoneNumber, tenant) {
     await sendMessage(phoneNumber, `⚠️ *Image Error* \nFailed to load image. Here’s the info:\n${caption}`);
   }
 }
+
 // Helper function for Property Options (Add, Edit, Remove)
 async function sendPropertyOptions(phoneNumber) {
   const buttonMenu = {
@@ -995,6 +1046,7 @@ async function sendPropertyOptions(phoneNumber) {
     },
   });
 }
+
 async function promptPropertySelectionForUnits(phoneNumber, action) {
   console.log(`Prompting property selection for units for ${phoneNumber}`);
   const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
@@ -1019,6 +1071,7 @@ async function promptPropertySelectionForUnits(phoneNumber, action) {
 
   sessions[phoneNumber] = { action: 'select_property_for_units', properties, nextAction: action };
 }
+
 // Helper function for Unit Options (Add, Edit, Remove)
 async function sendUnitOptions(phoneNumber) {
   await promptPropertySelectionForUnits(phoneNumber, 'manage_units');
@@ -1080,7 +1133,7 @@ async function sendTenantOptions(phoneNumber) {
 
 // Helper function to prompt property selection (for editing)
 async function promptPropertySelection(phoneNumber, action) {
-  console.log(`Prompting property selection for ${phoneNumber}`);
+  console.log(`Prompting property selection for ${phoneNumber} with action ${action}`);
   const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
   if (!user) {
     await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
@@ -1089,11 +1142,11 @@ async function promptPropertySelection(phoneNumber, action) {
 
   const properties = await Property.find({ userId: user._id });
   if (!properties.length) {
-    await sendMessage(phoneNumber, 'ℹ️ *No Properties Found* \nAdd a property first to manage tenants.');
+    await sendMessage(phoneNumber, 'ℹ️ *No Properties Found* \nAdd a property first to manage units.');
     return;
   }
 
-  let propertyList = `*🏠 Select a Property* \nReply with the number of the property:\n━━━━━━━━━━━━━━━\n`;
+  let propertyList = `*🏠 Select a Property* \nReply with the number of the property to edit its units:\n━━━━━━━━━━━━━━━\n`;
   properties.forEach((property, index) => {
     propertyList += `${index + 1}. *${property.name}* \n   _Address_: ${property.address}\n`;
   });
@@ -1101,10 +1154,10 @@ async function promptPropertySelection(phoneNumber, action) {
   await sendMessage(phoneNumber, propertyList);
   console.log(`Property list sent to ${phoneNumber}: ${propertyList}`);
 
-   sessions[phoneNumber] = { 
-    action: 'select_property_for_unit_action',
-    properties,
-    unitAction: action 
+  sessions[phoneNumber] = { 
+    action: 'select_property', 
+    properties, 
+    nextAction: action 
   };
 }
 
@@ -1276,7 +1329,6 @@ async function confirmUnitRemoval(phoneNumber, unit) {
     );
     return;
   }
-  
 
   const confirmationMessage = {
     messaging_product: 'whatsapp',
