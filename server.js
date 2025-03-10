@@ -1053,6 +1053,7 @@ app.get('/addunit/:id', checkOTPValidation, async (req, res) => {
 
 app.get('/editunit/:id', checkOTPValidation, async (req, res) => {
   const id = req.params.id;
+  const propertyId = req.query.propertyId;
 
   try {
     const authorizeRecord = await Authorize.findById(id);
@@ -1070,19 +1071,27 @@ app.get('/editunit/:id', checkOTPValidation, async (req, res) => {
       return res.status(404).send('User not found.');
     }
 
-    const units = await Unit.find({ userId: user._id });
-    if (!units.length) {
-      return res.status(404).send('No units found to edit.');
+    const properties = await Property.find({ userId: user._id });
+    if (!properties.length) {
+      return res.status(404).send('No properties found. Please add a property first.');
     }
 
-    const properties = await Property.find({ userId: user._id });
-    res.render('editUnit', { id, units, properties });
+    if (!propertyId) {
+      res.render('selectPropertyForUnit', { id, properties, action: 'editunit' });
+    } else {
+      const units = await Unit.find({ userId: user._id, property: propertyId });
+      if (!units.length) {
+        return res.status(404).send('No units found for this property.');
+      }
+      res.render('editUnit', { id, units, properties, selectedPropertyId: propertyId });
+    }
   } catch (error) {
     console.error('Error rendering edit unit form:', error);
     res.status(500).send('An error occurred while rendering the form.');
   }
 });
 
+// New EJS template needed: selectPropertyForUnit.ejs
 app.get('/addtenant/:id', checkOTPValidation, async (req, res) => {
   const id = req.params.id;
 

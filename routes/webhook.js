@@ -130,6 +130,7 @@ router.get('/', (req, res) => {
 });
 
 // Webhook event handling
+// Webhook event handling
 router.post('/', async (req, res) => {
   const body = req.body;
 
@@ -221,14 +222,45 @@ router.post('/', async (req, res) => {
           } else {
             await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid property number.');
           }
-        } else if (sessions[fromNumber].action === 'select_unit_to_remove') {
-          console.log(`Unit to remove selection received: ${text} from ${fromNumber}`);
+        } else if (sessions[fromNumber].action === 'select_property_for_edit_unit') {
+          const propertyIndex = parseInt(text) - 1;
+          const properties = sessions[fromNumber].properties;
+
+          if (propertyIndex >= 0 && propertyIndex < properties.length) {
+            const selectedProperty = properties[propertyIndex];
+            await promptUnitSelection(fromNumber, 'edit_unit', selectedProperty._id);
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid property number.');
+          }
+        } else if (sessions[fromNumber].action === 'select_property_for_remove_unit') {
+          const propertyIndex = parseInt(text) - 1;
+          const properties = sessions[fromNumber].properties;
+
+          if (propertyIndex >= 0 && propertyIndex < properties.length) {
+            const selectedProperty = properties[propertyIndex];
+            await promptUnitSelection(fromNumber, 'remove_unit', selectedProperty._id);
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid property number.');
+          }
+        } else if (sessions[fromNumber].action === 'select_unit_to_edit_unit') {
           const unitIndex = parseInt(text) - 1;
           const units = sessions[fromNumber].units;
 
           if (unitIndex >= 0 && unitIndex < units.length) {
             const selectedUnit = units[unitIndex];
-            console.log(`Selected unit to remove: ${selectedUnit.unitNumber} (ID: ${selectedUnit._id})`);
+            await sendPropertyLink(fromNumber, 'editunit', selectedUnit._id);
+            sessions[fromNumber].action = null;
+            delete sessions[fromNumber].units;
+            delete sessions[fromNumber].propertyId;
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid unit number.');
+          }
+        } else if (sessions[fromNumber].action === 'select_unit_to_remove_unit') {
+          const unitIndex = parseInt(text) - 1;
+          const units = sessions[fromNumber].units;
+
+          if (unitIndex >= 0 && unitIndex < units.length) {
+            const selectedUnit = units[unitIndex];
             await confirmUnitRemoval(fromNumber, selectedUnit);
             sessions[fromNumber].action = 'confirm_unit_removal';
             sessions[fromNumber].unitToRemove = selectedUnit;
@@ -254,7 +286,6 @@ router.post('/', async (req, res) => {
           try {
             const tenant = await Tenant.findOne({ tenant_id: tenantId });
             if (tenant) {
-              // Assuming status field is added to Tenant model
               tenant.status = 'paid';
               await tenant.save();
               await sendMessage(fromNumber, `✅ *Rent Payment Confirmed* \nTenant ID: *${tenantId}*\nStatus updated to *Paid*.`);
@@ -491,9 +522,9 @@ router.post('/', async (req, res) => {
         } else if (selectedOption === 'add_unit') {
           await sendPropertyLink(fromNumber, 'addunit');
         } else if (selectedOption === 'edit_unit') {
-          await sendPropertyLink(fromNumber, 'editunit');
+          await promptPropertySelectionForUnits(fromNumber, 'edit_unit');
         } else if (selectedOption === 'remove_unit') {
-          await promptUnitRemoval(fromNumber);
+          await promptPropertySelectionForUnits(fromNumber, 'remove_unit');
         } else if (selectedOption === 'add_tenant') {
           await sendPropertyLink(fromNumber, 'addtenant');
         } else if (selectedOption === 'edit_tenant') {
@@ -511,6 +542,27 @@ router.post('/', async (req, res) => {
   res.sendStatus(200);
 });
 
+async function promptPropertySelectionForUnits(phoneNumber, action) {
+  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+  if (!user) {
+    await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
+    return;
+  }
+
+  const properties = await Property.find({ userId: user._id });
+  if (!properties.length) {
+    await sendMessage(phoneNumber, 'ℹ️ *No Properties Found* \nAdd a property first to manage units.');
+    return;
+  }
+
+  let propertyList = `*🏠 Select a Property* \nReply with the number of the property to ${action === 'edit_unit' ? 'edit' : 'remove'} units:\n━━━━━━━━━━━━━━━\n`;
+  properties.forEach((property, index) => {
+    propertyList += `${index + 1}. *${property.name}* \n   _Address_: ${property.address}\n`;
+  });
+  propertyList += `━━━━━━━━━━━━━━━`;
+  await sendMessage(phoneNumber, propertyList);
+  sessions[phoneNumber] = { action: `select_property_for_${action}`, properties };
+}
 // Helper function to wait for the user response (polling every second)
 async function waitForUserResponse(phoneNumber, timeout = 30000) {
   return new Promise((resolve, reject) => {
@@ -730,28 +782,28 @@ async function sendPropertyInfo(phoneNumber, property) {
   }
 }
 // Helper function to prompt unit info selection
-async function promptUnitInfoSelection(phoneNumber) {
+async function promptUnitSelection(phoneNumber, action, propertyId) {
   const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
   if (!user) {
     await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
     return;
   }
 
-  const units = await Unit.find({ userId: user._id }).populate('images').populate('property');
+  const units = await Unit.find({ userId: user._id, property: propertyId });
   if (!units.length) {
-    await sendMessage(phoneNumber, 'ℹ️ *No Units Found* \nNo units available to display.');
+    await sendMessage(phoneNumber, 'ℹ️ *No Units Found* \nNo units available for this property.');
+    sessions[phoneNumber].action = null;
     return;
   }
 
-  let unitList = `*🚪 Select a Unit for Info* \nReply with the number of the unit:\n━━━━━━━━━━━━━━━\n`;
+  let unitList = `*🚪 Select a Unit to ${action === 'edit_unit' ? 'Edit' : 'Remove'}* \nReply with the number of the unit:\n━━━━━━━━━━━━━━━\n`;
   units.forEach((unit, index) => {
-    unitList += `${index + 1}. *${unit.unitNumber}* \n   _Property_: ${unit.property ? unit.property.name : 'N/A'}\n`;
+    unitList += `${index + 1}. *${unit.unitNumber}* \n   _ID_: ${unit._id}\n`;
   });
   unitList += `━━━━━━━━━━━━━━━`;
   await sendMessage(phoneNumber, unitList);
-  sessions[phoneNumber] = { action: 'select_unit_for_info', units };
+  sessions[phoneNumber] = { action: `select_unit_to_${action}`, units, propertyId };
 }
-
 // Helper function to send unit info
 async function sendUnitInfo(phoneNumber, unit) {
   // Populate the images and property fields
