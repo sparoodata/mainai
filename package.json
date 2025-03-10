@@ -40,9 +40,6 @@
   "repository": {
     "url": "https://glitch.com/edit/#!/glitch-hello-node"
   },
-  "scripts": {
-  "start": "NODE_NO_WARNINGS=1 node server.js"
-},
   "license": "MIT",
   "keywords": [
     "node",
