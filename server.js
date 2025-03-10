@@ -1082,23 +1082,48 @@ app.get('/editunit/:id', checkOTPValidation, async (req, res) => {
       return res.status(404).send('User not found.');
     }
 
-    // Fetch all properties owned by the user
     const properties = await Property.find({ userId: user._id });
     if (!properties.length) {
       return res.status(404).send('No properties found. Please add a property first.');
     }
 
-    // Fetch all units linked to these properties
-    const propertyIds = properties.map(p => p._id);
-    const units = await Unit.find({ property: { $in: propertyIds } });
-    if (!units.length) {
-      return res.status(404).send('No units found to edit.');
-    }
-
-    res.render('editUnit', { id, units, properties });
+    // Render the edit unit form with properties list initially
+    res.render('editUnit', { id, properties, units: null, selectedPropertyId: null });
   } catch (error) {
     console.error('Error rendering edit unit form:', error);
     res.status(500).send('An error occurred while rendering the form.');
+  }
+});
+
+// Add a new route to handle property selection and show units
+app.get('/editunit/:id/units', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+  const propertyId = req.query.propertyId;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const properties = await Property.find({ userId: user._id });
+    const units = await Unit.find({ property: propertyId, userId: user._id });
+
+    res.render('editUnit', { 
+      id, 
+      properties, 
+      units: units.length ? units : [], 
+      selectedPropertyId: propertyId 
+    });
+  } catch (error) {
+    console.error('Error fetching units for property:', error);
+    res.status(500).send('An error occurred while fetching units.');
   }
 });
 
