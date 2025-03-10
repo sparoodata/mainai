@@ -20,13 +20,13 @@ const { GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 // Configure R2 client
-const s3Client = new S3Client({
-  region: 'auto',
+const AWS = require('aws-sdk');
+const s3 = new AWS.S3({
   endpoint: process.env.R2_ENDPOINT,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-  },
+  accessKeyId: process.env.R2_ACCESS_KEY_ID,
+  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  region: 'auto',
+  signatureVersion: 'v4',
 });
 // Session management to track user interactions
 const sessions = {};
@@ -130,7 +130,6 @@ router.get('/', (req, res) => {
 });
 
 // Webhook event handling
-// Webhook event handling
 router.post('/', async (req, res) => {
   const body = req.body;
 
@@ -139,6 +138,7 @@ router.post('/', async (req, res) => {
     const changes = entry.changes[0];
     const value = changes.value;
 
+    // Handle contact information updates
     if (value.contacts) {
       const contact = value.contacts[0];
       const contactPhoneNumber = `+${contact.wa_id}`;
@@ -157,6 +157,7 @@ router.post('/', async (req, res) => {
       }
     }
 
+    // Handle incoming messages
     if (value.messages) {
       const message = value.messages[0];
       const fromNumber = message.from; // e.g., "918885305097"
@@ -164,12 +165,14 @@ router.post('/', async (req, res) => {
       const text = message.text ? message.text.body.trim() : null;
       const interactive = message.interactive || null;
 
+      // Handle button replies
       if (interactive && interactive.type === 'button_reply') {
         const buttonReplyId = interactive.button_reply.id;
         console.log(`Button reply received: ${buttonReplyId} from ${fromNumber}`);
         userResponses[fromNumber] = buttonReplyId;
       }
 
+      // Initialize session if not exists
       if (!sessions[fromNumber]) {
         sessions[fromNumber] = { action: null };
       }
@@ -177,6 +180,7 @@ router.post('/', async (req, res) => {
       console.log(`Received message from ${phoneNumber}: ${text}`);
       console.log(`Current session state for ${fromNumber}: ${JSON.stringify(sessions[fromNumber])}`);
 
+      // Process text input
       if (text) {
         console.log(`Processing text input: ${text} for ${fromNumber}`);
         if (sessions[fromNumber].action === 'select_property') {
@@ -222,45 +226,14 @@ router.post('/', async (req, res) => {
           } else {
             await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid property number.');
           }
-        } else if (sessions[fromNumber].action === 'select_property_for_edit_unit') {
-          const propertyIndex = parseInt(text) - 1;
-          const properties = sessions[fromNumber].properties;
-
-          if (propertyIndex >= 0 && propertyIndex < properties.length) {
-            const selectedProperty = properties[propertyIndex];
-            await promptUnitSelection(fromNumber, 'edit_unit', selectedProperty._id);
-          } else {
-            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid property number.');
-          }
-        } else if (sessions[fromNumber].action === 'select_property_for_remove_unit') {
-          const propertyIndex = parseInt(text) - 1;
-          const properties = sessions[fromNumber].properties;
-
-          if (propertyIndex >= 0 && propertyIndex < properties.length) {
-            const selectedProperty = properties[propertyIndex];
-            await promptUnitSelection(fromNumber, 'remove_unit', selectedProperty._id);
-          } else {
-            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid property number.');
-          }
-        } else if (sessions[fromNumber].action === 'select_unit_to_edit_unit') {
+        } else if (sessions[fromNumber].action === 'select_unit_to_remove') {
+          console.log(`Unit to remove selection received: ${text} from ${fromNumber}`);
           const unitIndex = parseInt(text) - 1;
           const units = sessions[fromNumber].units;
 
           if (unitIndex >= 0 && unitIndex < units.length) {
             const selectedUnit = units[unitIndex];
-            await sendPropertyLink(fromNumber, 'editunit', selectedUnit._id);
-            sessions[fromNumber].action = null;
-            delete sessions[fromNumber].units;
-            delete sessions[fromNumber].propertyId;
-          } else {
-            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid unit number.');
-          }
-        } else if (sessions[fromNumber].action === 'select_unit_to_remove_unit') {
-          const unitIndex = parseInt(text) - 1;
-          const units = sessions[fromNumber].units;
-
-          if (unitIndex >= 0 && unitIndex < units.length) {
-            const selectedUnit = units[unitIndex];
+            console.log(`Selected unit to remove: ${selectedUnit.unitNumber} (ID: ${selectedUnit._id})`);
             await confirmUnitRemoval(fromNumber, selectedUnit);
             sessions[fromNumber].action = 'confirm_unit_removal';
             sessions[fromNumber].unitToRemove = selectedUnit;
@@ -340,6 +313,37 @@ router.post('/', async (req, res) => {
           } else {
             await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid tenant number.');
           }
+        } else if (sessions[fromNumber].action === 'select_property_for_units') {
+          console.log(`Property selection for units received: ${text} from ${fromNumber}`);
+          const propertyIndex = parseInt(text) - 1;
+          const properties = sessions[fromNumber].properties;
+
+          if (propertyIndex >= 0 && propertyIndex < properties.length) {
+            const selectedProperty = properties[propertyIndex];
+            console.log(`Selected property: ${selectedProperty.name} (ID: ${selectedProperty._id})`);
+            if (sessions[fromNumber].nextAction === 'manage_units') {
+              await promptUnitSelection(fromNumber, selectedProperty._id);
+              sessions[fromNumber].action = 'select_unit_to_manage';
+              sessions[fromNumber].propertyId = selectedProperty._id;
+            }
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid property number.');
+          }
+        } else if (sessions[fromNumber].action === 'select_unit_to_manage') {
+          console.log(`Unit selection received: ${text} from ${fromNumber}`);
+          const unitIndex = parseInt(text) - 1;
+          const units = sessions[fromNumber].units;
+
+          if (unitIndex >= 0 && unitIndex < units.length) {
+            const selectedUnit = units[unitIndex];
+            console.log(`Selected unit: ${selectedUnit.unitNumber} (ID: ${selectedUnit._id})`);
+            await sendUnitManagementOptions(fromNumber, selectedUnit);
+            sessions[fromNumber].action = null; // Clear action after showing options
+            delete sessions[fromNumber].propertyId;
+            delete sessions[fromNumber].units;
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease reply with a valid unit number.');
+          }
         } else if (text.toLowerCase() === 'help') {
           try {
             sessions[fromNumber].action = null;
@@ -384,6 +388,7 @@ router.post('/', async (req, res) => {
         }
       }
 
+      // Process interactive button replies
       if (interactive) {
         const selectedOption = interactive.button_reply.id;
 
@@ -436,10 +441,7 @@ router.post('/', async (req, res) => {
           await sendMessage(fromNumber, `ℹ️ *Canceled* \nRemoval of tenant *${sessions[fromNumber].tenantToRemove.name}* has been canceled.`);
           sessions[fromNumber].action = null;
           delete sessions[fromNumber].tenantToRemove;
-        }
-
-        // Handle menu options
-        else if (selectedOption === 'account_info') {
+        } else if (selectedOption === 'account_info') {
           try {
             const user = await User.findOne({ phoneNumber });
             if (user) {
@@ -510,7 +512,7 @@ router.post('/', async (req, res) => {
         } else if (selectedOption === 'manage_properties') {
           await sendPropertyOptions(fromNumber);
         } else if (selectedOption === 'manage_units') {
-          await sendUnitOptions(fromNumber);
+          await sendUnitOptions(fromNumber); // Triggers property selection
         } else if (selectedOption === 'manage_tenants') {
           await sendTenantOptions(fromNumber);
         } else if (selectedOption === 'add_property') {
@@ -522,9 +524,9 @@ router.post('/', async (req, res) => {
         } else if (selectedOption === 'add_unit') {
           await sendPropertyLink(fromNumber, 'addunit');
         } else if (selectedOption === 'edit_unit') {
-          await promptPropertySelectionForUnits(fromNumber, 'edit_unit');
+          await sendPropertyLink(fromNumber, 'editunit');
         } else if (selectedOption === 'remove_unit') {
-          await promptPropertySelectionForUnits(fromNumber, 'remove_unit');
+          await promptUnitRemoval(fromNumber);
         } else if (selectedOption === 'add_tenant') {
           await sendPropertyLink(fromNumber, 'addtenant');
         } else if (selectedOption === 'edit_tenant') {
@@ -532,6 +534,12 @@ router.post('/', async (req, res) => {
           await promptPropertySelection(fromNumber, 'edittenant');
         } else if (selectedOption === 'remove_tenant') {
           await promptTenantRemoval(fromNumber);
+        } else if (selectedOption === 'edit_unit_from_list') {
+          console.log(`Edit Unit selected for ${fromNumber}`);
+          await sendPropertyLink(fromNumber, 'editunit'); // Correctly sends editunit link
+        } else if (selectedOption === 'remove_unit_from_list') {
+          console.log(`Remove Unit selected for ${fromNumber}`);
+          await sendPropertyLink(fromNumber, 'removeunit');
         }
       }
     }
@@ -542,27 +550,54 @@ router.post('/', async (req, res) => {
   res.sendStatus(200);
 });
 
-async function promptPropertySelectionForUnits(phoneNumber, action) {
-  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
-  if (!user) {
-    await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
+// Helper function to prompt unit selection
+async function promptUnitSelection(phoneNumber, propertyId) {
+  console.log(`Prompting unit selection for property ${propertyId} for ${phoneNumber}`);
+  const units = await Unit.find({ property: propertyId });
+  if (!units.length) {
+    await sendMessage(phoneNumber, 'ℹ️ *No Units Found* \nNo units available for this property.');
     return;
   }
 
-  const properties = await Property.find({ userId: user._id });
-  if (!properties.length) {
-    await sendMessage(phoneNumber, 'ℹ️ *No Properties Found* \nAdd a property first to manage units.');
-    return;
-  }
-
-  let propertyList = `*🏠 Select a Property* \nReply with the number of the property to ${action === 'edit_unit' ? 'edit' : 'remove'} units:\n━━━━━━━━━━━━━━━\n`;
-  properties.forEach((property, index) => {
-    propertyList += `${index + 1}. *${property.name}* \n   _Address_: ${property.address}\n`;
+  let unitList = `*🚪 Select a Unit* \nReply with the number of the unit:\n━━━━━━━━━━━━━━━\n`;
+  units.forEach((unit, index) => {
+    unitList += `${index + 1}. *${unit.unitNumber}* \n   _Rent_: $${unit.rentAmount}\n`;
   });
-  propertyList += `━━━━━━━━━━━━━━━`;
-  await sendMessage(phoneNumber, propertyList);
-  sessions[phoneNumber] = { action: `select_property_for_${action}`, properties };
+  unitList += `━━━━━━━━━━━━━━━`;
+  await sendMessage(phoneNumber, unitList);
+  console.log(`Unit list sent to ${phoneNumber}: ${unitList}`);
+
+  sessions[phoneNumber].units = units;
 }
+
+async function sendUnitManagementOptions(phoneNumber, unit) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: `🚪 Unit: ${unit.unitNumber}` },
+      body: { text: '*What would you like to do with this unit?*' },
+      footer: { text: 'Rental Management App' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'edit_unit_from_list', title: '✏️ Edit Unit' } },
+          { type: 'reply', reply: { id: 'remove_unit_from_list', title: '🗑️ Remove Unit' } },
+        ],
+      },
+    },
+  };
+
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: {
+      'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  console.log(`Unit management options sent to ${phoneNumber} for unit: ${unit.unitNumber}`);
+}
+
 // Helper function to wait for the user response (polling every second)
 async function waitForUserResponse(phoneNumber, timeout = 30000) {
   return new Promise((resolve, reject) => {
@@ -728,50 +763,122 @@ async function promptPropertyInfoSelection(phoneNumber) {
 async function sendPropertyInfo(phoneNumber, property) {
   console.log(`Sending property info for ${property.name} to ${phoneNumber}`);
 
-  const populatedProperty = await Property.findById(property._id).populate('images');
-  if (!populatedProperty) {
-    console.error(`Property ${property._id} not found in database`);
+  // Fetch the property without populating 'images'
+  const propertyDoc = await Property.findById(property._id);
+  if (!propertyDoc) {
+    console.error(`Property ${property._id} not found`);
     await sendMessage(phoneNumber, '⚠️ *Error* \nProperty not found.');
     return;
   }
 
-  let imageUrl = 'https://via.placeholder.com/150'; // Default fallback
-  if (populatedProperty.images && populatedProperty.images.length > 0) {
-    const imageDoc = populatedProperty.images[0];
-    console.log(`Image document: ${JSON.stringify(imageDoc)}`);
+  console.log('Property document:', JSON.stringify(propertyDoc, null, 2));
 
-    if (imageDoc && imageDoc.imageUrl) {
-      const key = imageDoc.imageUrl; // Already the bucket path (e.g., "images/1741467333425-92hFJ.png")
-      console.log(`Using key from imageUrl: ${key}`);
+  let images = 'https://via.placeholder.com/150'; // Default fallback
+  if (propertyDoc.images && propertyDoc.images.length > 0) {
+    const key = propertyDoc.images[0]; // Use the first image
+    console.log(`Using key from images[0]: ${key}`);
 
-      try {
-        const command = new GetObjectCommand({
-          Bucket: process.env.R2_BUCKET,
-          Key: key,
-        });
-        imageUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 }); // 1-hour expiration
-        console.log(`Generated signed URL: ${imageUrl}`);
-      } catch (error) {
-        console.error(`Error generating signed URL for key ${key}: ${error.message}`);
-      }
-    } else {
-      console.warn(`No valid imageUrl in Image document for property ${property._id}`);
+    const params = {
+      Bucket: process.env.R2_BUCKET,
+      Key: key,
+      Expires: 60,
+    };
+
+    try {
+      images = await s3.getSignedUrlPromise('getObject', params);
+      console.log(`Generated signed URL: ${images}`);
+    } catch (error) {
+      console.error(`Error generating signed URL for key ${key}: ${error.message}`);
     }
   } else {
-    console.log(`No images for property ${property._id}`);
+    console.log(`No images found for property ${property._id}`);
   }
 
-  const caption = `
-*🏠 Property Details*
+  const caption = `*🏠 Property Details*
 ━━━━━━━━━━━━━━━
-*Name*: ${property.name}
-*Address*: ${property.address}
-*Units*: ${property.units}
-*Total Amount*: $${property.totalAmount}
-*ID*: ${property._id}
-*Created At*: ${property.createdAt ? new Date(property.createdAt).toLocaleDateString() : 'N/A'}
+*Name*: ${propertyDoc.name}
+*Address*: ${propertyDoc.address}
+*Units*: ${propertyDoc.units}
+*Total Amount*: $${propertyDoc.totalAmount}
+*ID*: ${propertyDoc._id}
+*Created At*: ${propertyDoc.createdAt ? new Date(propertyDoc.createdAt).toLocaleDateString() : 'N/A'}
+━━━━━━━━━━━━━━━`;
+
+  try {
+    await sendImageMessage(phoneNumber, images, caption);
+    console.log(`Image message sent to ${phoneNumber} with URL: ${images}`);
+  } catch (error) {
+    console.error(`Error sending image: ${JSON.stringify(error.response ? error.response.data : error.message)}`);
+    await sendMessage(phoneNumber, `⚠️ *Image Error* \nFailed to load image. Here’s the info:\n${caption}`);
+  }
+}
+// Helper function to prompt unit info selection
+async function promptUnitInfoSelection(phoneNumber) {
+  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+  if (!user) {
+    await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
+    return;
+  }
+
+  const units = await Unit.find({ userId: user._id }).populate('images').populate('property');
+  if (!units.length) {
+    await sendMessage(phoneNumber, 'ℹ️ *No Units Found* \nNo units available to display.');
+    return;
+  }
+
+  let unitList = `*🚪 Select a Unit for Info* \nReply with the number of the unit:\n━━━━━━━━━━━━━━━\n`;
+  units.forEach((unit, index) => {
+    unitList += `${index + 1}. *${unit.unitNumber}* \n   _Property_: ${unit.property ? unit.property.name : 'N/A'}\n`;
+  });
+  unitList += `━━━━━━━━━━━━━━━`;
+  await sendMessage(phoneNumber, unitList);
+  sessions[phoneNumber] = { action: 'select_unit_for_info', units };
+}
+
+// Helper function to send unit info
+async function sendUnitInfo(phoneNumber, unit) {
+  console.log(`Sending unit info for ${unit.unitNumber} to ${phoneNumber}`);
+
+  const unitDoc = await Unit.findById(unit._id).populate('property');
+  if (!unitDoc) {
+    console.error(`Unit ${unit._id} not found`);
+    await sendMessage(phoneNumber, '⚠️ *Error* \nUnit not found.');
+    return;
+  }
+
+  console.log('Unit document:', JSON.stringify(unitDoc, null, 2));
+
+  let imageUrl = 'https://via.placeholder.com/150';
+  if (unitDoc.images && unitDoc.images.length > 0) {
+    const key = unitDoc.images[0]; // Use the first image
+    console.log(`Using key from images[0]: ${key}`);
+
+    const params = {
+      Bucket: process.env.R2_BUCKET,
+      Key: key,
+      Expires: 60,
+    };
+
+    try {
+      imageUrl = await s3.getSignedUrlPromise('getObject', params);
+      console.log(`Generated signed URL: ${imageUrl}`);
+    } catch (error) {
+      console.error(`Error generating signed URL for key ${key}: ${error.message}`);
+    }
+  } else {
+    console.log(`No images found for unit ${unit._id}`);
+  }
+
+  const caption = `*🚪 Unit Details*
 ━━━━━━━━━━━━━━━
-  `;
+*Unit Number*: ${unitDoc.unitNumber}
+*Property*: ${unitDoc.property ? unitDoc.property.name : 'N/A'}
+*Rent Amount*: $${unitDoc.rentAmount}
+*Floor*: ${unitDoc.floor || 'N/A'}
+*Size*: ${unitDoc.size ? unitDoc.size + ' sq ft' : 'N/A'}
+*ID*: ${unitDoc._id}
+*Created At*: ${unitDoc.createdAt ? new Date(unitDoc.createdAt).toLocaleDateString() : 'N/A'}
+━━━━━━━━━━━━━━━`;
 
   try {
     await sendImageMessage(phoneNumber, imageUrl, caption);
@@ -780,67 +887,6 @@ async function sendPropertyInfo(phoneNumber, property) {
     console.error(`Error sending image: ${JSON.stringify(error.response ? error.response.data : error.message)}`);
     await sendMessage(phoneNumber, `⚠️ *Image Error* \nFailed to load image. Here’s the info:\n${caption}`);
   }
-}
-// Helper function to prompt unit info selection
-async function promptUnitSelection(phoneNumber, action, propertyId) {
-  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
-  if (!user) {
-    await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
-    return;
-  }
-
-  const units = await Unit.find({ userId: user._id, property: propertyId });
-  if (!units.length) {
-    await sendMessage(phoneNumber, 'ℹ️ *No Units Found* \nNo units available for this property.');
-    sessions[phoneNumber].action = null;
-    return;
-  }
-
-  let unitList = `*🚪 Select a Unit to ${action === 'edit_unit' ? 'Edit' : 'Remove'}* \nReply with the number of the unit:\n━━━━━━━━━━━━━━━\n`;
-  units.forEach((unit, index) => {
-    unitList += `${index + 1}. *${unit.unitNumber}* \n   _ID_: ${unit._id}\n`;
-  });
-  unitList += `━━━━━━━━━━━━━━━`;
-  await sendMessage(phoneNumber, unitList);
-  sessions[phoneNumber] = { action: `select_unit_to_${action}`, units, propertyId };
-}
-// Helper function to send unit info
-async function sendUnitInfo(phoneNumber, unit) {
-  // Populate the images and property fields
-  const populatedUnit = await Unit.findById(unit._id).populate('images').populate('property');
-  let imageUrl = 'https://via.placeholder.com/150'; // Default fallback image
-
-  if (populatedUnit.images && populatedUnit.images.length > 0) {
-    imageUrl = populatedUnit.images[0].imageUrl; // Direct URL from R2
-    console.log(`Unit image URL: ${imageUrl}`);
-
-    // Optional: Generate a signed URL if your R2 bucket is private
-    /*
-    const key = imageUrl.split('/').pop();
-    const command = new GetObjectCommand({
-      Bucket: process.env.R2_BUCKET,
-      Key: key,
-    });
-    imageUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
-    console.log(`Signed URL generated: ${imageUrl}`);
-    */
-  } else {
-    console.log(`No images found for unit ${unit._id}`);
-  }
-
-  const caption = `
-*🚪 Unit Details*
-━━━━━━━━━━━━━━━
-*Unit Number*: ${unit.unitNumber}
-*Property*: ${populatedUnit.property ? populatedUnit.property.name : 'N/A'}
-*Rent Amount*: $${unit.rentAmount}
-*Floor*: ${unit.floor || 'N/A'}
-*Size*: ${unit.size ? unit.size + ' sq ft' : 'N/A'}
-*ID*: ${unit._id}
-*Created At*: ${unit.createdAt ? new Date(unit.createdAt).toLocaleDateString() : 'N/A'}
-━━━━━━━━━━━━━━━
-  `;
-  await sendImageMessage(phoneNumber, imageUrl, caption);
 }
 // Helper function to prompt tenant info selection
 async function promptTenantInfoSelection(phoneNumber) {
@@ -866,44 +912,61 @@ async function promptTenantInfoSelection(phoneNumber) {
 }
 // Helper function to send tenant info
 async function sendTenantInfo(phoneNumber, tenant) {
-  // Populate the unitAssigned field
-  const populatedTenant = await Tenant.findById(tenant._id).populate('unitAssigned');
-  let imageUrl = populatedTenant.photo || 'https://via.placeholder.com/150'; // Use tenant photo or fallback
+  console.log(`Sending tenant info for ${tenant.name} to ${phoneNumber}`);
 
-  console.log(`Tenant photo URL: ${imageUrl}`);
-
-  // Optional: Generate a signed URL if your R2 bucket is private
-  if (populatedTenant.photo) {
-    /*
-    const key = populatedTenant.photo.split('/').pop();
-    const command = new GetObjectCommand({
-      Bucket: process.env.R2_BUCKET,
-      Key: key,
-    });
-    imageUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
-    console.log(`Signed URL generated: ${imageUrl}`);
-    */
+  const tenantDoc = await Tenant.findById(tenant._id).populate('unitAssigned');
+  if (!tenantDoc) {
+    console.error(`Tenant ${tenant._id} not found`);
+    await sendMessage(phoneNumber, '⚠️ *Error* \nTenant not found.');
+    return;
   }
 
-  const caption = `
-*👥 Tenant Details*
-━━━━━━━━━━━━━━━
-*Name*: ${tenant.name}
-*Phone Number*: ${tenant.phoneNumber}
-*Unit*: ${populatedTenant.unitAssigned ? populatedTenant.unitAssigned.unitNumber : 'N/A'}
-*Property*: ${tenant.propertyName}
-*Lease Start*: ${tenant.lease_start ? new Date(tenant.lease_start).toLocaleDateString() : 'N/A'}
-*Deposit*: $${tenant.deposit}
-*Rent Amount*: $${tenant.rent_amount}
-*Tenant ID*: ${tenant.tenant_id}
-*Email*: ${tenant.email || 'N/A'}
-*ID Proof*: ${tenant.idProof ? 'Available' : 'N/A'}
-*Created At*: ${tenant.createdAt ? new Date(tenant.createdAt).toLocaleDateString() : 'N/A'}
-━━━━━━━━━━━━━━━
-  `;
-  await sendImageMessage(phoneNumber, imageUrl, caption);
-}
+  console.log('Tenant document:', JSON.stringify(tenantDoc, null, 2));
 
+  let imageUrl = 'https://via.placeholder.com/150';
+  if (tenantDoc.images && tenantDoc.images.length > 0) {
+    const key = tenantDoc.images[0]; // Use the first image (photo)
+    console.log(`Using key from images[0]: ${key}`);
+
+    const params = {
+      Bucket: process.env.R2_BUCKET,
+      Key: key,
+      Expires: 60,
+    };
+
+    try {
+      imageUrl = await s3.getSignedUrlPromise('getObject', params);
+      console.log(`Generated signed URL: ${imageUrl}`);
+    } catch (error) {
+      console.error(`Error generating signed URL for key ${key}: ${error.message}`);
+    }
+  } else {
+    console.log(`No images found for tenant ${tenant._id}`);
+  }
+
+  const caption = `*👥 Tenant Details*
+━━━━━━━━━━━━━━━
+*Name*: ${tenantDoc.name}
+*Phone Number*: ${tenantDoc.phoneNumber}
+*Unit*: ${tenantDoc.unitAssigned ? tenantDoc.unitAssigned.unitNumber : 'N/A'}
+*Property*: ${tenantDoc.propertyName}
+*Lease Start*: ${tenantDoc.lease_start ? new Date(tenantDoc.lease_start).toLocaleDateString() : 'N/A'}
+*Deposit*: $${tenantDoc.deposit}
+*Rent Amount*: $${tenantDoc.rent_amount}
+*Tenant ID*: ${tenantDoc.tenant_id}
+*Email*: ${tenantDoc.email || 'N/A'}
+*ID Proof*: ${tenantDoc.idProof ? 'Available' : 'N/A'}
+*Created At*: ${tenantDoc.createdAt ? new Date(tenantDoc.createdAt).toLocaleDateString() : 'N/A'}
+━━━━━━━━━━━━━━━`;
+
+  try {
+    await sendImageMessage(phoneNumber, imageUrl, caption);
+    console.log(`Image message sent to ${phoneNumber} with URL: ${imageUrl}`);
+  } catch (error) {
+    console.error(`Error sending image: ${JSON.stringify(error.response ? error.response.data : error.message)}`);
+    await sendMessage(phoneNumber, `⚠️ *Image Error* \nFailed to load image. Here’s the info:\n${caption}`);
+  }
+}
 // Helper function for Property Options (Add, Edit, Remove)
 async function sendPropertyOptions(phoneNumber) {
   const buttonMenu = {
@@ -932,9 +995,33 @@ async function sendPropertyOptions(phoneNumber) {
     },
   });
 }
+async function promptPropertySelectionForUnits(phoneNumber, action) {
+  console.log(`Prompting property selection for units for ${phoneNumber}`);
+  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
+  if (!user) {
+    await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
+    return;
+  }
 
+  const properties = await Property.find({ userId: user._id });
+  if (!properties.length) {
+    await sendMessage(phoneNumber, 'ℹ️ *No Properties Found* \nNo properties available to manage units.');
+    return;
+  }
+
+  let propertyList = `*🏠 Select a Property* \nReply with the number of the property to manage its units:\n━━━━━━━━━━━━━━━\n`;
+  properties.forEach((property, index) => {
+    propertyList += `${index + 1}. *${property.name}* \n   _Address_: ${property.address}\n`;
+  });
+  propertyList += `━━━━━━━━━━━━━━━`;
+  await sendMessage(phoneNumber, propertyList);
+  console.log(`Property list sent to ${phoneNumber} for unit management: ${propertyList}`);
+
+  sessions[phoneNumber] = { action: 'select_property_for_units', properties, nextAction: action };
+}
 // Helper function for Unit Options (Add, Edit, Remove)
 async function sendUnitOptions(phoneNumber) {
+  await promptPropertySelectionForUnits(phoneNumber, 'manage_units');
   const buttonMenu = {
     messaging_product: 'whatsapp',
     to: phoneNumber,
@@ -1014,7 +1101,11 @@ async function promptPropertySelection(phoneNumber, action) {
   await sendMessage(phoneNumber, propertyList);
   console.log(`Property list sent to ${phoneNumber}: ${propertyList}`);
 
-  sessions[phoneNumber] = { action: 'select_property', properties };
+   sessions[phoneNumber] = { 
+    action: 'select_property_for_unit_action',
+    properties,
+    unitAction: action 
+  };
 }
 
 // Helper function to prompt tenant selection (for editing)
@@ -1176,18 +1267,16 @@ async function promptUnitRemoval(phoneNumber) {
 
 // Helper function to confirm unit removal
 async function confirmUnitRemoval(phoneNumber, unit) {
-  const user = await User.findOne({ phoneNumber: `+${phoneNumber}` });
-  if (!user) {
-    await sendMessage(phoneNumber, '⚠️ *User Not Found* \nNo account associated with this number.');
-    return;
-  }
-
   const tenants = await Tenant.find({ unitAssigned: unit._id });
+  
   if (tenants.length > 0) {
-    await sendMessage(phoneNumber, `⚠️ *Cannot Remove Unit* \nUnit *${unit.unitNumber}* has ${tenants.length} tenant(s) assigned. Please remove the tenants first.`);
-    sessions[phoneNumber].action = null;
+    const tenantList = tenants.map(t => `- ${t.name}`).join('\n');
+    await sendMessage(phoneNumber,
+      `⚠️ *Cannot Remove Unit*\nUnit ${unit.unitNumber} has tenants:\n${tenantList}\nRemove tenants first.`
+    );
     return;
   }
+  
 
   const confirmationMessage = {
     messaging_product: 'whatsapp',
