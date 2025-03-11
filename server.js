@@ -132,6 +132,8 @@ app.post('/addunit', async (req, res) => {
   }
 });
 
+
+
 // Add Tenant Route (called from webhook)
 app.post('/addtenant', async (req, res) => {
   const { phoneNumber, name, propertyName, unitAssigned, lease_start, deposit, rent_amount, tenant_id } = req.body;
@@ -238,6 +240,10 @@ app.post('/upload-image/:sessionId', upload.fields([{ name: 'photo', maxCount: 1
     await sendMessage(phoneNumber, `⚠️ *Upload Failed* \nPlease upload images again using the same link.`);
     res.status(500).send('An error occurred while uploading images.');
   }
+});
+
+app.get('/upload-image/:sessionId', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'upload.html'));
 });
 
 // Generate Tenant ID
