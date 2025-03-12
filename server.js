@@ -7,13 +7,6 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Debug environment variables
-console.log('Environment Variables:');
-console.log('MONGODB_URI:', process.env.MONGODB_URI);
-console.log('PHONE_NUMBER_ID:', process.env.PHONE_NUMBER_ID);
-console.log('WHATSAPP_ACCESS_TOKEN:', process.env.WHATSAPP_ACCESS_TOKEN);
-console.log('VERIFY_TOKEN:', process.env.VERIFY_TOKEN);
-
 // Validate environment variables
 const requiredEnvVars = ['MONGODB_URI', 'PHONE_NUMBER_ID', 'WHATSAPP_ACCESS_TOKEN', 'VERIFY_TOKEN'];
 requiredEnvVars.forEach((varName) => {
@@ -34,7 +27,6 @@ mongoose.connect(process.env.MONGODB_URI, {
   process.exit(1);
 });
 
-// Suppress strictQuery deprecation warning
 mongoose.set('strictQuery', true);
 
 // WhatsApp Cloud API Configuration
@@ -71,20 +63,57 @@ const Unit = require('./models/Unit');
 
 // Webhook for incoming messages
 app.post('/webhook', async (req, res) => {
-  const incomingMsg = req.body.entry[0]?.changes[0]?.value?.messages[0]?.text?.body?.toLowerCase().trim();
-  const fromNumber = req.body.entry[0]?.changes[0]?.value?.contacts[0]?.wa_id;
+  console.log('Incoming webhook payload:', JSON.stringify(req.body, null, 2));
 
-  if (!incomingMsg || !fromNumber) {
+  // Validate basic payload structure
+  if (!req.body || !req.body.entry || !Array.isArray(req.body.entry) || req.body.entry.length === 0) {
+    console.error('Invalid or missing "entry" in webhook payload');
+    return res.sendStatus(400);
+  }
+
+  const entry = req.body.entry[0];
+  if (!entry.changes || !Array.isArray(entry.changes) || entry.changes.length === 0) {
+    console.error('Invalid or missing "changes" in webhook entry');
+    return res.sendStatus(400);
+  }
+
+  const change = entry.changes[0];
+  // Check if this is a message event (has "messages") or a status update (has "statuses")
+  if (!change.value || !change.value.messages || !Array.isArray(change.value.messages) || change.value.messages.length === 0) {
+    // If it’s a status update or something else, just acknowledge it silently
     return res.sendStatus(200);
   }
 
+  const message = change.value.messages[0];
+  let incomingMsg;
+  if (message?.text?.body) {
+    incomingMsg = message.text.body.toLowerCase().trim();
+  } else if (message?.interactive?.button_reply?.id) {
+    incomingMsg = message.interactive.button_reply.id.toLowerCase().trim();
+  }
+
+  const fromNumber = change.value.contacts?.[0]?.wa_id;
+
+  if (!incomingMsg || !fromNumber) {
+    console.error('Missing message body or sender number');
+    return res.sendStatus(200);
+  }
+  console.log(fromNumber);
   let user = await User.findOne({ phoneNumber: fromNumber });
 
   if (!user) {
     await sendWhatsAppMessage(fromNumber, {
-      type: 'text',
-      text: {
-        body: `Welcome to MyTenants! It seems you're not registered yet.\n\nOur app helps landlords manage properties, units, and tenants easily.\n\nReply with "Onboard" to register`
+      type: 'interactive',
+      interactive: {
+        type: 'button',
+        body: { 
+          text: 'Welcome to MyTenants! It seems you\'re not registered yet.\n\nOur app helps landlords manage properties, units, and tenants easily.' 
+        },
+        action: {
+          buttons: [
+            { type: 'reply', reply: { id: 'onboard', title: 'Onboard' } }
+          ]
+        }
       }
     });
   } else if (incomingMsg === 'help') {
@@ -106,7 +135,7 @@ app.post('/webhook', async (req, res) => {
     await sendWhatsAppMessage(fromNumber, {
       type: 'text',
       text: {
-        body: `Account Information:\nPhone: ${user.phoneNumber}\nName: ${user.profileName || 'Not set'}\nVerified: ${user.verified ? 'Yes' : 'No'}\nSubscription: ${user.subscription}\nRegistered: ${user.registrationDate.toDateString()}`
+        body: `Account Information:\nPhone: ${user.phoneNumber}\nName: ${user.profileName || 'Not set'}\nVerified: ${user.verified ? 'Yes' : 'No'}\nSubscription: ${user.subscription}\nRegistered: ${user.registrationDate.toDateString()}${user.verifiedDate ? `\nVerified Date: ${user.verifiedDate.toDateString()}` : ''}`
       }
     });
   } else if (incomingMsg === 'manage') {
@@ -143,7 +172,9 @@ app.post('/webhook', async (req, res) => {
     try {
       const newUser = new User({
         phoneNumber: fromNumber,
-        profileName: 'Landlord'
+        profileName: 'Landlord',
+        verified: false,
+        subscription: 'Free'
       });
       await newUser.save();
       await sendWhatsAppMessage(fromNumber, {
@@ -176,7 +207,7 @@ app.post('/webhook', async (req, res) => {
 });
 
 // Webhook verification
-app.get('/whatsapp', (req, res) => {
+app.get('/webhook', (req, res) => {
   const verifyToken = process.env.VERIFY_TOKEN;
 
   if (
