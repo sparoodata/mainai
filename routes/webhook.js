@@ -4,8 +4,9 @@ const User = require('../models/User');
 const Tenant = require('../models/Tenant');
 const Property = require('../models/Property');
 const Unit = require('../models/Unit');
-const Authorize = require('../models/Authorize');
+const UploadToken = require('../models/UploadToken'); // New model
 const Groq = require('groq-sdk');
+const crypto = require('crypto');
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const router = express.Router();
@@ -26,28 +27,18 @@ async function shortenUrl(longUrl) {
     return longUrl;
   }
 }
-
-async function getGroqAIResponse(message, phoneNumber, isAssistanceMode) {
-  try {
-    const systemPrompt = isAssistanceMode
-      ? "You are an AI assistant helping a user with commands for a rental management app. Suggest using *Help* to see the menu or assist with their query."
-      : "You are an AI agent for a rental management app. If the user needs help with commands, suggest using *Help* to see the menu. Otherwise, respond naturally to the message.";
-
-    const response = await groq.chat.completions.create({
-      model: 'llama3-8b-8192',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: message },
-      ],
-      max_tokens: 200,
-      temperature: 0.7,
-    });
-
-    return response.choices[0].message.content.trim();
-  } catch (error) {
-    console.error('Error with Groq AI:', error);
-    return '⚠️ *Sorry*, I encountered an error. Please try again or type *Help* for assistance.';
-  }
+async function generateUploadToken(phoneNumber, type, entityId) {
+  const token = crypto.randomBytes(16).toString('hex');
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes expiration
+  const uploadToken = new UploadToken({
+    token,
+    phoneNumber,
+    type,
+    entityId,
+    expiresAt,
+  });
+  await uploadToken.save();
+  return token;
 }
 
 async function sendMessage(phoneNumber, message) {
@@ -138,9 +129,10 @@ router.post('/', async (req, res) => {
           });
           await property.save();
 
-          const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/property/${property._id}`;
+          const token = await generateUploadToken(phoneNumber, 'property', property._id);
+          const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/property/${property._id}?token=${token}`;
           const shortUrl = await shortenUrl(imageUploadUrl);
-          await sendMessage(fromNumber, `✅ *Property Added* \nProperty "${property.name}" has been added successfully!\n📸 *Upload Image* \nClick here to upload an image for this property: ${shortUrl}`);
+          await sendMessage(fromNumber, `✅ *Property Added* \nProperty "${property.name}" has been added successfully!\n📸 *Upload Image* \nClick here to upload an image for this property (valid once): ${shortUrl}`);
           sessions[fromNumber].action = null;
           delete sessions[fromNumber].propertyData;
         } else if (sessions[fromNumber].action === 'add_unit_select_property') {
@@ -178,9 +170,10 @@ router.post('/', async (req, res) => {
           });
           await unit.save();
 
-          const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/unit/${unit._id}`;
+          const token = await generateUploadToken(phoneNumber, 'unit', unit._id);
+          const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/unit/${unit._id}?token=${token}`;
           const shortUrl = await shortenUrl(imageUploadUrl);
-          await sendMessage(fromNumber, `✅ *Unit Added* \nUnit "${unit.unitNumber}" has been added successfully!\n📸 *Upload Image* \nClick here to upload an image for this unit: ${shortUrl}`);
+          await sendMessage(fromNumber, `✅ *Unit Added* \nUnit "${unit.unitNumber}" has been added successfully!\n📸 *Upload Image* \nClick here to upload an image for this unit (valid once): ${shortUrl}`);
           sessions[fromNumber].action = null;
           delete sessions[fromNumber].unitData;
           delete sessions[fromNumber].properties;
@@ -222,9 +215,10 @@ router.post('/', async (req, res) => {
           });
           await tenant.save();
 
-          const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/tenant/${tenant._id}`;
+          const token = await generateUploadToken(phoneNumber, 'tenant', tenant._id);
+          const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/tenant/${tenant._id}?token=${token}`;
           const shortUrl = await shortenUrl(imageUploadUrl);
-          await sendMessage(fromNumber, `✅ *Tenant Added* \nTenant "${tenant.name}" has been added successfully!\n📸 *Upload Photo* \nClick here to upload a photo for this tenant: ${shortUrl}`);
+          await sendMessage(fromNumber, `✅ *Tenant Added* \nTenant "${tenant.name}" has been added successfully!\n📸 *Upload Photo* \nClick here to upload a photo for this tenant (valid once): ${shortUrl}`);
           sessions[fromNumber].action = null;
           delete sessions[fromNumber].tenantData;
           delete sessions[fromNumber].units;
@@ -248,13 +242,6 @@ router.post('/', async (req, res) => {
             },
           };
           await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
-        } else if (text.startsWith('\\')) {
-          const query = text.substring(1).trim();
-          const aiResponse = await getGroqAIResponse(query, phoneNumber, true);
-          await sendMessage(fromNumber, aiResponse);
-        } else if (!sessions[fromNumber].action) {
-          const aiResponse = await getGroqAIResponse(text, phoneNumber, false);
-          await sendMessage(fromNumber, aiResponse);
         }
       }
 
@@ -374,7 +361,6 @@ async function sendPropertyOptions(phoneNumber) {
       action: {
         buttons: [
           { type: 'reply', reply: { id: 'add_property', title: '➕ Add Property' } },
-          // Add Edit/Remove options as needed
         ],
       },
     },
@@ -394,7 +380,6 @@ async function sendUnitOptions(phoneNumber) {
       action: {
         buttons: [
           { type: 'reply', reply: { id: 'add_unit', title: '➕ Add Unit' } },
-          // Add Edit/Remove options as needed
         ],
       },
     },
@@ -414,7 +399,6 @@ async function sendTenantOptions(phoneNumber) {
       action: {
         buttons: [
           { type: 'reply', reply: { id: 'add_tenant', title: '➕ Add Tenant' } },
-          // Add Edit/Remove options as needed
         ],
       },
     },

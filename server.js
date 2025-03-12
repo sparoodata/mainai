@@ -8,13 +8,13 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const axios = require("axios");
 const multer = require('multer');
-const crypto = require('crypto'); // For generating unique tokens
+const crypto = require('crypto');
 const Tenant = require('./models/Tenant');
 const Image = require('./models/Image');
 const Property = require('./models/Property');
 const User = require('./models/User');
 const Unit = require('./models/Unit');
-const UploadToken = require('./models/UploadToken'); // New model
+const UploadToken = require('./models/UploadToken');
 const AWS = require('aws-sdk');
 
 const app = express();
@@ -70,9 +70,9 @@ const upload = multer({
 const { router, sendMessage } = require('./routes/webhook');
 app.use('/webhook', router);
 
-// Middleware to validate upload token
+// Middleware to validate upload token (without marking as used on GET)
 async function validateUploadToken(req, res, next) {
-  const { token } = req.query;
+  const { token } = req.query || req.body; // Check query for GET, body for POST
   if (!token) {
     return res.status(403).send('No token provided.');
   }
@@ -89,10 +89,6 @@ async function validateUploadToken(req, res, next) {
       return res.status(403).send('This upload link has expired.');
     }
 
-    // Mark token as used after the page is loaded
-    uploadToken.used = true;
-    await uploadToken.save();
-
     req.uploadToken = uploadToken; // Pass token data to the route
     next();
   } catch (error) {
@@ -108,18 +104,12 @@ app.get('/upload-image/:phoneNumber/:type/:id', validateUploadToken, (req, res) 
   res.render('uploadImage', { phoneNumber, type, id, token });
 });
 
-// Image upload POST route with additional token check
-app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), async (req, res) => {
+// Image upload POST route with token validation and invalidation on success
+app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validateUploadToken, async (req, res) => {
   const { phoneNumber, type, id } = req.params;
-  const { token } = req.body; // Token passed from form
+  const { token } = req.body;
 
   try {
-    const uploadToken = await UploadToken.findOne({ token });
-    if (!uploadToken || uploadToken.used || new Date() > uploadToken.expiresAt) {
-      await sendMessage(phoneNumber, `❌ *Error* \nUpload link is invalid or expired. Please request a new link.`);
-      return res.status(403).send('Invalid or expired token.');
-    }
-
     const key = `images/${Date.now()}-${req.file.originalname}`;
     const uploadParams = {
       Bucket: process.env.R2_BUCKET,
@@ -150,6 +140,10 @@ app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), async (
       await entity.save();
       await sendMessage(phoneNumber, `✅ *Success* \nPhoto uploaded successfully for tenant "${entity.name}".`);
     }
+
+    // Mark token as used only after successful upload
+    req.uploadToken.used = true;
+    await req.uploadToken.save();
 
     res.send('Image uploaded successfully!');
   } catch (error) {
