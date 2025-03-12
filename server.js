@@ -32,6 +32,7 @@ app.set('trust proxy', 1);
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
+// Body-parser for JSON and URL-encoded data
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -61,31 +62,39 @@ app.use(session({
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Multer setup for file uploads
 const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
 });
 
 const { router, sendMessage } = require('./routes/webhook');
 app.use('/webhook', router);
 
-// Middleware to validate upload token (without marking as used on GET)
+// Middleware to validate upload token
 async function validateUploadToken(req, res, next) {
-  const { token } = req.query || req.body; // Check query for GET, body for POST
+  // For GET, token is in query; for POST, it’s in body
+  const token = req.method === 'GET' ? req.query.token : req.body.token;
+  console.log(`Validating token: ${token}, Method: ${req.method}`); // Debug log
+
   if (!token) {
+    console.log('No token provided in request');
     return res.status(403).send('No token provided.');
   }
 
   try {
     const uploadToken = await UploadToken.findOne({ token });
     if (!uploadToken) {
+      console.log('Token not found in database');
       return res.status(403).send('Invalid or expired token.');
     }
     if (uploadToken.used) {
+      console.log('Token already used');
       return res.status(403).send('This upload link has already been used.');
     }
     if (new Date() > uploadToken.expiresAt) {
+      console.log('Token expired');
       return res.status(403).send('This upload link has expired.');
     }
 
@@ -101,13 +110,16 @@ async function validateUploadToken(req, res, next) {
 app.get('/upload-image/:phoneNumber/:type/:id', validateUploadToken, (req, res) => {
   const { phoneNumber, type, id } = req.params;
   const { token } = req.query;
+  console.log(`Rendering upload page with token: ${token}`); // Debug log
   res.render('uploadImage', { phoneNumber, type, id, token });
 });
 
-// Image upload POST route with token validation and invalidation on success
+// Image upload POST route with token validation and multer
 app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validateUploadToken, async (req, res) => {
   const { phoneNumber, type, id } = req.params;
   const { token } = req.body;
+
+  console.log(`POST request received - Token: ${token}, File: ${req.file ? req.file.originalname : 'No file'}`); // Debug log
 
   try {
     const key = `images/${Date.now()}-${req.file.originalname}`;
@@ -154,6 +166,7 @@ app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validat
     res.status(500).send('Error uploading image.');
   }
 });
+
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
