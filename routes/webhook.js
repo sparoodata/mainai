@@ -4,7 +4,7 @@ const User = require('../models/User');
 const Tenant = require('../models/Tenant');
 const Property = require('../models/Property');
 const Unit = require('../models/Unit');
-const UploadToken = require('../models/UploadToken'); // New model
+const UploadToken = require('../models/UploadToken');
 const Groq = require('groq-sdk');
 const crypto = require('crypto');
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
@@ -27,6 +27,7 @@ async function shortenUrl(longUrl) {
     return longUrl;
   }
 }
+
 async function generateUploadToken(phoneNumber, type, entityId) {
   const token = crypto.randomBytes(16).toString('hex');
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes expiration
@@ -57,6 +58,25 @@ async function sendMessage(phoneNumber, message) {
   } catch (err) {
     console.error('Error sending WhatsApp message:', err.response ? err.response.data : err);
   }
+}
+
+// Validation functions
+function isValidName(name) {
+  return typeof name === 'string' && name.trim().length > 0;
+}
+
+function isValidAddress(address) {
+  return typeof address === 'string' && address.trim().length > 0;
+}
+
+function isValidUnits(units) {
+  const num = parseInt(units);
+  return !isNaN(num) && num > 0 && Number.isInteger(num);
+}
+
+function isValidTotalAmount(amount) {
+  const num = parseFloat(amount);
+  return !isNaN(num) && num > 0;
 }
 
 router.get('/', (req, res) => {
@@ -107,35 +127,51 @@ router.post('/', async (req, res) => {
 
       if (text) {
         if (sessions[fromNumber].action === 'add_property_name') {
-          sessions[fromNumber].propertyData = { name: text };
-          await sendMessage(fromNumber, '📍 *Property Address* \nPlease provide the address of the property.');
-          sessions[fromNumber].action = 'add_property_address';
+          if (isValidName(text)) {
+            sessions[fromNumber].propertyData = { name: text };
+            await sendMessage(fromNumber, '📍 *Property Address* \nPlease provide the address of the property.');
+            sessions[fromNumber].action = 'add_property_address';
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease retry with a valid property name (e.g., "Sunset Apartments").');
+          }
         } else if (sessions[fromNumber].action === 'add_property_address') {
-          sessions[fromNumber].propertyData.address = text;
-          await sendMessage(fromNumber, '🏠 *Number of Units* \nHow many units does this property have?');
-          sessions[fromNumber].action = 'add_property_units';
+          if (isValidAddress(text)) {
+            sessions[fromNumber].propertyData.address = text;
+            await sendMessage(fromNumber, '🏠 *Number of Units* \nHow many units does this property have? (e.g., 5)');
+            sessions[fromNumber].action = 'add_property_units';
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease retry with a valid address (e.g., "123 Main St").');
+          }
         } else if (sessions[fromNumber].action === 'add_property_units') {
-          sessions[fromNumber].propertyData.units = parseInt(text);
-          await sendMessage(fromNumber, '💰 *Total Amount* \nWhat is the total amount for this property (e.g., rent or value)?');
-          sessions[fromNumber].action = 'add_property_totalAmount';
-        }else if (sessions[fromNumber].action === 'add_property_totalAmount') {
-  const user = await User.findOne({ phoneNumber });
-  const property = new Property({
-    name: sessions[fromNumber].propertyData.name,
-    address: sessions[fromNumber].propertyData.address,
-    units: sessions[fromNumber].propertyData.units,
-    totalAmount: parseFloat(text),
-    userId: user._id,
-  });
-  await property.save();
+          if (isValidUnits(text)) {
+            sessions[fromNumber].propertyData.units = parseInt(text);
+            await sendMessage(fromNumber, '💰 *Total Amount* \nWhat is the total amount for this property (e.g., 5000)?');
+            sessions[fromNumber].action = 'add_property_totalAmount';
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease retry with a valid number of units (e.g., 5). Must be a positive whole number.');
+          }
+        } else if (sessions[fromNumber].action === 'add_property_totalAmount') {
+          if (isValidTotalAmount(text)) {
+            const user = await User.findOne({ phoneNumber });
+            const property = new Property({
+              name: sessions[fromNumber].propertyData.name,
+              address: sessions[fromNumber].propertyData.address,
+              units: sessions[fromNumber].propertyData.units,
+              totalAmount: parseFloat(text),
+              userId: user._id,
+            });
+            await property.save();
 
-  const token = await generateUploadToken(phoneNumber, 'property', property._id);
-  const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/property/${property._id}?token=${token}`;
-  const shortUrl = await shortenUrl(imageUploadUrl);
-  await sendMessage(fromNumber, `✅ *Property Added* \nProperty "${property.name}" has been added successfully!\n📸 *Upload Image* \nClick here to upload an image for this property (valid once): ${shortUrl}`);
-  sessions[fromNumber].action = null;
-  delete sessions[fromNumber].propertyData;
-} else if (sessions[fromNumber].action === 'add_unit_select_property') {
+            const token = await generateUploadToken(phoneNumber, 'property', property._id);
+            const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/property/${property._id}?token=${token}`;
+            const shortUrl = await shortenUrl(imageUploadUrl);
+            await sendMessage(fromNumber, `✅ *Property Added* \nProperty "${property.name}" has been added successfully!\n📸 *Upload Image* \nClick here to upload an image for this property (valid once): ${shortUrl}`);
+            sessions[fromNumber].action = null;
+            delete sessions[fromNumber].propertyData;
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease retry with a valid total amount (e.g., 5000). Must be a positive number.');
+          }
+        } else if (sessions[fromNumber].action === 'add_unit_select_property') {
           const propertyIndex = parseInt(text) - 1;
           const properties = sessions[fromNumber].properties;
 
