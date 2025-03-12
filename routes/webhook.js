@@ -118,24 +118,24 @@ router.post('/', async (req, res) => {
           sessions[fromNumber].propertyData.units = parseInt(text);
           await sendMessage(fromNumber, '💰 *Total Amount* \nWhat is the total amount for this property (e.g., rent or value)?');
           sessions[fromNumber].action = 'add_property_totalAmount';
-        } else if (sessions[fromNumber].action === 'add_property_totalAmount') {
-          const user = await User.findOne({ phoneNumber });
-          const property = new Property({
-            name: sessions[fromNumber].propertyData.name,
-            address: sessions[fromNumber].propertyData.address,
-            units: sessions[fromNumber].propertyData.units,
-            totalAmount: parseFloat(text),
-            userId: user._id,
-          });
-          await property.save();
+        }else if (sessions[fromNumber].action === 'add_property_totalAmount') {
+  const user = await User.findOne({ phoneNumber });
+  const property = new Property({
+    name: sessions[fromNumber].propertyData.name,
+    address: sessions[fromNumber].propertyData.address,
+    units: sessions[fromNumber].propertyData.units,
+    totalAmount: parseFloat(text),
+    userId: user._id,
+  });
+  await property.save();
 
-          const token = await generateUploadToken(phoneNumber, 'property', property._id);
-          const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/property/${property._id}?token=${token}`;
-          const shortUrl = await shortenUrl(imageUploadUrl);
-          await sendMessage(fromNumber, `✅ *Property Added* \nProperty "${property.name}" has been added successfully!\n📸 *Upload Image* \nClick here to upload an image for this property (valid once): ${shortUrl}`);
-          sessions[fromNumber].action = null;
-          delete sessions[fromNumber].propertyData;
-        } else if (sessions[fromNumber].action === 'add_unit_select_property') {
+  const token = await generateUploadToken(phoneNumber, 'property', property._id);
+  const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/property/${property._id}?token=${token}`;
+  const shortUrl = await shortenUrl(imageUploadUrl);
+  await sendMessage(fromNumber, `✅ *Property Added* \nProperty "${property.name}" has been added successfully!\n📸 *Upload Image* \nClick here to upload an image for this property (valid once): ${shortUrl}`);
+  sessions[fromNumber].action = null;
+  delete sessions[fromNumber].propertyData;
+} else if (sessions[fromNumber].action === 'add_unit_select_property') {
           const propertyIndex = parseInt(text) - 1;
           const properties = sessions[fromNumber].properties;
 
