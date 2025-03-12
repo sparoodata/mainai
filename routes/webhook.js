@@ -60,7 +60,6 @@ async function sendMessage(phoneNumber, message) {
   }
 }
 
-// Validation functions (unchanged)
 function isValidName(name) {
   const regex = /^[a-zA-Z0-9 ]+$/;
   return typeof name === 'string' && name.trim().length > 0 && name.length <= 40 && regex.test(name);
@@ -119,10 +118,14 @@ router.post('/', async (req, res) => {
       const text = message.text ? message.text.body.trim() : null;
       const interactive = message.interactive || null;
 
+      console.log(`Message from ${fromNumber}:`, { text, interactive });
+
       if (interactive && interactive.type === 'list_reply') {
         userResponses[fromNumber] = interactive.list_reply.id;
+        console.log(`List reply received: ${userResponses[fromNumber]}`);
       } else if (interactive && interactive.type === 'button_reply') {
         userResponses[fromNumber] = interactive.button_reply.id;
+        console.log(`Button reply received: ${userResponses[fromNumber]}`);
       }
 
       if (!sessions[fromNumber]) {
@@ -175,25 +178,6 @@ router.post('/', async (req, res) => {
           } else {
             await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease retry with a valid total amount (e.g., 5000). Must be a positive number.');
           }
-        } else if (sessions[fromNumber].action === 'add_unit_select_property') {
-          const propertyId = userResponses[fromNumber];
-          const properties = sessions[fromNumber].properties;
-          const selectedProperty = properties.find(p => p._id.toString() === propertyId);
-
-          if (selectedProperty) {
-            sessions[fromNumber].unitData = { property: selectedProperty._id };
-            const units = await Unit.find({ property: selectedProperty._id, userId: sessions[fromNumber].userId });
-            if (!units.length) {
-              await sendMessage(fromNumber, 'ℹ️ *No Units* \nPlease add a unit to this property first.');
-              sessions[fromNumber].action = 'add_unit_number'; // Allow adding a unit directly
-            } else {
-              await sendUnitSelectionMenu(fromNumber, units);
-              sessions[fromNumber].action = 'add_unit_select_unit';
-            }
-          } else {
-            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease select a valid property from the menu.');
-            await sendPropertySelectionMenu(fromNumber, properties);
-          }
         } else if (sessions[fromNumber].action === 'add_unit_number') {
           sessions[fromNumber].unitData.unitNumber = text;
           await sendMessage(fromNumber, '💰 *Rent Amount* \nWhat is the rent amount for this unit?');
@@ -225,40 +209,6 @@ router.post('/', async (req, res) => {
           sessions[fromNumber].action = null;
           delete sessions[fromNumber].unitData;
           delete sessions[fromNumber].properties;
-        } else if (sessions[fromNumber].action === 'add_tenant_select_property') {
-          const propertyId = userResponses[fromNumber];
-          const properties = sessions[fromNumber].properties;
-          const selectedProperty = properties.find(p => p._id.toString() === propertyId);
-
-          if (selectedProperty) {
-            sessions[fromNumber].tenantData = { propertyId: selectedProperty._id };
-            const units = await Unit.find({ property: selectedProperty._id, userId: sessions[fromNumber].userId });
-            if (!units.length) {
-              await sendMessage(fromNumber, 'ℹ️ *No Units* \nPlease add a unit to this property first.');
-              sessions[fromNumber].action = null;
-              delete sessions[fromNumber].tenantData;
-            } else {
-              await sendUnitSelectionMenu(fromNumber, units);
-              sessions[fromNumber].action = 'add_tenant_select_unit';
-            }
-          } else {
-            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease select a valid property from the menu.');
-            await sendPropertySelectionMenu(fromNumber, properties);
-          }
-        } else if (sessions[fromNumber].action === 'add_tenant_select_unit') {
-          const unitId = userResponses[fromNumber];
-          const units = await Unit.find({ property: sessions[fromNumber].tenantData.propertyId }).populate('property');
-          const selectedUnit = units.find(u => u._id.toString() === unitId);
-
-          if (selectedUnit) {
-            sessions[fromNumber].tenantData.unitAssigned = selectedUnit._id;
-            sessions[fromNumber].tenantData.propertyName = selectedUnit.property.name;
-            await sendMessage(fromNumber, '👤 *Tenant Name* \nPlease provide the tenant’s full name.');
-            sessions[fromNumber].action = 'add_tenant_name';
-          } else {
-            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease select a valid unit from the menu.');
-            await sendUnitSelectionMenu(fromNumber, units);
-          }
         } else if (sessions[fromNumber].action === 'add_tenant_name') {
           sessions[fromNumber].tenantData.name = text;
           await sendMessage(fromNumber, '📅 *Lease Start Date* \nWhen does the lease start? (e.g., 2025-01-01)');
@@ -316,7 +266,7 @@ router.post('/', async (req, res) => {
         }
       }
 
-      if (interactive) {
+      if (interactive && userResponses[fromNumber]) {
         const selectedOption = userResponses[fromNumber];
 
         if (selectedOption === 'account_info') {
@@ -367,14 +317,93 @@ router.post('/', async (req, res) => {
             await sendPropertySelectionMenu(fromNumber, properties);
             sessions[fromNumber].action = 'add_tenant_select_property';
           }
+        } else if (sessions[fromNumber].action === 'add_unit_select_property') {
+          const propertyId = selectedOption;
+          console.log(`Property selected for unit: ${propertyId}`);
+          const properties = sessions[fromNumber].properties;
+          const selectedProperty = properties.find(p => p._id.toString() === propertyId);
+
+          if (selectedProperty) {
+            console.log(`Found property: ${selectedProperty.name}`);
+            sessions[fromNumber].unitData = { property: selectedProperty._id };
+            const units = await Unit.find({ property: selectedProperty._id, userId: sessions[fromNumber].userId });
+            console.log(`Units found: ${units.length}`);
+            if (!units.length) {
+              await sendMessage(fromNumber, 'ℹ️ *No Units* \nPlease add a unit to this property. Enter the unit number:');
+              sessions[fromNumber].action = 'add_unit_number';
+            } else {
+              await sendUnitSelectionMenu(fromNumber, units);
+              sessions[fromNumber].action = 'add_unit_select_unit';
+            }
+          } else {
+            console.log('Property not found');
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease select a valid property from the menu.');
+            await sendPropertySelectionMenu(fromNumber, properties);
+          }
+        } else if (sessions[fromNumber].action === 'add_unit_select_unit') {
+          const unitId = selectedOption;
+          console.log(`Unit selected: ${unitId}`);
+          const units = await Unit.find({ property: sessions[fromNumber].unitData.property }).populate('property');
+          const selectedUnit = units.find(u => u._id.toString() === unitId);
+
+          if (selectedUnit) {
+            console.log(`Found unit: ${selectedUnit.unitNumber}`);
+            await sendMessage(fromNumber, 'ℹ️ Unit already exists. To add a new unit, enter a new unit number:');
+            sessions[fromNumber].action = 'add_unit_number';
+          } else {
+            console.log('Unit not found - proceeding to add new unit');
+            await sendMessage(fromNumber, '🚪 *Unit Number* \nPlease provide the unit number.');
+            sessions[fromNumber].action = 'add_unit_number';
+          }
+        } else if (sessions[fromNumber].action === 'add_tenant_select_property') {
+          const propertyId = selectedOption;
+          console.log(`Property selected for tenant: ${propertyId}`);
+          const properties = sessions[fromNumber].properties;
+          const selectedProperty = properties.find(p => p._id.toString() === propertyId);
+
+          if (selectedProperty) {
+            console.log(`Found property: ${selectedProperty.name}`);
+            sessions[fromNumber].tenantData = { propertyId: selectedProperty._id };
+            const units = await Unit.find({ property: selectedProperty._id, userId: sessions[fromNumber].userId });
+            console.log(`Units found: ${units.length}`);
+            if (!units.length) {
+              await sendMessage(fromNumber, 'ℹ️ *No Units* \nPlease add a unit to this property first.');
+              sessions[fromNumber].action = null;
+              delete sessions[fromNumber].tenantData;
+            } else {
+              await sendUnitSelectionMenu(fromNumber, units);
+              sessions[fromNumber].action = 'add_tenant_select_unit';
+            }
+          } else {
+            console.log('Property not found');
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease select a valid property from the menu.');
+            await sendPropertySelectionMenu(fromNumber, properties);
+          }
+        } else if (sessions[fromNumber].action === 'add_tenant_select_unit') {
+          const unitId = selectedOption;
+          console.log(`Unit selected for tenant: ${unitId}`);
+          const units = await Unit.find({ property: sessions[fromNumber].tenantData.propertyId }).populate('property');
+          const selectedUnit = units.find(u => u._id.toString() === unitId);
+
+          if (selectedUnit) {
+            console.log(`Found unit: ${selectedUnit.unitNumber}`);
+            sessions[fromNumber].tenantData.unitAssigned = selectedUnit._id;
+            sessions[fromNumber].tenantData.propertyName = selectedUnit.property.name;
+            await sendMessage(fromNumber, '👤 *Tenant Name* \nPlease provide the tenant’s full name.');
+            sessions[fromNumber].action = 'add_tenant_name';
+          } else {
+            console.log('Unit not found');
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease select a valid unit from the menu.');
+            await sendUnitSelectionMenu(fromNumber, units);
+          }
         }
+        delete userResponses[fromNumber]; // Clear response after handling
       }
     }
   }
   res.sendStatus(200);
 });
 
-// New WhatsApp Menu Functions
 async function sendPropertySelectionMenu(phoneNumber, properties) {
   const listMenu = {
     messaging_product: 'whatsapp',
@@ -391,8 +420,8 @@ async function sendPropertySelectionMenu(phoneNumber, properties) {
           title: 'Properties',
           rows: properties.map(p => ({
             id: p._id.toString(),
-            title: p.name.slice(0, 24), // WhatsApp limits title to 24 chars
-            description: p.address.slice(0, 72), // WhatsApp limits description to 72 chars
+            title: p.name.slice(0, 24),
+            description: p.address.slice(0, 72),
           })),
         }],
       },
