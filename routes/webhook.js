@@ -692,7 +692,12 @@ function generateTenantId() {
   const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
   return 'T' + digits + letter;
 }
-
+router.post('/upload-image/:phoneNumber/:type/:entityId', async (req, res) => {
+  const { phoneNumber, type, entityId } = req.params;
+  const uploadedImageUrl = 'https://mybucket.com/uploaded-image.jpg'; // Replace with actual URL from your storage
+  await handleImageUpload(phoneNumber, type, entityId, uploadedImageUrl);
+  res.send('Image uploaded successfully');
+});
 module.exports = {
   router,
   sendMessage,
