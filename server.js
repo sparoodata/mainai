@@ -120,6 +120,7 @@ app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validat
 
     await s3.upload(uploadParams).promise();
     const imageUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
+    console.log(`Image uploaded to R2: ${process.env.R2_BUCKET}/${key}`); // Debug log
     const image = new Image({ [`${type}Id`]: id, imageUrl });
     await image.save();
 
@@ -141,7 +142,6 @@ app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validat
       await sendMessage(phoneNumber, `✅ *Success* \nPhoto uploaded successfully for tenant "${entity.name}".`);
     }
 
-    // Mark token as used only after successful upload
     req.uploadToken.used = true;
     await req.uploadToken.save();
 
@@ -154,7 +154,6 @@ app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validat
     res.status(500).send('Error uploading image.');
   }
 });
-
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
