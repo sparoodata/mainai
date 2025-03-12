@@ -1,551 +1,1173 @@
-const express = require('express');
-const axios = require('axios');
-const mongoose = require('mongoose');
-const AWS = require('aws-sdk');
-const multer = require('multer');
 require('dotenv').config();
-const Property = require('./models/Property');
-const Unit = require('./models/Unit');
+const express = require('express');
+const bodyParser = require('body-parser');
+const session = require('express-session');
+const MongoStore = require('connect-mongo');
+const mongoose = require('mongoose');
+const rateLimit = require('express-rate-limit');
+const path = require('path');
+const axios = require("axios");
+const multer = require('multer');
 const Tenant = require('./models/Tenant');
 const Image = require('./models/Image');
+const Property = require('./models/Property');
+const User = require('./models/User');
+const Authorize = require('./models/Authorize');
+const Unit = require('./models/Unit');
+const Otp = require('./models/Otp');
+const Dropbox = require('dropbox').Dropbox;
+const fetch = require('isomorphic-fetch');
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3000; // Glitch uses dynamic port
+const AWS = require('aws-sdk');
 
-app.use(express.json());
-app.use(express.static('public'));
-
-// Configure multer for multiple file uploads (up to 3 images)
-const upload = multer({ storage: multer.memoryStorage() }).array('images', 3);
-
-// Cloudflare R2 configuration
+// Configure the S3 client to use Cloudflare R2 settings
 const s3 = new AWS.S3({
-  endpoint: process.env.R2_ENDPOINT,
+  endpoint: process.env.R2_ENDPOINT, // e.g., https://<account-id>.r2.cloudflarestorage.com
   accessKeyId: process.env.R2_ACCESS_KEY_ID,
   secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
   Bucket: process.env.R2_BUCKET,
-  region: 'auto',
+  region: 'auto', // R2 doesn’t require a region but "auto" works for S3 compatibility
   signatureVersion: 'v4',
 });
 
-// WhatsApp Business Cloud API configuration
-const WHATSAPP_API_URL = 'https://graph.facebook.com/v19.0'; // Latest version as of March 2025
-const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
-const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+// Trust the first proxy
+app.set('trust proxy', 1);
 
-// Groq API configuration
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_MODEL = 'llama-3.3-70b-versatile';
+// Set up EJS as the templating engine
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
 
-const GROQ_API_KEYS = [
-  process.env.GROQ_API_KEY1,
-  process.env.GROQ_API_KEY2,
-  process.env.GROQ_API_KEY3,
-  process.env.GROQ_API_KEY4,
-  process.env.GROQ_API_KEY5,
-].filter(key => key);
-
-if (GROQ_API_KEYS.length === 0) {
-  console.error('No valid Groq API keys found in .env');
-  process.exit(1);
-}
-
-function getRandomGroqApiKey() {
-  const randomIndex = Math.floor(Math.random() * GROQ_API_KEYS.length);
-  return GROQ_API_KEYS[randomIndex];
-}
-
-// MongoDB Message Schema
-const messageSchema = new mongoose.Schema({
-  role: String,
-  content: String,
-  sessionId: String,
-  timestamp: { type: Date, default: Date.now },
-});
-const Message = mongoose.models.Message || mongoose.model('Message', messageSchema);
+// Middleware
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
 // MongoDB connection
-async function connectToMongo() {
-  try {
-    await mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
-    console.log('Connected to MongoDB');
-    await seedInitialData();
-  } catch (error) {
-    console.error('MongoDB connection error:', error.message);
-    process.exit(1);
-  }
-}
+mongoose.set('strictQuery', false);
+mongoose.connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+})
+.then(() => console.log('MongoDB connected'))
+.catch(error => console.error('MongoDB connection error:', error));
 
-// Seed initial data
-async function seedInitialData() {
-  const propertyCount = await Property.countDocuments();
-  if (propertyCount === 0) {
-    const property = await Property.create({
-      name: 'Sunset Apartments',
-      units: 10,
-      address: '123 Main St',
-      totalAmount: 15000,
-      userId: new mongoose.Types.ObjectId(),
-      createdAt: new Date(),
-    });
-    await Unit.create({
-      unitNumber: '101',
-      property: property._id,
-      rentAmount: 1500,
-      createdAt: new Date(),
-    });
-    await Unit.create({
-      unitNumber: '122',
-      property: property._id,
-      rentAmount: 4747,
-      createdAt: new Date(),
-    });
-    await Tenant.create({
-      name: 'Ramulu',
-      unitAssigned: (await Unit.findOne({ unitNumber: '122' }))._id,
-      propertyName: 'Ambabai Nilayam',
-      rent_amount: 5500,
-      createdAt: new Date(),
-    });
-    console.log('Seeded initial property, units, and tenant');
-  }
-}
+const cors = require('cors');
+app.use(cors({
+    origin: 'http://your-frontend-domain.com', // Replace with your frontend domain
+    credentials: true, // Allow cookies to be sent
+}));
+// Session setup with MongoDB storage
+app.use(session({
+    secret: process.env.SESSION_SECRET, // Ensure this is set in .env
+    resave: false,
+    saveUninitialized: true,
+    store: MongoStore.create({
+        mongoUrl: process.env.MONGODB_URI, // Ensure this is correct
+        collectionName: 'sessions', // Optional: Name of the collection to store sessions
+        ttl: 3600, // Session TTL (time to live) in seconds (1 hour)
+    }),
+    cookie: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production', // Ensure cookies are only sent over HTTPS in production
+        maxAge: 3600000, // 1 hour
+    },
+}));
 
-// Conversation state
-const conversationState = new Map();
+// Serve static files (public directory)
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Store message in MongoDB
-async function storeMessage(sessionId, role, content) {
-  try {
-    await Message.create({ role, content, sessionId });
-    console.log('Message stored successfully');
-  } catch (error) {
-    console.error('MongoDB store error:', error.message);
-    throw error;
-  }
-}
+// Rate limiter for signup
+const signupLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10,
+    message: 'Too many signup attempts. Try again later.',
+});
 
-// Get memory context
-async function getMemory(sessionId) {
-  try {
-    const messages = await Message.find({ sessionId }).sort({ timestamp: -1 }).limit(10);
-    const properties = await Property.find();
-    const units = await Unit.find();
-    const tenants = await Tenant.find();
-    const tenantLines = await Promise.all(tenants.map(async t => {
-      const unit = t.unitAssigned ? await Unit.findById(t.unitAssigned) : null;
-      return `${t.name} - Unit: ${unit ? unit.unitNumber : 'None'} - Property: ${t.propertyName} - Rent: $${t.rent_amount} - Created: ${t.createdAt}`;
-    }));
-    const memory = `
-      Messages (last 10):\n${messages.reverse().map(m => `${m.role}: ${m.content}`).join('\n')}
-      Properties:\n${properties.map(p => `${p.name}: ${p.address}, ${p.units} units, $${p.totalAmount}, Created: ${p.createdAt}`).join('\n')}
-      Units:\n${units.map(u => `${u.unitNumber} (Property: ${u.property}): $${u.rentAmount}, Created: ${u.createdAt}`).join('\n')}
-      Tenants:\n${tenantLines.join('\n')}
-    `;
-    return memory.length > 1000 ? memory.substring(0, 1000) + '...' : memory;
-  } catch (error) {
-    console.error('MongoDB get memory error:', error.message);
-    return '';
-  }
-}
+// Configure multer for image uploads (memory storage)
+const storage = multer.memoryStorage(); // Use memory storage for direct upload to Dropbox
+const upload = multer({ 
+    storage: storage, 
+    limits: { fileSize: 5 * 1024 * 1024 }, // Limit file size to 5 MB
+});
 
-// Shorten URL using TinyURL
-async function shortenUrl(longUrl) {
-  try {
-    const response = await axios.post('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(longUrl));
-    return response.data;
-  } catch (error) {
-    console.error('Error shortening URL:', error.response ? error.response.data : error);
-    return longUrl;
-  }
-}
+// Routes and webhook handling
+const { router, waitForUserResponse, userResponses, sendMessage } = require('./routes/webhook');
+app.use('/webhook', router);
 
-// Send WhatsApp message (text or interactive)
-async function sendWhatsAppMessage(to, messageBody, interactive = null) {
-  const payload = {
-    messaging_product: 'whatsapp',
-    recipient_type: 'individual',
-    to,
-    type: interactive ? 'interactive' : 'text',
-  };
 
-  if (interactive) {
-    payload.interactive = interactive;
-  } else {
-    payload.text = { body: messageBody };
-  }
 
-  try {
-    const response = await axios.post(
-      `${WHATSAPP_API_URL}/${PHONE_NUMBER_ID}/messages`,
-      payload,
-      {
+
+// Function to send WhatsApp message for authorization
+async function sendWhatsAppAuthMessage(phoneNumber) {
+    return axios.post(process.env.WHATSAPP_API_URL, {
+        messaging_product: 'whatsapp',
+        to: phoneNumber,
+        type: 'interactive',
+        interactive: {
+            type: 'button',
+            body: { text: 'Do you authorize this action?' },
+            action: {
+                buttons: [
+                    { type: 'reply', reply: { id: 'Yes_authorize', title: 'Yes' } },
+                    { type: 'reply', reply: { id: 'No_authorize', title: 'No' } }
+                ]
+            }
+        }
+    }, {
         headers: {
-          'Authorization': `Bearer ${ACCESS_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-    console.log('WhatsApp message sent:', response.data);
-    return response.data;
-  } catch (error) {
-    console.error('WhatsApp API error:', error.response ? error.response.data : error.message);
-    throw error;
-  }
-}
-
-// Intent recognition using Groq
-async function getIntentResponse(memoryContext, message, sessionId) {
-  const prompt = `
-    You are a landlord assistant. Use the following data from memory to respond:
-    ${memoryContext}
-    User input: "${message}"
-    Task:
-    1. If a query (e.g., "list tenants"), return a clear response.
-    2. If a command (e.g., "create tenant", "add property"), return JSON: {"intent": "add_tenant", "step": "unit", "response": "Which unit would you like to assign the new tenant to?"}
-    3. If unclear, ask for clarification.
-    4. For greetings, respond conversationally.
-  `;
-
-  for (let i = 0; i < GROQ_API_KEYS.length; i++) {
-    const apiKey = getRandomGroqApiKey();
-    try {
-      console.log(`Using Groq API key: ${apiKey.substring(0, 5)}... for request`);
-      const groqResponse = await axios.post(
-        GROQ_API_URL,
-        {
-          model: GROQ_MODEL,
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: 500,
-          temperature: 0.5,
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
+            'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
             'Content-Type': 'application/json',
-          },
+        },
+    });
+}
+
+
+
+function generateTenantId() {
+    // Generate a random 4-digit number (ensuring it is always 4 digits)
+    const digits = Math.floor(1000 + Math.random() * 9000);
+    // Generate a random uppercase letter (A-Z)
+    const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+    return 'T' + digits + letter;
+}
+
+
+// Route to get units for a selected property
+
+// Handle form submission and image upload to Dropbox (add property)
+app.post('/addproperty/:id', upload.single('image'), async (req, res) => {
+    const { property_name, units, address, totalAmount } = req.body;
+    const id = req.params.id;
+
+    try {
+        // Find the authorization record
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            console.error('Authorization record not found for ID:', id);
+            return res.status(404).send('Authorization record not found.');
         }
-      );
-      const responseText = groqResponse.data.choices[0].message.content.trim();
-      try {
-        const jsonResponse = JSON.parse(responseText);
-        if (jsonResponse.intent && jsonResponse.step) {
-          conversationState.set(sessionId, { entity: jsonResponse.intent.split('_')[1], step: jsonResponse.step, data: {} });
-          return jsonResponse.response;
+
+        // Check if the authorization has already been used
+        if (authorizeRecord.used) {
+            console.error('Authorization already used for ID:', id);
+            return res.status(403).send('This link has already been used.');
         }
-        return responseText;
-      } catch {
-        return responseText; // Fallback to plain text if not JSON
-      }
+
+        // Use the phone number directly (no need to add '+')
+        const phoneNumber = authorizeRecord.phoneNumber;
+        console.log(`Querying User collection for phoneNumber: ${phoneNumber}`);
+
+        // Find the user
+        const user = await User.findOne({ phoneNumber });
+        if (!user) {
+            console.error('User not found for phoneNumber:', phoneNumber);
+            return res.status(404).send('User not found.');
+        }
+
+        // Log the user ID
+        console.log(`User found with ID: ${user._id}`);
+
+        // Create the property
+        const property = new Property({
+            name: property_name,
+            units,
+            address,
+            totalAmount,
+            userId: user._id,
+        });
+        await property.save();
+
+        // Upload image to Cloudflare R2 if provided
+        if (req.file) {
+            const key = 'images/' + Date.now() + '-' + req.file.originalname;
+            const uploadParams = {
+                Bucket: process.env.R2_BUCKET,
+                Key: key,
+                Body: req.file.buffer,
+                ContentType: req.file.mimetype,
+            };
+
+            await s3.upload(uploadParams).promise();
+            const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
+
+            const image = new Image({ propertyId: property._id, imageUrl: imageUrl });
+            await image.save();
+            property.images.push(image._id);
+            await property.save();
+        }
+
+        // Send WhatsApp confirmation message
+        await sendMessage(authorizeRecord.phoneNumber, `Property *${property_name}* has been successfully added.`);
+
+        // Delete the authorization record after successful property addition
+        await Authorize.findByIdAndDelete(id);
+        console.log(`Authorization record deleted for ID: ${id}`);
+
+        res.send('Property and image added successfully!');
     } catch (error) {
-      if (error.response && error.response.status === 429) {
-        console.warn(`Rate limit hit with key ${apiKey.substring(0, 5)}... Trying next key.`);
-        if (i === GROQ_API_KEYS.length - 1) throw new Error('All API keys hit rate limit (429).');
-        continue;
-      } else if (error.response && error.response.status === 413) {
-        throw new Error('Payload too large. Memory context exceeds API limit.');
-      }
-      throw error;
+        console.error('Error adding property and image:', error);
+        res.status(500).send('An error occurred while adding the property and image.');
     }
-  }
-}
-
-// Webhook for WhatsApp incoming messages
-app.post('/webhook', async (req, res) => {
-  const body = req.body;
-  if (body.object === 'whatsapp_business_account') {
-    for (const entry of body.entry) {
-      for (const change of entry.changes) {
-        if (change.field === 'messages' && change.value.messages) {
-          const message = change.value.messages[0];
-          const phoneNumber = message.from;
-          const sessionId = `whatsapp_${phoneNumber}`;
-          const text = message.type === 'text' ? message.text.body : message.button ? message.button.text : '';
-
-          await processChatMessage({ message: text, phoneNumber, sessionId });
-        }
-      }
-    }
-    res.sendStatus(200);
-  } else {
-    res.sendStatus(404);
-  }
 });
 
-// Process chat message
-async function processChatMessage({ message, phoneNumber, sessionId }) {
-  try {
-    await storeMessage(sessionId, 'user', message);
-    let reply;
-
-    if (conversationState.has(sessionId)) {
-      const state = conversationState.get(sessionId);
-      console.log(`Session ${sessionId} - Entity: ${state.entity}, Step: ${state.step}, Data:`, state.data);
-
-      switch (state.entity) {
-        case 'tenant':
-          reply = await handleTenantSteps(state, message, sessionId, phoneNumber);
-          break;
-        case 'property':
-          reply = await handlePropertySteps(state, message, sessionId, phoneNumber);
-          break;
-        case 'unit':
-          reply = await handleUnitSteps(state, message, sessionId, phoneNumber);
-          break;
-        default:
-          reply = 'Something went wrong. Please try again.';
-          conversationState.delete(sessionId);
-      }
-      if (!reply.includes('Please type "done"')) {
-        conversationState.set(sessionId, state);
-      }
-    } else {
-      const memoryContext = await getMemory(sessionId);
-      reply = await getIntentResponse(memoryContext, message, sessionId);
-    }
-
-    // Send reply via WhatsApp
-    if (reply.includes('Which unit')) {
-      const units = await Unit.find().limit(3); // Limit to 3 for button constraints
-      const interactive = {
-        type: 'button',
-        body: { text: 'Which unit would you like to assign the new tenant to?' },
-        action: {
-          buttons: units.map(unit => ({
-            type: 'reply',
-            reply: { id: unit.unitNumber, title: `Unit ${unit.unitNumber}` },
-          })),
-        },
-      };
-      await sendWhatsAppMessage(phoneNumber, null, interactive);
-    } else if (reply.includes('The unit’s rent')) {
-      const interactive = {
-        type: 'button',
-        body: { text: reply },
-        action: {
-          buttons: [
-            { type: 'reply', reply: { id: 'yes', title: 'Yes' } },
-            { type: 'reply', reply: { id: 'no', title: 'No' } },
-          ],
-        },
-      };
-      await sendWhatsAppMessage(phoneNumber, null, interactive);
-    } else {
-      await sendWhatsAppMessage(phoneNumber, reply);
-    }
-
-    await storeMessage(sessionId, 'assistant', reply);
-  } catch (error) {
-    console.error('Chat processing error:', error.message);
-    const errorReply = 'Something went wrong! Please try again.';
-    await sendWhatsAppMessage(phoneNumber, errorReply);
-    await storeMessage(sessionId, 'assistant', errorReply);
-    conversationState.delete(sessionId);
-  }
-}
-
-// Handle tenant steps
-async function handleTenantSteps(state, message, sessionId, phoneNumber) {
-  switch (state.step) {
-    case 'unit':
-      const unit = await Unit.findOne({ unitNumber: message });
-      if (!unit) return 'Unit not found. Please provide a valid unit number.';
-      state.data.unitNumber = message;
-      state.data.unitAssigned = unit._id;
-      state.data.propertyName = (await Property.findById(unit.property)).name;
-      state.data.rent_amount = unit.rentAmount;
-      state.step = 'name';
-      return 'What’s the tenant’s name?';
-    case 'name':
-      state.data.name = message;
-      state.step = 'phone';
-      return 'What’s the tenant’s phone number?';
-    case 'phone':
-      state.data.phoneNumber = message;
-      state.step = 'deposit';
-      return 'What’s the deposit amount?';
-    case 'deposit':
-      state.data.deposit = parseFloat(message);
-      state.step = 'rent';
-      return `The unit’s rent is $${state.data.rent_amount}. Use this amount?`;
-    case 'rent':
-      state.data.rent_amount = message.toLowerCase() === 'yes' ? state.data.rent_amount : message.toLowerCase() === 'no' ? null : parseFloat(message);
-      if (state.data.rent_amount === null) {
-        state.step = 'rent'; // Stay on rent step if "No"
-        return 'Please provide the monthly rent amount.';
-      }
-      state.step = 'tenant_id';
-      return 'Please provide a unique tenant ID.';
-    case 'tenant_id':
-      state.data.tenant_id = message;
-      state.step = 'image';
-      const uploadUrl = `https://lacy-snapdragon-saguaro.glitch.me/upload?sessionId=${sessionId}&entity=tenant&id=${state.data.tenant_id}`;
-      const shortUrl = await shortenUrl(uploadUrl);
-      return `Please upload up to 3 images for the tenant here: ${shortUrl}. Once uploaded, type "done" to continue.`;
-    case 'image':
-      if (message.toLowerCase() === 'done') {
-        state.data.createdAt = new Date();
-        await Tenant.create(state.data);
-        conversationState.delete(sessionId);
-        return `Tenant ${state.data.name} added successfully!`;
-      }
-      return 'Please type "done" after uploading the images.';
-    default:
-      conversationState.delete(sessionId);
-      return 'Something went wrong. Please try again.';
-  }
-}
-
-// Handle property steps
-async function handlePropertySteps(state, message, sessionId, phoneNumber) {
-  switch (state.step) {
-    case 'name':
-      state.data.name = message;
-      state.step = 'units';
-      return 'How many units does the property have?';
-    case 'units':
-      state.data.units = parseInt(message);
-      state.step = 'address';
-      return 'What’s the property’s address?';
-    case 'address':
-      state.data.address = message;
-      state.step = 'totalAmount';
-      return 'What’s the total monthly rent amount for the property?';
-    case 'totalAmount':
-      state.data.totalAmount = parseFloat(message);
-      state.step = 'image';
-      const uploadUrl = `https://lacy-snapdragon-saguaro.glitch.me/upload?sessionId=${sessionId}&entity=property&id=${state.data.name}`;
-      const shortUrl = await shortenUrl(uploadUrl);
-      return `Please upload up to 3 images for the property here: ${shortUrl}. Once uploaded, type "done" to continue.`;
-    case 'image':
-      if (message.toLowerCase() === 'done') {
-        state.data.createdAt = new Date();
-        await Property.create(state.data);
-        conversationState.delete(sessionId);
-        return `Property ${state.data.name} added successfully!`;
-      }
-      return 'Please type "done" after uploading the images.';
-    default:
-      conversationState.delete(sessionId);
-      return 'Something went wrong. Please try again.';
-  }
-}
-
-// Handle unit steps
-async function handleUnitSteps(state, message, sessionId, phoneNumber) {
-  switch (state.step) {
-    case 'property':
-      const property = await Property.findOne({ name: message });
-      if (!property) return 'Property not found. Please provide a valid property name.';
-      state.data.property = property._id;
-      state.step = 'unitNumber';
-      return 'What’s the unit number?';
-    case 'unitNumber':
-      const existingUnit = await Unit.findOne({ unitNumber: message, property: state.data.property });
-      if (existingUnit) return 'Unit number already exists for this property. Please provide a unique unit number.';
-      state.data.unitNumber = message;
-      state.step = 'rentAmount';
-      return 'What’s the rent amount for this unit?';
-    case 'rentAmount':
-      state.data.rentAmount = parseFloat(message);
-      state.step = 'image';
-      const uploadUrl = `https://lacy-snapdragon-saguaro.glitch.me/upload?sessionId=${sessionId}&entity=unit&id=${state.data.unitNumber}`;
-      const shortUrl = await shortenUrl(uploadUrl);
-      return `Please upload up to 3 images for the unit here: ${shortUrl}. Once uploaded, type "done" to continue.`;
-    case 'image':
-      if (message.toLowerCase() === 'done') {
-        state.data.createdAt = new Date();
-        await Unit.create(state.data);
-        conversationState.delete(sessionId);
-        return `Unit ${state.data.unitNumber} added successfully!`;
-      }
-      return 'Please type "done" after uploading the images.';
-    default:
-      conversationState.delete(sessionId);
-      return 'Something went wrong. Please try again.';
-  }
-}
-
-// Image upload page
-app.get('/upload', (req, res) => {
-  const { sessionId, entity, id } = req.query;
-  res.send(`
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <title>Upload ${entity} Images</title>
-    </head>
-    <body>
-      <h1>Upload ${entity} Images (Max 3)</h1>
-      <form action="/upload-image" method="post" enctype="multipart/form-data">
-        <input type="hidden" name="sessionId" value="${sessionId}">
-        <input type="hidden" name="entity" value="${entity}">
-        <input type="hidden" name="id" value="${id}">
-        <input type="file" name="images" accept="image/*" multiple required>
-        <button type="submit">Upload</button>
-      </form>
-      <p>Note: You can upload up to 3 images. Select multiple files by holding Ctrl (Windows) or Cmd (Mac).</p>
-    </body>
-    </html>
-  `);
-});
-
-// Handle image upload
-app.post('/upload-image', upload, async (req, res) => {
-  const { sessionId, entity, id } = req.body;
-  const files = req.files;
+// Handle form submission and image upload to Dropbox (add unit)
+app.post('/addunit/:id', upload.single('image'), async (req, res) => {
+  const { property, unit_number, rent_amount, floor, size } = req.body;
+  const id = req.params.id;
 
   try {
-    if (!files || files.length === 0) throw new Error('No images uploaded.');
-    if (files.length > 3) throw new Error('Maximum of 3 images allowed.');
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
 
-    const imageIds = [];
-    for (const file of files) {
-      const key = `images/${entity}s/${id}/${Date.now()}-${file.originalname}`;
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const unit = new Unit({
+      property,
+      unitNumber: unit_number,
+      rentAmount: rent_amount,
+      floor,
+      size,
+      userId: user._id,
+    });
+    await unit.save();
+
+    if (req.file) {
+      const key = 'images/' + Date.now() + '-' + req.file.originalname;
       const uploadParams = {
         Bucket: process.env.R2_BUCKET,
         Key: key,
-        Body: file.buffer,
-        ContentType: file.mimetype,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype,
       };
 
-      const uploadResult = await s3.upload(uploadParams).promise();
-      const imageUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
-      const image = await Image.create({ imageUrl, imageName: file.originalname });
-      imageIds.push(image._id);
+      await s3.upload(uploadParams).promise();
+      const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
+
+      const image = new Image({ unitId: unit._id, imageUrl: imageUrl });
+      await image.save();
+      unit.images.push(image._id);
+      await unit.save();
     }
 
-    const state = conversationState.get(sessionId);
-    console.log(`Upload - Session: ${sessionId}, Entity: ${entity}, ID: ${id}, State:`, state);
+    // Send WhatsApp confirmation
+    const propertyDoc = await Property.findById(property);
+    await sendMessage(
+      phoneNumber,
+      `Unit "${unit_number}" has been added to property "${propertyDoc ? propertyDoc.name : 'Unknown'}".`
+    );
 
-    if (state) {
-      const idField = entity === 'tenant' ? 'tenant_id' : entity === 'property' ? 'name' : 'unitNumber';
-      if (state.data[idField] === id) {
-        state.data.images = state.data.images || [];
-        state.data.images.push(...imageIds.slice(0, 3 - state.data.images.length));
-        conversationState.set(sessionId, state);
-      } else {
-        console.warn(`ID mismatch: Expected ${state.data[idField]}, Got ${id}`);
-      }
-    } else {
-      console.warn(`No state found for session ${sessionId}. Images uploaded but not linked to entity.`);
-    }
+    // Mark authorization as used and delete it
+    authorizeRecord.used = true;
+    await authorizeRecord.save();
+    await Authorize.findByIdAndDelete(id);
 
-    await storeMessage(sessionId, 'assistant', `${files.length} image(s) uploaded successfully!`);
-    res.send(`${files.length} image(s) uploaded successfully! Return to the chat and type "done" to continue.`);
+    res.send('Unit and image added successfully!');
   } catch (error) {
-    console.error('Error uploading images:', error.message, error.stack);
-    res.status(500).send(`Error uploading images: ${error.message}`);
+    console.error('Error adding unit and image:', error);
+    res.status(500).send('An error occurred while adding the unit and image.');
   }
 });
 
-// Start server
-async function startServer() {
-  await connectToMongo();
-  app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-  });
+// Add tenant route that waits for WhatsApp authorization
+app.post('/addtenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
+  const { name, propertyName, unitAssigned, lease_start, deposit, rent_amount, tenant_id } = req.body;
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    // Debug: Log the incoming unitAssigned value
+    console.log('unitAssigned from form:', unitAssigned);
+
+    // Find the unit by _id (expects a valid ObjectId)
+    const unit = await Unit.findById(unitAssigned);
+    if (!unit) {
+      return res.status(400).send(`No unit found with ID: ${unitAssigned}`);
+    }
+
+    const tenant = new Tenant({
+      name,
+      phoneNumber: user.phoneNumber,
+      userId: user._id,
+      propertyName,
+      unitAssigned: unit._id, // Use the Unit's _id (ObjectId) for the reference
+      lease_start: new Date(lease_start),
+      deposit,
+      rent_amount,
+      tenant_id: tenant_id || await generateTenantId(), // Use provided ID or generate one
+    });
+
+    if (req.files.photo) {
+      const key = 'images/' + Date.now() + '-' + req.files.photo[0].originalname;
+      const uploadParams = {
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: req.files.photo[0].buffer,
+        ContentType: req.files.photo[0].mimetype,
+      };
+      await s3.upload(uploadParams).promise();
+      tenant.photo = process.env.R2_PUBLIC_URL + '/' + key;
+    }
+
+    if (req.files.idProof) {
+      const key = 'images/' + Date.now() + '-' + req.files.idProof[0].originalname;
+      const uploadParams = {
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: req.files.idProof[0].buffer,
+        ContentType: req.files.idProof[0].mimetype,
+      };
+      await s3.upload(uploadParams).promise();
+      tenant.idProof = process.env.R2_PUBLIC_URL + '/' + key;
+    }
+
+    await tenant.save();
+
+    // Send WhatsApp confirmation
+    await sendMessage(
+      phoneNumber,
+      `Tenant "${name}" has been added to unit "${unit.unitNumber}" (ID: ${unit.unit_id}) at property "${propertyName}".`
+    );
+
+    // Mark authorization as used and delete it
+    await Authorize.findByIdAndDelete(id);
+
+    res.send('Tenant added successfully!');
+  } catch (error) {
+    console.error('Error adding tenant:', error);
+    res.status(500).send('An error occurred while adding the tenant.');
+  }
+});
+// GET route to render the edit property form with current data
+// POST route to update the property
+// POST route to update the property
+app.post('/editproperty/:id', upload.single('image'), async (req, res) => {
+    const { propertyId, property_name, units, address, totalAmount } = req.body;
+    const id = req.params.id;
+
+    try {
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            console.error('Authorization record not found for ID:', id);
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        if (authorizeRecord.used) {
+            console.error('Authorization already used for ID:', id);
+            return res.status(403).send('This link has already been used.');
+        }
+
+        const phoneNumber = authorizeRecord.phoneNumber;
+        const user = await User.findOne({ phoneNumber });
+        if (!user) {
+            console.error('User not found for phoneNumber:', phoneNumber);
+            return res.status(404).send('User not found.');
+        }
+
+        // Update the property
+        const property = await Property.findOne({ _id: propertyId, userId: user._id });
+        if (!property) {
+            return res.status(404).send('Property not found or you do not have permission to edit it.');
+        }
+
+        property.name = property_name;
+        property.units = units;
+        property.address = address;
+        property.totalAmount = totalAmount;
+
+        // Handle image upload if provided
+        if (req.file) {
+            const key = 'images/' + Date.now() + '-' + req.file.originalname;
+            const uploadParams = {
+                Bucket: process.env.R2_BUCKET,
+                Key: key,
+                Body: req.file.buffer,
+                ContentType: req.file.mimetype,
+            };
+
+            await s3.upload(uploadParams).promise();
+            const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
+
+            // If property already has an image, update it; otherwise, create a new one
+            if (property.images.length > 0) {
+                const image = await Image.findById(property.images[0]);
+                image.imageUrl = imageUrl;
+                await image.save();
+            } else {
+                const image = new Image({ propertyId: property._id, imageUrl });
+                await image.save();
+                property.images.push(image._id);
+            }
+        }
+
+        await property.save();
+
+        // Send WhatsApp confirmation message
+        await sendMessage(phoneNumber, `Property "${property_name}" has been successfully updated.`);
+
+        // Mark authorization as used and delete it
+        authorizeRecord.used = true;
+        await authorizeRecord.save();
+        await Authorize.findByIdAndDelete(id);
+
+        res.send('Property updated successfully!');
+    } catch (error) {
+        console.error('Error updating property:', error);
+        res.status(500).send('Error updating property.');
+    }
+});
+// GET route to render the edit property form with current data
+app.get('/editproperty/:id', checkOTPValidation, async (req, res) => {
+    const id = req.params.id;
+
+    try {
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        // Check if the authorization has already been used
+        if (authorizeRecord.used) {
+            return res.status(403).send('This link has already been used.');
+        }
+
+        // Fetch all properties for the user
+        const phoneNumber = authorizeRecord.phoneNumber;
+        const user = await User.findOne({ phoneNumber });
+        if (!user) {
+            return res.status(404).send('User not found.');
+        }
+
+        const properties = await Property.find({ userId: user._id });
+        if (!properties.length) {
+            return res.status(404).send('No properties found to edit.');
+        }
+
+        // Render the edit property form with properties list
+        res.render('editProperty', { id, properties });
+    } catch (error) {
+        console.error('Error rendering edit property form:', error);
+        res.status(500).send('An error occurred while rendering the form.');
+    }
+});
+
+
+app.post('/deleteproperty/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+  const { propertyId } = req.body; // Expect propertyId from the form
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    // Find and delete the property
+    const property = await Property.findOneAndDelete({
+      _id: propertyId,
+      userId: user._id,
+    });
+
+    if (!property) {
+      return res.status(404).send('Property not found or you do not have permission to delete it.');
+    }
+
+    // Send WhatsApp confirmation message
+    await sendMessage(
+      phoneNumber,
+      `Property "${property.name}" has been successfully deleted.`
+    );
+
+    // Mark authorization as used and delete it
+    authorizeRecord.used = true;
+    await authorizeRecord.save();
+    await Authorize.findByIdAndDelete(id);
+
+    res.send('Property deleted successfully!');
+  } catch (error) {
+    console.error('Error deleting property:', error);
+    res.status(500).send('Error deleting property.');
+  }
+});
+// GET route to render the edit unit form (with list of properties if needed)
+// POST route to update the unit
+app.post('/editunit/:id', upload.single('image'), async (req, res) => {
+  const { unitId, property, unit_number, rent_amount, floor, size } = req.body;
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const unit = await Unit.findOne({ _id: unitId, userId: user._id });
+    if (!unit) {
+      return res.status(404).send('Unit not found or you do not have permission to edit it.');
+    }
+
+    unit.property = property;
+    unit.unitNumber = unit_number;
+    unit.rentAmount = rent_amount;
+    unit.floor = floor;
+    unit.size = size;
+
+    if (req.file) {
+      const key = 'images/' + Date.now() + '-' + req.file.originalname;
+      const uploadParams = {
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype,
+      };
+
+      await s3.upload(uploadParams).promise();
+      const imageUrl = process.env.R2_PUBLIC_URL + '/' + key;
+
+      if (unit.images.length > 0) {
+        const image = await Image.findById(unit.images[0]);
+        image.imageUrl = imageUrl;
+        await image.save();
+      } else {
+        const image = new Image({ unitId: unit._id, imageUrl });
+        await image.save();
+        unit.images.push(image._id);
+      }
+    }
+
+    await unit.save();
+
+    // Send WhatsApp confirmation
+    const propertyDoc = await Property.findById(property);
+    await sendMessage(
+      phoneNumber,
+      `Unit "${unit_number}" in property "${propertyDoc ? propertyDoc.name : 'Unknown'}" has been updated.`
+    );
+
+    // Mark authorization as used and delete it
+    authorizeRecord.used = true;
+    await authorizeRecord.save();
+    await Authorize.findByIdAndDelete(id);
+
+    res.send('Unit updated successfully!');
+  } catch (error) {
+    console.error('Error updating unit:', error);
+    res.status(500).send('Error updating unit.');
+  }
+});
+
+app.post('/deleteunit/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+  const { unitId } = req.body; // Expect unitId from the form
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const unit = await Unit.findOneAndDelete({ _id: unitId, userId: user._id });
+    if (!unit) {
+      return res.status(404).send('Unit not found or you do not have permission to delete it.');
+    }
+
+    // Send WhatsApp confirmation message
+    await sendMessage(
+      phoneNumber,
+      `Unit "${unit.unitNumber}" has been successfully deleted.`
+    );
+
+    // Mark authorization as used and delete it
+    authorizeRecord.used = true;
+    await authorizeRecord.save();
+    await Authorize.findByIdAndDelete(id);
+
+    res.send('Unit deleted successfully!');
+  } catch (error) {
+    console.error('Error deleting unit:', error);
+    res.status(500).send('Error deleting unit.');
+  }
+});
+// GET route to render the edit tenant form with current data
+// POST route to update the tenant
+app.post('/edittenant/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'idProof', maxCount: 1 }]), async (req, res) => {
+  const { tenantId, name, propertyName, unitAssigned, lease_start, deposit, rent_amount } = req.body;
+  const id = req.params.id;
+
+  console.log(`POST /edittenant/:id called with id: ${id}, tenantId: ${tenantId}`);
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      console.log(`Authorize record not found for id: ${id}`);
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      console.log(`Authorize record already used for id: ${id}`);
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      console.log(`User not found for phoneNumber: ${phoneNumber}`);
+      return res.status(404).send('User not found.');
+    }
+
+    const tenant = await Tenant.findOne({ _id: tenantId, userId: user._id });
+    if (!tenant) {
+      console.log(`Tenant not found for tenantId: ${tenantId}, userId: ${user._id}`);
+      return res.status(404).send('Tenant not found or you do not have permission to edit it.');
+    }
+
+    // Validate unitAssigned
+    const unit = await Unit.findById(unitAssigned);
+    if (!unit) {
+      console.log(`Unit not found for unitAssigned: ${unitAssigned}`);
+      return res.status(400).send(`No unit found with ID: ${unitAssigned}`);
+    }
+
+    // Update tenant fields
+    tenant.name = name;
+    tenant.propertyName = propertyName;
+    tenant.unitAssigned = unit._id;
+    tenant.lease_start = new Date(lease_start);
+    tenant.deposit = deposit;
+    tenant.rent_amount = rent_amount;
+
+    // Handle file uploads (if present)
+    if (req.files['photo']) {
+      tenant.photo = {
+        data: req.files['photo'][0].buffer,
+        contentType: req.files['photo'][0].mimetype
+      };
+    }
+    if (req.files['idProof']) {
+      tenant.idProof = {
+        data: req.files['idProof'][0].buffer,
+        contentType: req.files['idProof'][0].mimetype
+      };
+    }
+
+    await tenant.save();
+    console.log(`Tenant ${tenantId} updated successfully`);
+
+    // Send WhatsApp message
+    const whatsappMessage = `Tenant "${name}" edited successfully!`;
+    await sendMessage(phoneNumber, whatsappMessage);
+    console.log(`WhatsApp message sent to ${phoneNumber}: ${whatsappMessage}`);
+
+    // Mark authorization as used and delete it
+    await Authorize.findByIdAndDelete(id);
+
+    res.send('Tenant updated successfully! Check WhatsApp for confirmation.');
+  } catch (error) {
+    console.error('Error updating tenant:', error);
+    res.status(500).send('Error updating tenant.');
+  }
+});
+/////////////////////////////////////////////////////////////////////////////////////////////
+
+// Helper function to generate a 6-digit OTP
+// Helper function to generate a 6-digit OTP
+function generateOTP() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-startServer();
+// Function to send OTP via WhatsApp
+async function sendOTP(phoneNumber, otp) {
+  console.log(`sendOTP function called for phone number: ${phoneNumber}`); // Debug log
+
+  try {
+    const response = await axios.post(process.env.WHATSAPP_API_URL, {
+      messaging_product: 'whatsapp',
+      to: phoneNumber,
+      type: 'text',
+      text: { body: `Your OTP for authorization is: ${otp}` },
+    }, {
+      headers: {
+        'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    console.log(`OTP sent to ${phoneNumber}: ${otp}`); // Debug log
+    console.log('WhatsApp API response:', response.data); // Debug log
+  } catch (error) {
+    console.error('Error sending OTP:', error.response ? {
+      status: error.response.status,
+      data: error.response.data,
+      headers: error.response.headers,
+    } : error.message); // Debug log
+  }
+}
+// In-memory store for OTPs and attempts
+const otpStore = new Map(); // { phoneNumber: { otp: '123456', attempts: 0, lastAttempt: Date } }
+
+// Route to request OTP
+app.get('/request-otp/:id', async (req, res) => {
+  const id = req.params.id;
+  console.log(`/request-otp/:id route called with ID: ${id}`);
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      console.error('Authorization record not found for ID:', id);
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    console.log(`Phone number extracted from authorizeRecord: ${phoneNumber}`);
+
+    const otp = generateOTP();
+    console.log(`Generated OTP: ${otp}`);
+
+    otpStore.set(phoneNumber, { otp, attempts: 0, lastAttempt: null, validated: false });
+    console.log(`OTP stored for phone number: ${phoneNumber}`);
+
+    // Store phoneNumber in session and verify
+    req.session.phoneNumber = phoneNumber;
+    console.log(`Session phoneNumber set to: ${req.session.phoneNumber}`);
+    console.log(`Full session object: ${JSON.stringify(req.session)}`);
+
+    await sendOTP(phoneNumber, otp);
+    res.json({ status: 'OTP sent', phoneNumber });
+  } catch (error) {
+    console.error('Error in /request-otp/:id route:', error);
+    res.status(500).send('An error occurred while generating OTP.');
+  }
+});
+
+
+app.post('/validate-otp/:id', async (req, res) => {
+  const id = req.params.id;
+  const { otp } = req.body;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const storedOTPData = otpStore.get(phoneNumber);
+
+    if (!storedOTPData) {
+      return res.status(400).json({ error: 'OTP expired or not requested.' });
+    }
+
+    const { otp: storedOTP, attempts, lastAttempt } = storedOTPData;
+
+    if (attempts >= 3 && Date.now() - lastAttempt < 180000) {
+      return res.status(429).json({ error: 'Too many attempts. Try again after 3 minutes.' });
+    }
+
+    if (otp === storedOTP) {
+      otpStore.set(phoneNumber, { ...storedOTPData, validated: true });
+      console.log(`OTP validated for ${phoneNumber}. Determining redirect...`);
+
+      const tenantId = req.query.tenantId;
+      console.log(`tenantId from query: ${tenantId}`);
+
+      let redirectUrl;
+      switch (authorizeRecord.action) {
+        case 'edittenant':
+          redirectUrl = tenantId ? `/edittenant/${id}?tenantId=${tenantId}` : `/edittenant/${id}`;
+          break;
+        case 'addproperty':
+          redirectUrl = `/addproperty/${id}`;
+          break;
+        case 'editproperty':
+          redirectUrl = `/editproperty/${id}`;
+          break;
+        case 'addunit':
+          redirectUrl = `/addunit/${id}`;
+          break;
+        case 'editunit':
+          redirectUrl = `/editunit/${id}`;
+          break;
+        case 'addtenant':
+          redirectUrl = `/addtenant/${id}`;
+          break;
+        default:
+          redirectUrl = `/editproperty/${id}`; // Default case
+      }
+
+      console.log(`Redirecting to: ${redirectUrl}`);
+      res.json({ status: 'OTP validated', redirect: redirectUrl });
+    } else {
+      otpStore.set(phoneNumber, { ...storedOTPData, attempts: attempts + 1, lastAttempt: Date.now() });
+      res.status(400).json({ error: 'Invalid OTP.' });
+    }
+  } catch (error) {
+    console.error('Error validating OTP:', error);
+    res.status(500).send('An error occurred while validating OTP.');
+  }
+});
+
+
+
+
+// Route to render the OTP input page
+app.get('/authorize/:id', async (req, res) => {
+  const id = req.params.id;
+  console.log(`/authorize/:id route called with ID: ${id}`); // Debug log
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      console.error('Authorization record not found for ID:', id); // Debug log
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    // Render the OTP input page
+    console.log(`Rendering OTP input page for phone number: ${authorizeRecord.phoneNumber}`); // Debug log
+    res.sendFile(path.join(__dirname, 'public', 'otp.html'));
+  } catch (error) {
+    console.error('Error in /authorize/:id route:', error); // Debug log
+    res.status(500).send('An error occurred while rendering the OTP page.');
+  }
+});
+
+// Middleware to check if OTP is validated
+function checkOTPValidation(req, res, next) {
+  const id = req.params.id;
+  const phoneNumber = req.session.phoneNumber;
+
+  console.log(`checkOTPValidation: ID = ${id}, Session phoneNumber = ${phoneNumber}`); // Debug log
+  console.log(`Full session object: ${JSON.stringify(req.session)}`); // Debug log
+
+  if (!phoneNumber) {
+    console.error('No phoneNumber in session. OTP not requested.');
+    return res.status(401).send('OTP not requested. Please request an OTP first.');
+  }
+
+  const storedOTPData = otpStore.get(phoneNumber);
+  console.log(`otpStore data for ${phoneNumber}: ${JSON.stringify(storedOTPData)}`); // Debug log
+
+  if (!storedOTPData || !storedOTPData.validated) {
+    console.error('OTP not validated or not found in otpStore.');
+    return res.status(401).send('OTP not validated. Please validate the OTP first.');
+  }
+
+  console.log(`OTP validated successfully for ${phoneNumber}. Proceeding...`);
+  next();
+}
+
+
+
+app.get('/addproperty/:id', checkOTPValidation, async (req, res) => {
+    const id = req.params.id;
+
+    try {
+        const authorizeRecord = await Authorize.findById(id);
+        if (!authorizeRecord) {
+            return res.status(404).send('Authorization record not found.');
+        }
+
+        // Check if the authorization has already been used
+        if (authorizeRecord.used) {
+            return res.status(403).send('This link has already been used.');
+        }
+
+        // Render the add property form
+        res.render('addProperty', { id });
+    } catch (error) {
+        console.error('Error rendering add property form:', error);
+        res.status(500).send('An error occurred while rendering the form.');
+    }
+});
+
+app.get('/removeproperty/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const properties = await Property.find({ userId: user._id });
+    if (!properties.length) {
+      return res.status(404).send('No properties found to remove.');
+    }
+
+    // Render the remove property form with properties list
+    res.render('removeProperty', { id, properties });
+  } catch (error) {
+    console.error('Error rendering remove property form:', error);
+    res.status(500).send('An error occurred while rendering the form.');
+  }
+});
+
+app.get('/removeunit/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const units = await Unit.find({ userId: user._id });
+    if (!units.length) {
+      return res.status(404).send('No units found to remove.');
+    }
+
+    const properties = await Property.find({ userId: user._id }); // For property names
+    res.render('removeUnit', { id, units, properties });
+  } catch (error) {
+    console.error('Error rendering remove unit form:', error);
+    res.status(500).send('An error occurred while rendering the form.');
+  }
+});
+
+app.get('/removetenant/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const tenants = await Tenant.find({ userId: user._id });
+    if (!tenants.length) {
+      return res.status(404).send('No tenants found to remove.');
+    }
+
+    res.render('removeTenant', { id, tenants });
+  } catch (error) {
+    console.error('Error rendering remove tenant form:', error);
+    res.status(500).send('An error occurred while rendering the form.');
+  }
+});
+
+app.get('/addunit/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const properties = await Property.find({ userId: user._id });
+    if (!properties.length) {
+      return res.status(404).send('No properties found. Please add a property first.');
+    }
+
+    res.render('addUnit', { id, properties });
+  } catch (error) {
+    console.error('Error rendering add unit form:', error);
+    res.status(500).send('An error occurred while rendering the form.');
+  }
+});
+
+app.get('/editunit/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const units = await Unit.find({ userId: user._id });
+    if (!units.length) {
+      return res.status(404).send('No units found to edit.');
+    }
+
+    const properties = await Property.find({ userId: user._id });
+    res.render('editUnit', { id, units, properties });
+  } catch (error) {
+    console.error('Error rendering edit unit form:', error);
+    res.status(500).send('An error occurred while rendering the form.');
+  }
+});
+
+app.get('/addtenant/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      return res.status(404).send('Authorization record not found.');
+    }
+
+    if (authorizeRecord.used) {
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      return res.status(404).send('User not found.');
+    }
+
+    const properties = await Property.find({ userId: user._id });
+    const units = await Unit.find({ userId: user._id });
+    if (!properties.length || !units.length) {
+      return res.status(404).send('No properties or units found. Please add them first.');
+    }
+
+    res.render('addTenant', { id, properties, units });
+  } catch (error) {
+    console.error('Error rendering add tenant form:', error);
+    res.status(500).send('An error occurred while rendering the form.');
+  }
+});
+
+app.get('/edittenant/:id', checkOTPValidation, async (req, res) => {
+  const id = req.params.id;
+  const tenantId = req.query.tenantId;
+
+  console.log(`GET /edittenant/:id called with id: ${id}, tenantId: ${tenantId}`);
+
+  try {
+    const authorizeRecord = await Authorize.findById(id);
+    if (!authorizeRecord) {
+      console.log(`Authorize record not found for id: ${id}`);
+      return res.status(404).send('Authorization record not found.');
+    }
+    if (authorizeRecord.used) {
+      console.log(`Authorize record already used for id: ${id}`);
+      return res.status(403).send('This link has already been used.');
+    }
+
+    const phoneNumber = authorizeRecord.phoneNumber;
+    const user = await User.findOne({ phoneNumber });
+    if (!user) {
+      console.log(`User not found for phoneNumber: ${phoneNumber}`);
+      return res.status(404).send('User not found.');
+    }
+
+    if (!tenantId || !mongoose.Types.ObjectId.isValid(tenantId)) {
+      console.log(`Invalid or missing tenantId: ${tenantId}`);
+      return res.status(400).send('Invalid or missing tenantId.');
+    }
+
+    const tenant = await Tenant.findOne({ _id: tenantId, userId: user._id });
+    if (!tenant) {
+      console.log(`Tenant not found for tenantId: ${tenantId}, userId: ${user._id}`);
+      return res.status(404).send('Tenant not found or invalid tenantId.');
+    }
+
+    const properties = await Property.find({ userId: user._id });
+    const units = await Unit.find({ userId: user._id });
+
+    res.render('editTenant', { id, tenant, properties, units });
+  } catch (error) {
+    console.error('Error rendering edit tenant form:', error);
+    res.status(500).send('An error occurred while rendering the form.');
+  }
+});
+// Start the server
+app.listen(port, () => {
+    console.log(`Server running on http://localhost:${port}`);
+});
