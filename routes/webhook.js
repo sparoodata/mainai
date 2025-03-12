@@ -61,7 +61,7 @@ async function sendMessage(phoneNumber, message) {
   }
 }
 
-async function sendImageOption(phoneNumber, type, entityId, summary) {
+async function sendImageOption(phoneNumber, type, entityId) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
     to: phoneNumber,
@@ -79,7 +79,52 @@ async function sendImageOption(phoneNumber, type, entityId, summary) {
     },
   };
   await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
-  sessions[phoneNumber].pendingSummary = summary; // Store summary temporarily
+}
+
+async function sendSummary(phoneNumber, type, entityId, imageUrl) {
+  let summary;
+  if (type === 'property') {
+    const property = await Property.findById(entityId);
+    summary = `
+📸 *Image*: ${imageUrl}
+✅ *Property Added*
+━━━━━━━━━━━━━━━
+🏠 *Name*: ${property.name}
+📍 *Address*: ${property.address}
+🚪 *Units*: ${property.units}
+💰 *Total Amount*: ${property.totalAmount}
+━━━━━━━━━━━━━━━
+    `;
+  } else if (type === 'unit') {
+    const unit = await Unit.findById(entityId).populate('property');
+    summary = `
+📸 *Image*: ${imageUrl}
+✅ *Unit Added*
+━━━━━━━━━━━━━━━
+🏠 *Property*: ${unit.property.name}
+🚪 *Unit Number*: ${unit.unitNumber}
+💰 *Rent Amount*: ${unit.rentAmount}
+📏 *Floor*: ${unit.floor}
+📐 *Size*: ${unit.size}
+━━━━━━━━━━━━━━━
+    `;
+  } else if (type === 'tenant') {
+    const tenant = await Tenant.findById(entityId);
+    const unit = await Unit.findById(tenant.unitAssigned);
+    summary = `
+📸 *Image*: ${imageUrl}
+✅ *Tenant Added*
+━━━━━━━━━━━━━━━
+👤 *Name*: ${tenant.name}
+🏠 *Property*: ${tenant.propertyName}
+🚪 *Unit*: ${unit.unitNumber}
+📅 *Lease Start*: ${tenant.lease_start}
+💵 *Deposit*: ${tenant.deposit}
+💰 *Rent Amount*: ${tenant.rent_amount}
+━━━━━━━━━━━━━━━
+    `;
+  }
+  await sendMessage(phoneNumber, summary);
 }
 
 function isValidName(name) {
@@ -199,20 +244,11 @@ router.post('/', async (req, res) => {
             });
             await property.save();
 
-            const summary = `
-✅ *Property Added*
-━━━━━━━━━━━━━━━
-🏠 *Name*: ${property.name}
-📍 *Address*: ${property.address}
-🚪 *Units*: ${property.units}
-💰 *Total Amount*: ${property.totalAmount}
-━━━━━━━━━━━━━━━
-            `;
-            await sendMessage(fromNumber, summary);
-            await sendImageOption(fromNumber, 'property', property._id, summary);
-            sessions[fromNumber].action = 'awaiting_image_choice';
-            sessions[fromNumber].entityId = property._id;
             sessions[fromNumber].entityType = 'property';
+            sessions[fromNumber].entityId = property._id;
+            await sendImageOption(fromNumber, 'property', property._id);
+            sessions[fromNumber].action = 'awaiting_image_choice';
+            sessions[fromNumber].propertyData = { ...sessions[fromNumber].propertyData, id: property._id }; // Keep data for summary
           } else {
             await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease retry with a valid total amount (e.g., 5000). Must be a positive number.');
           }
@@ -240,22 +276,11 @@ router.post('/', async (req, res) => {
           });
           await unit.save();
 
-          const property = await Property.findById(unit.property);
-          const summary = `
-✅ *Unit Added*
-━━━━━━━━━━━━━━━
-🏠 *Property*: ${property.name}
-🚪 *Unit Number*: ${unit.unitNumber}
-💰 *Rent Amount*: ${unit.rentAmount}
-📏 *Floor*: ${unit.floor}
-📐 *Size*: ${unit.size}
-━━━━━━━━━━━━━━━
-          `;
-          await sendMessage(fromNumber, summary);
-          await sendImageOption(fromNumber, 'unit', unit._id, summary);
-          sessions[fromNumber].action = 'awaiting_image_choice';
-          sessions[fromNumber].entityId = unit._id;
           sessions[fromNumber].entityType = 'unit';
+          sessions[fromNumber].entityId = unit._id;
+          await sendImageOption(fromNumber, 'unit', unit._id);
+          sessions[fromNumber].action = 'awaiting_image_choice';
+          sessions[fromNumber].unitData = { ...sessions[fromNumber].unitData, id: unit._id }; // Keep data for summary
         } else if (sessions[fromNumber].action === 'add_tenant_name') {
           sessions[fromNumber].tenantData.name = text;
           await sendMessage(fromNumber, '📅 *Lease Start Date* \nWhen does the lease start? (e.g., DD-MM-YYYY like 01-01-2025)');
@@ -283,27 +308,15 @@ router.post('/', async (req, res) => {
             lease_start: sessions[fromNumber].tenantData.lease_start,
             deposit: sessions[fromNumber].tenantData.deposit,
             rent_amount: parseFloat(text),
-            tenant_id: generate.TEXTenantId(),
+            tenant_id: generateTenantId(),
           });
           await tenant.save();
 
-          const unit = await Unit.findById(tenant.unitAssigned).populate('property');
-          const summary = `
-✅ *Tenant Added*
-━━━━━━━━━━━━━━━
-👤 *Name*: ${tenant.name}
-🏠 *Property*: ${tenant.propertyName}
-🚪 *Unit*: ${unit.unitNumber}
-📅 *Lease Start*: ${tenant.lease_start}
-💵 *Deposit*: ${tenant.deposit}
-💰 *Rent Amount*: ${tenant.rent_amount}
-━━━━━━━━━━━━━━━
-          `;
-          await sendMessage(fromNumber, summary);
-          await sendImageOption(fromNumber, 'tenant', tenant._id, summary);
-          sessions[fromNumber].action = 'awaiting_image_choice';
-          sessions[fromNumber].entityId = tenant._id;
           sessions[fromNumber].entityType = 'tenant';
+          sessions[fromNumber].entityId = tenant._id;
+          await sendImageOption(fromNumber, 'tenant', tenant._id);
+          sessions[fromNumber].action = 'awaiting_image_choice';
+          sessions[fromNumber].tenantData = { ...sessions[fromNumber].tenantData, id: tenant._id }; // Keep data for summary
         } else if (text.toLowerCase() === 'help') {
           const buttonMenu = {
             messaging_product: 'whatsapp',
@@ -360,7 +373,7 @@ router.post('/', async (req, res) => {
           const user = await User.findOne({ phoneNumber });
           const properties = await Property.find({ userId: user._id });
           if (!properties.length) {
-            await sendMessage(fromNumber, 'ℹ️ *No Properties* \nPlease add a property first.');
+           await sendMessage(fromNumber, 'ℹ️ *No Properties* \nPlease add a property first.');
           } else {
             sessions[fromNumber].properties = properties;
             sessions[fromNumber].userId = user._id;
@@ -463,34 +476,32 @@ router.post('/', async (req, res) => {
             const token = await generateUploadToken(phoneNumber, type, entityId);
             const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/${type}/${entityId}?token=${token}`;
             const shortUrl = await shortenUrl(imageUploadUrl);
-            const summaryWithImage = `${sessions[fromNumber].pendingSummary}📸 *Image*: ${shortUrl}`;
-            await sendMessage(fromNumber, `Click here to upload an image (valid once): ${shortUrl}`);
-            sessions[fromNumber].action = null;
-            delete sessions[fromNumber].pendingSummary;
-            delete sessions[fromNumber].entityId;
-            delete sessions[fromNumber].entityType;
+
+            await sendMessage(fromNumber, `Please upload the image here (valid for 15 minutes): ${shortUrl}`);
+            sessions[fromNumber].action = 'awaiting_image_upload';
+            sessions[fromNumber].uploadUrl = shortUrl; // Store for reference
           } else if (selectedOption.startsWith('no_upload_')) {
             const [_, type, entityId] = selectedOption.split('_');
-            let entity;
             if (type === 'property') {
-              entity = await Property.findById(entityId);
-              entity.images = [DEFAULT_IMAGE_URL];
-              await entity.save();
+              const property = await Property.findById(entityId);
+              property.images = [DEFAULT_IMAGE_URL];
+              await property.save();
+              await sendSummary(phoneNumber, 'property', entityId, DEFAULT_IMAGE_URL);
             } else if (type === 'unit') {
-              entity = await Unit.findById(entityId);
-              entity.images = [DEFAULT_IMAGE_URL];
-              await entity.save();
+              const unit = await Unit.findById(entityId);
+              unit.images = [DEFAULT_IMAGE_URL];
+              await unit.save();
+              await sendSummary(phoneNumber, 'unit', entityId, DEFAULT_IMAGE_URL);
             } else if (type === 'tenant') {
-              entity = await Tenant.findById(entityId);
-              entity.photo = DEFAULT_IMAGE_URL;
-              await entity.save();
+              const tenant = await Tenant.findById(entityId);
+              tenant.photo = DEFAULT_IMAGE_URL;
+              await tenant.save();
+              await sendSummary(phoneNumber, 'tenant', entityId, DEFAULT_IMAGE_URL);
             }
-            const summaryWithImage = `${sessions[fromNumber].pendingSummary}📸 *Image*: ${DEFAULT_IMAGE_URL}`;
-            await sendMessage(fromNumber, summaryWithImage);
             sessions[fromNumber].action = null;
-            delete sessions[fromNumber].pendingSummary;
-            delete sessions[fromNumber].entityId;
             delete sessions[fromNumber].entityType;
+            delete sessions[fromNumber].entityId;
+            delete sessions[fromNumber][type + 'Data'];
           }
         }
         delete userResponses[fromNumber]; // Clear response after handling
@@ -499,6 +510,31 @@ router.post('/', async (req, res) => {
   }
   res.sendStatus(200);
 });
+
+// Placeholder: This should be triggered by your upload endpoint after image upload
+async function handleImageUpload(phoneNumber, type, entityId, uploadedImageUrl) {
+  if (sessions[phoneNumber] && sessions[phoneNumber].action === 'awaiting_image_upload') {
+    if (type === 'property') {
+      const property = await Property.findById(entityId);
+      property.images = [uploadedImageUrl];
+      await property.save();
+    } else if (type === 'unit') {
+      const unit = await Unit.findById(entityId);
+      unit.images = [uploadedImageUrl];
+      await unit.save();
+    } else if (type === 'tenant') {
+      const tenant = await Tenant.findById(entityId);
+      tenant.photo = uploadedImageUrl;
+      await tenant.save();
+    }
+    await sendSummary(phoneNumber, type, entityId, uploadedImageUrl);
+    sessions[phoneNumber].action = null;
+    delete sessions[phoneNumber].entityType;
+    delete sessions[phoneNumber].entityId;
+    delete sessions[phoneNumber][type + 'Data'];
+    delete sessions[phoneNumber].uploadUrl;
+  }
+}
 
 async function sendPropertySelectionMenu(phoneNumber, properties) {
   const listMenu = {
@@ -660,4 +696,5 @@ function generateTenantId() {
 module.exports = {
   router,
   sendMessage,
+  handleImageUpload, // Export this for use in your upload endpoint
 };
