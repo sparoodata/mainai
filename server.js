@@ -119,11 +119,11 @@ app.post('/webhook', async (req, res) => {
       interactive: {
         type: 'button',
         body: { 
-          text: '*Welcome to MyTenants!*\nYou’re not registered yet. Simplify property management with our WhatsApp solution.' 
+          text: '🏡 *Welcome to MyTenants!* \nHello! You’re not yet registered with us. MyTenants helps landlords like you:\n- Manage properties, units, and tenants effortlessly\n- Track rent and occupancy\n- Generate reports—all via WhatsApp!\nReady to simplify your rental business?' 
         },
         action: {
           buttons: [
-            { type: 'reply', reply: { id: 'onboard', title: 'Get Started' } }
+            { type: 'reply', reply: { id: 'onboard', title: 'Join Now 📋' } }
           ]
         }
       }
@@ -134,13 +134,13 @@ app.post('/webhook', async (req, res) => {
       interactive: {
         type: 'button',
         body: { 
-          text: '*MyTenants Dashboard*\nHow may I assist you today?' 
+          text: '🏡 *MyTenants Dashboard*\nHello! How can I assist you today?' 
         },
         action: {
           buttons: [
-            { type: 'reply', reply: { id: 'account', title: 'My Account' } },
-            { type: 'reply', reply: { id: 'portfolio', title: 'Portfolio' } },
-            { type: 'reply', reply: { id: 'reports', title: 'Reports' } }
+            { type: 'reply', reply: { id: 'account', title: '👤 My Account' } },
+            { type: 'reply', reply: { id: 'portfolio', title: '🏢 Portfolio' } },
+            { type: 'reply', reply: { id: 'reports', title: '📊 Reports' } }
           ]
         }
       }
@@ -149,7 +149,7 @@ app.post('/webhook', async (req, res) => {
     await sendWhatsAppMessage(fromNumber, {
       type: 'text',
       text: {
-        body: `*Account Details*\nPhone: ${user.phoneNumber}\nName: ${user.profileName || 'Not set'}\nVerified: ${user.verified ? 'Yes ✅' : 'No'}\nSubscription: ${user.subscription}\nRegistered: ${user.registrationDate.toDateString()}${user.verifiedDate ? `\nVerified On: ${user.verifiedDate.toDateString()}` : ''}`
+        body: `👤 *Account Details*\nPhone: ${user.phoneNumber}\nName: ${user.profileName || 'Not set'}\nVerified: ${user.verified ? 'Yes ✅' : 'No'}\nSubscription: ${user.subscription}\nRegistered: ${user.registrationDate.toDateString()}${user.verifiedDate ? `\nVerified On: ${user.verifiedDate.toDateString()}` : ''}`
       }
     });
   } else if (incomingMsg === 'portfolio') {
@@ -158,13 +158,13 @@ app.post('/webhook', async (req, res) => {
       interactive: {
         type: 'button',
         body: { 
-          text: '*Property Portfolio*\nManage your rental assets:' 
+          text: '🏢 *Property Portfolio*\nManage your rental assets:' 
         },
         action: {
           buttons: [
-            { type: 'reply', reply: { id: 'properties', title: 'Properties' } },
-            { type: 'reply', reply: { id: 'units', title: 'Units' } },
-            { type: 'reply', reply: { id: 'tenants', title: 'Tenants' } }
+            { type: 'reply', reply: { id: 'properties', title: '🏠 Properties' } },
+            { type: 'reply', reply: { id: 'units', title: '🚪 Units' } },
+            { type: 'reply', reply: { id: 'tenants', title: '👥 Tenants' } }
           ]
         }
       }
@@ -175,13 +175,13 @@ app.post('/webhook', async (req, res) => {
       interactive: {
         type: 'button',
         body: { 
-          text: '*Property Management*\nSelect an action:' 
+          text: '🏠 *Property Management*\nWhat would you like to do?' 
         },
         action: {
           buttons: [
-            { type: 'reply', reply: { id: 'add_property', title: 'Add Property' } },
-            { type: 'reply', reply: { id: 'edit_property', title: 'Edit Property' } },
-            { type: 'reply', reply: { id: 'delete_property', title: 'Delete Property' } }
+            { type: 'reply', reply: { id: 'add_property', title: '➕ Add Property' } },
+            { type: 'reply', reply: { id: 'edit_property', title: '✏️ Edit Property' } },
+            { type: 'reply', reply: { id: 'delete_property', title: '🗑️ Delete Property' } }
           ]
         }
       }
@@ -192,13 +192,13 @@ app.post('/webhook', async (req, res) => {
       interactive: {
         type: 'button',
         body: { 
-          text: '*Unit Management*\nSelect an action:' 
+          text: '🚪 *Unit Management*\nSelect an action:' 
         },
         action: {
           buttons: [
-            { type: 'reply', reply: { id: 'add_unit', title: 'Add Unit' } },
-            { type: 'reply', reply: { id: 'edit_unit', title: 'Edit Unit' } },
-            { type: 'reply', reply: { id: 'delete_unit', title: 'Delete Unit' } }
+            { type: 'reply', reply: { id: 'add_unit', title: '➕ Add Unit' } },
+            { type: 'reply', reply: { id: 'edit_unit', title: '✏️ Edit Unit' } },
+            { type: 'reply', reply: { id: 'delete_unit', title: '🗑️ Delete Unit' } }
           ]
         }
       }
@@ -209,13 +209,13 @@ app.post('/webhook', async (req, res) => {
       interactive: {
         type: 'button',
         body: { 
-          text: '*Tenant Management*\nSelect an action:' 
+          text: '👥 *Tenant Management*\nChoose an option:' 
         },
         action: {
           buttons: [
-            { type: 'reply', reply: { id: 'add_tenant', title: 'Add Tenant' } },
-            { type: 'reply', reply: { id: 'edit_tenant', title: 'Edit Tenant' } },
-            { type: 'reply', reply: { id: 'delete_tenant', title: 'Delete Tenant' } }
+            { type: 'reply', reply: { id: 'add_tenant', title: '➕ Add Tenant' } },
+            { type: 'reply', reply: { id: 'edit_tenant', title: '✏️ Edit Tenant' } },
+            { type: 'reply', reply: { id: 'delete_tenant', title: '🗑️ Delete Tenant' } }
           ]
         }
       }
@@ -226,37 +226,41 @@ app.post('/webhook', async (req, res) => {
       interactive: {
         type: 'button',
         body: { 
-          text: '*Financial Reports*\nChoose a report:' 
+          text: '📊 *Financial Reports*\nGenerate a report:' 
         },
         action: {
           buttons: [
-            { type: 'reply', reply: { id: 'rent_due', title: 'Rent Due' } },
-            { type: 'reply', reply: { id: 'occupancy', title: 'Occupancy' } },
-            { type: 'reply', reply: { id: 'maintenance', title: 'Maintenance' } }
+            { type: 'reply', reply: { id: 'rent_due', title: '💵 Rent Due' } },
+            { type: 'reply', reply: { id: 'occupancy', title: '📈 Occupancy' } },
+            { type: 'reply', reply: { id: 'maintenance', title: '🛠️ Maintenance' } }
           ]
         }
       }
     });
   } else if (incomingMsg === 'onboard') {
+    console.log('Processing onboard request for:', fromNumber);
     try {
       const newUser = new User({
         phoneNumber: fromNumber,
         profileName: 'Landlord',
         verified: false,
-        subscription: 'Free'
+        subscription: 'Free',
+        registrationDate: new Date()
       });
-      await newUser.save();
+      const savedUser = await newUser.save();
+      console.log('User registered successfully:', savedUser);
       await sendWhatsAppMessage(fromNumber, {
         type: 'text',
         text: { 
-          body: '*Registration Successful!*\nWelcome aboard! Type *Help* to explore your dashboard.' 
+          body: '🎉 *Registration Successful!*\nWelcome to MyTenants! Type *Help* to start managing your properties.' 
         }
       });
     } catch (error) {
+      console.error('Error during onboarding:', error.message);
       await sendWhatsAppMessage(fromNumber, {
         type: 'text',
         text: { 
-          body: '*Registration Failed*\nSomething went wrong. Please try again.' 
+          body: '❌ *Registration Failed*\nSomething went wrong. Please try again or contact support.' 
         }
       });
     }
@@ -266,12 +270,12 @@ app.post('/webhook', async (req, res) => {
       interactive: {
         type: 'button',
         body: { 
-          text: '*MyTenants*\nYour rental management assistant.\nHow can I assist you today?'
+          text: '🏡 *MyTenants*\nYour friendly rental management assistant.\nHow can I help you today?' 
         },
         action: {
           buttons: [
-            { type: 'reply', reply: { id: 'help', title: 'Dashboard' } },
-            { type: 'reply', reply: { id: 'ask_ai', title: 'Ask AI' } }
+            { type: 'reply', reply: { id: 'help', title: '📋 Dashboard' } },
+            { type: 'reply', reply: { id: 'ask_ai', title: '🤖 Ask AI' } }
           ]
         }
       }
