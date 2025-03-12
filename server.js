@@ -8,12 +8,13 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const axios = require("axios");
 const multer = require('multer');
+const crypto = require('crypto'); // For generating unique tokens
 const Tenant = require('./models/Tenant');
 const Image = require('./models/Image');
 const Property = require('./models/Property');
 const User = require('./models/User');
-const Authorize = require('./models/Authorize');
 const Unit = require('./models/Unit');
+const UploadToken = require('./models/UploadToken'); // New model
 const AWS = require('aws-sdk');
 
 const app = express();
@@ -30,7 +31,7 @@ const s3 = new AWS.S3({
 app.set('trust proxy', 1);
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
-app.set('views', '/app/views');
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -41,12 +42,6 @@ mongoose.connect(process.env.MONGODB_URI, {
 })
   .then(() => console.log('MongoDB connected'))
   .catch(error => console.error('MongoDB connection error:', error));
-
-const cors = require('cors');
-app.use(cors({
-  origin: 'http://your-frontend-domain.com',
-  credentials: true,
-}));
 
 app.use(session({
   secret: process.env.SESSION_SECRET,
@@ -66,32 +61,65 @@ app.use(session({
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-const signupLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: 'Too many signup attempts. Try again later.',
-});
-
 const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
-// Routes and webhook handling
 const { router, sendMessage } = require('./routes/webhook');
 app.use('/webhook', router);
 
-// Image upload route for properties, units, and tenants
-app.get('/upload-image/:phoneNumber/:type/:id', (req, res) => {
-  const { phoneNumber, type, id } = req.params;
-  res.render('uploadImage', { phoneNumber, type, id });
-});
-
-app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), async (req, res) => {
-  const { phoneNumber, type, id } = req.params;
+// Middleware to validate upload token
+async function validateUploadToken(req, res, next) {
+  const { token } = req.query;
+  if (!token) {
+    return res.status(403).send('No token provided.');
+  }
 
   try {
+    const uploadToken = await UploadToken.findOne({ token });
+    if (!uploadToken) {
+      return res.status(403).send('Invalid or expired token.');
+    }
+    if (uploadToken.used) {
+      return res.status(403).send('This upload link has already been used.');
+    }
+    if (new Date() > uploadToken.expiresAt) {
+      return res.status(403).send('This upload link has expired.');
+    }
+
+    // Mark token as used after the page is loaded
+    uploadToken.used = true;
+    await uploadToken.save();
+
+    req.uploadToken = uploadToken; // Pass token data to the route
+    next();
+  } catch (error) {
+    console.error('Error validating token:', error);
+    res.status(500).send('Server error during token validation.');
+  }
+}
+
+// Image upload GET route with token validation
+app.get('/upload-image/:phoneNumber/:type/:id', validateUploadToken, (req, res) => {
+  const { phoneNumber, type, id } = req.params;
+  const { token } = req.query;
+  res.render('uploadImage', { phoneNumber, type, id, token });
+});
+
+// Image upload POST route with additional token check
+app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), async (req, res) => {
+  const { phoneNumber, type, id } = req.params;
+  const { token } = req.body; // Token passed from form
+
+  try {
+    const uploadToken = await UploadToken.findOne({ token });
+    if (!uploadToken || uploadToken.used || new Date() > uploadToken.expiresAt) {
+      await sendMessage(phoneNumber, `❌ *Error* \nUpload link is invalid or expired. Please request a new link.`);
+      return res.status(403).send('Invalid or expired token.');
+    }
+
     const key = `images/${Date.now()}-${req.file.originalname}`;
     const uploadParams = {
       Bucket: process.env.R2_BUCKET,
@@ -126,7 +154,9 @@ app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), async (
     res.send('Image uploaded successfully!');
   } catch (error) {
     console.error(`Error uploading image for ${type}:`, error);
-    await sendMessage(phoneNumber, `❌ *Error* \nFailed to upload image. Please try again using the same link: ${req.headers.origin}/upload-image/${phoneNumber}/${type}/${id}`);
+    const retryUrl = `${process.env.GLITCH_HOST}/upload-image/${phoneNumber}/${type}/${id}?token=${token}`;
+    const shortUrl = await axios.post('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(retryUrl)).then(res => res.data);
+    await sendMessage(phoneNumber, `❌ *Error* \nFailed to upload image. Please try again using this link: ${shortUrl}`);
     res.status(500).send('Error uploading image.');
   }
 });
