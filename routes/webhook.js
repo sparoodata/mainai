@@ -172,7 +172,7 @@ router.post('/', async (req, res) => {
             const token = await generateUploadToken(phoneNumber, 'property', property._id);
             const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/property/${property._id}?token=${token}`;
             const shortUrl = await shortenUrl(imageUploadUrl);
-            await sendMessage(fromNumber, `✅ *Property Added* \nProperty "${property.name}" has been added successfully!\n📸 *Upload Image* \nClick here to upload an image for this property (valid once): ${shortUrl}`);
+            await sendMessage(fromNumber, `✅ *Property Added* \nProperty "${property.name}" has been added successfully!\n📸 *Upload Image* \nClick here to upload an image for this property (valid onceArizona: ${shortUrl}`);
             sessions[fromNumber].action = null;
             delete sessions[fromNumber].propertyData;
           } else {
@@ -320,13 +320,13 @@ router.post('/', async (req, res) => {
         } else if (sessions[fromNumber].action === 'add_unit_select_property') {
           const propertyId = selectedOption;
           console.log(`Property selected for unit: ${propertyId}`);
-          const properties = sessions[fromNumber].properties;
+          const properties = sessions[fromNumber].properties || await Property.find({ userId: sessions[fromNumber].userId });
           const selectedProperty = properties.find(p => p._id.toString() === propertyId);
 
           if (selectedProperty) {
             console.log(`Found property: ${selectedProperty.name}`);
             sessions[fromNumber].unitData = { property: selectedProperty._id };
-            const units = await Unit.find({ property: selectedProperty._id, userId: sessions[fromNumber].userId });
+            const units = await Unit.find({ property: selectedProperty._id });
             console.log(`Units found: ${units.length}`);
             if (!units.length) {
               await sendMessage(fromNumber, 'ℹ️ *No Units* \nPlease add a unit to this property. Enter the unit number:');
@@ -358,13 +358,13 @@ router.post('/', async (req, res) => {
         } else if (sessions[fromNumber].action === 'add_tenant_select_property') {
           const propertyId = selectedOption;
           console.log(`Property selected for tenant: ${propertyId}`);
-          const properties = sessions[fromNumber].properties;
+          const properties = sessions[fromNumber].properties || await Property.find({ userId: sessions[fromNumber].userId });
           const selectedProperty = properties.find(p => p._id.toString() === propertyId);
 
           if (selectedProperty) {
             console.log(`Found property: ${selectedProperty.name}`);
             sessions[fromNumber].tenantData = { propertyId: selectedProperty._id };
-            const units = await Unit.find({ property: selectedProperty._id, userId: sessions[fromNumber].userId });
+            const units = await Unit.find({ property: selectedProperty._id });
             console.log(`Units found: ${units.length}`);
             if (!units.length) {
               await sendMessage(fromNumber, 'ℹ️ *No Units* \nPlease add a unit to this property first.');
