@@ -14,6 +14,7 @@ const router = express.Router();
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const GLITCH_HOST = process.env.GLITCH_HOST;
+const DEFAULT_IMAGE_URL = 'https://via.placeholder.com/150'; // Default image URL
 
 const sessions = {};
 let userResponses = {};
@@ -60,6 +61,27 @@ async function sendMessage(phoneNumber, message) {
   }
 }
 
+async function sendImageOption(phoneNumber, type, entityId, summary) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: `📸 Add Image to ${type.charAt(0).toUpperCase() + type.slice(1)}` },
+      body: { text: `Would you like to upload an image for this ${type}?` },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: `upload_${type}_${entityId}`, title: 'Yes' } },
+          { type: 'reply', reply: { id: `no_upload_${type}_${entityId}`, title: 'No' } },
+        ],
+      },
+    },
+  };
+  await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
+  sessions[phoneNumber].pendingSummary = summary; // Store summary temporarily
+}
+
 function isValidName(name) {
   const regex = /^[a-zA-Z0-9 ]+$/;
   return typeof name === 'string' && name.trim().length > 0 && name.length <= 40 && regex.test(name);
@@ -78,6 +100,14 @@ function isValidUnits(units) {
 function isValidTotalAmount(amount) {
   const num = parseFloat(amount);
   return !isNaN(num) && num > 0;
+}
+
+function isValidDate(dateStr) {
+  const regex = /^(\d{2})-(\d{2})-(\d{4})$/;
+  if (!regex.test(dateStr)) return false;
+  const [day, month, year] = dateStr.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getDate() === day && date.getMonth() === month - 1 && date.getFullYear() === year;
 }
 
 router.get('/', (req, res) => {
@@ -169,12 +199,20 @@ router.post('/', async (req, res) => {
             });
             await property.save();
 
-            const token = await generateUploadToken(phoneNumber, 'property', property._id);
-            const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/property/${property._id}?token=${token}`;
-            const shortUrl = await shortenUrl(imageUploadUrl);
-            await sendMessage(fromNumber, `✅ *Property Added* \nProperty "${property.name}" has been added successfully!\n📸 *Upload Image* \nClick here to upload an image for this property (valid onceArizona: ${shortUrl}`);
-            sessions[fromNumber].action = null;
-            delete sessions[fromNumber].propertyData;
+            const summary = `
+✅ *Property Added*
+━━━━━━━━━━━━━━━
+🏠 *Name*: ${property.name}
+📍 *Address*: ${property.address}
+🚪 *Units*: ${property.units}
+💰 *Total Amount*: ${property.totalAmount}
+━━━━━━━━━━━━━━━
+            `;
+            await sendMessage(fromNumber, summary);
+            await sendImageOption(fromNumber, 'property', property._id, summary);
+            sessions[fromNumber].action = 'awaiting_image_choice';
+            sessions[fromNumber].entityId = property._id;
+            sessions[fromNumber].entityType = 'property';
           } else {
             await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease retry with a valid total amount (e.g., 5000). Must be a positive number.');
           }
@@ -202,21 +240,34 @@ router.post('/', async (req, res) => {
           });
           await unit.save();
 
-          const token = await generateUploadToken(phoneNumber, 'unit', unit._id);
-          const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/unit/${unit._id}?token=${token}`;
-          const shortUrl = await shortenUrl(imageUploadUrl);
-          await sendMessage(fromNumber, `✅ *Unit Added* \nUnit "${unit.unitNumber}" has been added successfully!\n📸 *Upload Image* \nClick here to upload an image for this unit (valid once): ${shortUrl}`);
-          sessions[fromNumber].action = null;
-          delete sessions[fromNumber].unitData;
-          delete sessions[fromNumber].properties;
+          const property = await Property.findById(unit.property);
+          const summary = `
+✅ *Unit Added*
+━━━━━━━━━━━━━━━
+🏠 *Property*: ${property.name}
+🚪 *Unit Number*: ${unit.unitNumber}
+💰 *Rent Amount*: ${unit.rentAmount}
+📏 *Floor*: ${unit.floor}
+📐 *Size*: ${unit.size}
+━━━━━━━━━━━━━━━
+          `;
+          await sendMessage(fromNumber, summary);
+          await sendImageOption(fromNumber, 'unit', unit._id, summary);
+          sessions[fromNumber].action = 'awaiting_image_choice';
+          sessions[fromNumber].entityId = unit._id;
+          sessions[fromNumber].entityType = 'unit';
         } else if (sessions[fromNumber].action === 'add_tenant_name') {
           sessions[fromNumber].tenantData.name = text;
-          await sendMessage(fromNumber, '📅 *Lease Start Date* \nWhen does the lease start? (e.g., 2025-01-01)');
+          await sendMessage(fromNumber, '📅 *Lease Start Date* \nWhen does the lease start? (e.g., DD-MM-YYYY like 01-01-2025)');
           sessions[fromNumber].action = 'add_tenant_lease_start';
         } else if (sessions[fromNumber].action === 'add_tenant_lease_start') {
-          sessions[fromNumber].tenantData.lease_start = text;
-          await sendMessage(fromNumber, '💵 *Deposit* \nWhat is the deposit amount?');
-          sessions[fromNumber].action = 'add_tenant_deposit';
+          if (isValidDate(text)) {
+            sessions[fromNumber].tenantData.lease_start = text;
+            await sendMessage(fromNumber, '💵 *Deposit* \nWhat is the deposit amount?');
+            sessions[fromNumber].action = 'add_tenant_deposit';
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Date* \nPlease use DD-MM-YYYY format (e.g., 01-01-2025).');
+          }
         } else if (sessions[fromNumber].action === 'add_tenant_deposit') {
           sessions[fromNumber].tenantData.deposit = parseFloat(text);
           await sendMessage(fromNumber, '💰 *Rent Amount* \nWhat is the monthly rent amount?');
@@ -229,20 +280,30 @@ router.post('/', async (req, res) => {
             userId: user._id,
             propertyName: sessions[fromNumber].tenantData.propertyName,
             unitAssigned: sessions[fromNumber].tenantData.unitAssigned,
-            lease_start: new Date(sessions[fromNumber].tenantData.lease_start),
+            lease_start: sessions[fromNumber].tenantData.lease_start,
             deposit: sessions[fromNumber].tenantData.deposit,
             rent_amount: parseFloat(text),
-            tenant_id: generateTenantId(),
+            tenant_id: generate.TEXTenantId(),
           });
           await tenant.save();
 
-          const token = await generateUploadToken(phoneNumber, 'tenant', tenant._id);
-          const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/tenant/${tenant._id}?token=${token}`;
-          const shortUrl = await shortenUrl(imageUploadUrl);
-          await sendMessage(fromNumber, `✅ *Tenant Added* \nTenant "${tenant.name}" has been added successfully!\n📸 *Upload Photo* \nClick here to upload a photo for this tenant (valid once): ${shortUrl}`);
-          sessions[fromNumber].action = null;
-          delete sessions[fromNumber].tenantData;
-          delete sessions[fromNumber].units;
+          const unit = await Unit.findById(tenant.unitAssigned).populate('property');
+          const summary = `
+✅ *Tenant Added*
+━━━━━━━━━━━━━━━
+👤 *Name*: ${tenant.name}
+🏠 *Property*: ${tenant.propertyName}
+🚪 *Unit*: ${unit.unitNumber}
+📅 *Lease Start*: ${tenant.lease_start}
+💵 *Deposit*: ${tenant.deposit}
+💰 *Rent Amount*: ${tenant.rent_amount}
+━━━━━━━━━━━━━━━
+          `;
+          await sendMessage(fromNumber, summary);
+          await sendImageOption(fromNumber, 'tenant', tenant._id, summary);
+          sessions[fromNumber].action = 'awaiting_image_choice';
+          sessions[fromNumber].entityId = tenant._id;
+          sessions[fromNumber].entityType = 'tenant';
         } else if (text.toLowerCase() === 'help') {
           const buttonMenu = {
             messaging_product: 'whatsapp',
@@ -395,6 +456,41 @@ router.post('/', async (req, res) => {
             console.log('Unit not found');
             await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease select a valid unit from the menu.');
             await sendUnitSelectionMenu(fromNumber, units);
+          }
+        } else if (sessions[fromNumber].action === 'awaiting_image_choice') {
+          if (selectedOption.startsWith('upload_')) {
+            const [_, type, entityId] = selectedOption.split('_');
+            const token = await generateUploadToken(phoneNumber, type, entityId);
+            const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/${type}/${entityId}?token=${token}`;
+            const shortUrl = await shortenUrl(imageUploadUrl);
+            const summaryWithImage = `${sessions[fromNumber].pendingSummary}📸 *Image*: ${shortUrl}`;
+            await sendMessage(fromNumber, `Click here to upload an image (valid once): ${shortUrl}`);
+            sessions[fromNumber].action = null;
+            delete sessions[fromNumber].pendingSummary;
+            delete sessions[fromNumber].entityId;
+            delete sessions[fromNumber].entityType;
+          } else if (selectedOption.startsWith('no_upload_')) {
+            const [_, type, entityId] = selectedOption.split('_');
+            let entity;
+            if (type === 'property') {
+              entity = await Property.findById(entityId);
+              entity.images = [DEFAULT_IMAGE_URL];
+              await entity.save();
+            } else if (type === 'unit') {
+              entity = await Unit.findById(entityId);
+              entity.images = [DEFAULT_IMAGE_URL];
+              await entity.save();
+            } else if (type === 'tenant') {
+              entity = await Tenant.findById(entityId);
+              entity.photo = DEFAULT_IMAGE_URL;
+              await entity.save();
+            }
+            const summaryWithImage = `${sessions[fromNumber].pendingSummary}📸 *Image*: ${DEFAULT_IMAGE_URL}`;
+            await sendMessage(fromNumber, summaryWithImage);
+            sessions[fromNumber].action = null;
+            delete sessions[fromNumber].pendingSummary;
+            delete sessions[fromNumber].entityId;
+            delete sessions[fromNumber].entityType;
           }
         }
         delete userResponses[fromNumber]; // Clear response after handling
