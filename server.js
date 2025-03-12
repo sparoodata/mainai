@@ -1,4 +1,4 @@
-require('dotenv').config();
+// server.js
 const express = require('express');
 const mongoose = require('mongoose');
 const axios = require('axios');
@@ -27,6 +27,7 @@ mongoose.connect(process.env.MONGODB_URI, {
   process.exit(1);
 });
 
+// Suppress strictQuery deprecation warning
 mongoose.set('strictQuery', true);
 
 // WhatsApp Cloud API Configuration
@@ -36,8 +37,7 @@ const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 
 const sendWhatsAppMessage = async (to, messageBody) => {
   try {
-    console.log(`Sending message to ${to}:`, JSON.stringify(messageBody, null, 2));
-    const response = await axios.post(
+    await axios.post(
       `${WHATSAPP_API_URL}/${PHONE_NUMBER_ID}/messages`,
       {
         messaging_product: 'whatsapp',
@@ -51,9 +51,8 @@ const sendWhatsAppMessage = async (to, messageBody) => {
         }
       }
     );
-    console.log('Message sent successfully:', response.data);
   } catch (error) {
-    console.error('Error sending WhatsApp message:', error.response?.data || error.message);
+    console.error('Error sending WhatsApp message:', error.response?.data);
   }
 };
 
@@ -64,68 +63,21 @@ const Tenant = require('./models/Tenant');
 const Unit = require('./models/Unit');
 
 // Webhook for incoming messages
-app.post('/webhook', async (req, res) => {
-  console.log('Incoming webhook payload:', JSON.stringify(req.body, null, 2));
+app.post('/whatsapp', async (req, res) => {
+  const incomingMsg = req.body.entry[0]?.changes[0]?.value?.messages[0]?.text?.body?.toLowerCase().trim();
+  const fromNumber = req.body.entry[0]?.changes[0]?.value?.contacts[0]?.wa_id;
 
-  if (!req.body || !req.body.entry || !Array.isArray(req.body.entry) || req.body.entry.length === 0) {
-    console.error('Invalid or missing "entry" in webhook payload');
-    return res.sendStatus(400);
-  }
-
-  const entry = req.body.entry[0];
-  if (!entry.changes || !Array.isArray(entry.changes) || entry.changes.length === 0) {
-    console.error('Invalid or missing "changes" in webhook entry');
-    return res.sendStatus(400);
-  }
-
-  const change = entry.changes[0];
-  if (!change.value || !change.value.messages || !Array.isArray(change.value.messages) || change.value.messages.length === 0) {
-    console.log('Received status update or non-message event, ignoring');
-    return res.sendStatus(200);
-  }
-
-  const message = change.value.messages[0];
-  let incomingMsg;
-  if (message?.text?.body) {
-    incomingMsg = message.text.body.toLowerCase().trim();
-    console.log('Received text message:', incomingMsg);
-  } else if (message?.interactive?.button_reply?.id) {
-    incomingMsg = message.interactive.button_reply.id.toLowerCase().trim();
-    console.log('Received button reply:', incomingMsg);
-  }
-
-  let fromNumber = change.value.contacts?.[0]?.wa_id;
-  if (!fromNumber) {
-    console.error('Missing sender number');
-    return res.sendStatus(200);
-  }
-
-  if (!fromNumber.startsWith('+')) {
-    fromNumber = `+${fromNumber}`;
-  }
-  console.log('Sender number:', fromNumber);
-
-  if (!incomingMsg) {
-    console.error('Missing message body');
+  if (!incomingMsg || !fromNumber) {
     return res.sendStatus(200);
   }
 
   let user = await User.findOne({ phoneNumber: fromNumber });
-  console.log('User lookup result:', user ? 'Found' : 'Not found');
 
   if (!user) {
     await sendWhatsAppMessage(fromNumber, {
-      type: 'interactive',
-      interactive: {
-        type: 'button',
-        body: { 
-          text: '🏡 *Welcome to MyTenants!* \nHello! You’re not yet registered with us. MyTenants helps landlords like you:\n- Manage properties, units, and tenants effortlessly\n- Track rent and occupancy\n- Generate reports—all via WhatsApp!\nReady to simplify your rental business?' 
-        },
-        action: {
-          buttons: [
-            { type: 'reply', reply: { id: 'onboard', title: 'Join Now 📋' } }
-          ]
-        }
+      type: 'text',
+      text: {
+        body: `Welcome to MyTenants! It seems you're not registered yet.\n\nOur app helps landlords manage properties, units, and tenants easily.\n\nReply with "Onboard" to register`
       }
     });
   } else if (incomingMsg === 'help') {
@@ -133,14 +85,12 @@ app.post('/webhook', async (req, res) => {
       type: 'interactive',
       interactive: {
         type: 'button',
-        body: { 
-          text: '🏡 *MyTenants Dashboard*\nHello! How can I assist you today?' 
-        },
+        body: { text: 'MyTenants Menu:' },
         action: {
           buttons: [
-            { type: 'reply', reply: { id: 'account', title: '👤 My Account' } },
-            { type: 'reply', reply: { id: 'portfolio', title: '🏢 Portfolio' } },
-            { type: 'reply', reply: { id: 'reports', title: '📊 Reports' } }
+            { type: 'reply', reply: { id: 'account', title: 'Account Info' } },
+            { type: 'reply', reply: { id: 'manage', title: 'Manage' } },
+            { type: 'reply', reply: { id: 'tools', title: 'Tools' } }
           ]
         }
       }
@@ -149,22 +99,20 @@ app.post('/webhook', async (req, res) => {
     await sendWhatsAppMessage(fromNumber, {
       type: 'text',
       text: {
-        body: `👤 *Account Details*\nPhone: ${user.phoneNumber}\nName: ${user.profileName || 'Not set'}\nVerified: ${user.verified ? 'Yes ✅' : 'No'}\nSubscription: ${user.subscription}\nRegistered: ${user.registrationDate.toDateString()}${user.verifiedDate ? `\nVerified On: ${user.verifiedDate.toDateString()}` : ''}`
+        body: `Account Information:\nPhone: ${user.phoneNumber}\nName: ${user.profileName || 'Not set'}\nVerified: ${user.verified ? 'Yes' : 'No'}\nSubscription: ${user.subscription}\nRegistered: ${user.registrationDate.toDateString()}`
       }
     });
-  } else if (incomingMsg === 'portfolio') {
+  } else if (incomingMsg === 'manage') {
     await sendWhatsAppMessage(fromNumber, {
       type: 'interactive',
       interactive: {
         type: 'button',
-        body: { 
-          text: '🏢 *Property Portfolio*\nManage your rental assets:' 
-        },
+        body: { text: 'Manage:' },
         action: {
           buttons: [
-            { type: 'reply', reply: { id: 'properties', title: '🏠 Properties' } },
-            { type: 'reply', reply: { id: 'units', title: '🚪 Units' } },
-            { type: 'reply', reply: { id: 'tenants', title: '👥 Tenants' } }
+            { type: 'reply', reply: { id: 'properties', title: 'Properties' } },
+            { type: 'reply', reply: { id: 'units', title: 'Units' } },
+            { type: 'reply', reply: { id: 'tenants', title: 'Tenants' } }
           ]
         }
       }
@@ -174,94 +122,31 @@ app.post('/webhook', async (req, res) => {
       type: 'interactive',
       interactive: {
         type: 'button',
-        body: { 
-          text: '🏠 *Property Management*\nWhat would you like to do?' 
-        },
+        body: { text: 'Property Management:' },
         action: {
           buttons: [
-            { type: 'reply', reply: { id: 'add_property', title: '➕ Add Property' } },
-            { type: 'reply', reply: { id: 'edit_property', title: '✏️ Edit Property' } },
-            { type: 'reply', reply: { id: 'delete_property', title: '🗑️ Delete Property' } }
-          ]
-        }
-      }
-    });
-  } else if (incomingMsg === 'units') {
-    await sendWhatsAppMessage(fromNumber, {
-      type: 'interactive',
-      interactive: {
-        type: 'button',
-        body: { 
-          text: '🚪 *Unit Management*\nSelect an action:' 
-        },
-        action: {
-          buttons: [
-            { type: 'reply', reply: { id: 'add_unit', title: '➕ Add Unit' } },
-            { type: 'reply', reply: { id: 'edit_unit', title: '✏️ Edit Unit' } },
-            { type: 'reply', reply: { id: 'delete_unit', title: '🗑️ Delete Unit' } }
-          ]
-        }
-      }
-    });
-  } else if (incomingMsg === 'tenants') {
-    await sendWhatsAppMessage(fromNumber, {
-      type: 'interactive',
-      interactive: {
-        type: 'button',
-        body: { 
-          text: '👥 *Tenant Management*\nChoose an option:' 
-        },
-        action: {
-          buttons: [
-            { type: 'reply', reply: { id: 'add_tenant', title: '➕ Add Tenant' } },
-            { type: 'reply', reply: { id: 'edit_tenant', title: '✏️ Edit Tenant' } },
-            { type: 'reply', reply: { id: 'delete_tenant', title: '🗑️ Delete Tenant' } }
-          ]
-        }
-      }
-    });
-  } else if (incomingMsg === 'reports') {
-    await sendWhatsAppMessage(fromNumber, {
-      type: 'interactive',
-      interactive: {
-        type: 'button',
-        body: { 
-          text: '📊 *Financial Reports*\nGenerate a report:' 
-        },
-        action: {
-          buttons: [
-            { type: 'reply', reply: { id: 'rent_due', title: '💵 Rent Due' } },
-            { type: 'reply', reply: { id: 'occupancy', title: '📈 Occupancy' } },
-            { type: 'reply', reply: { id: 'maintenance', title: '🛠️ Maintenance' } }
+            { type: 'reply', reply: { id: 'add_property', title: 'Add Property' } },
+            { type: 'reply', reply: { id: 'edit_property', title: 'Edit Property' } },
+            { type: 'reply', reply: { id: 'delete_property', title: 'Delete Property' } }
           ]
         }
       }
     });
   } else if (incomingMsg === 'onboard') {
-    console.log('Processing onboard request for:', fromNumber);
     try {
       const newUser = new User({
         phoneNumber: fromNumber,
-        profileName: 'Landlord',
-        verified: false,
-        subscription: 'Free',
-        registrationDate: new Date()
+        profileName: 'Landlord'
       });
-      const savedUser = await newUser.save();
-      console.log('User registered successfully:', savedUser);
+      await newUser.save();
       await sendWhatsAppMessage(fromNumber, {
         type: 'text',
-        text: { 
-          body: '🎉 *Registration Successful!*\nWelcome to MyTenants! Type *Help* to start managing your properties.' 
-        }
+        text: { body: 'Registration successful! Type "Help" to see options.' }
       });
     } catch (error) {
-      console.error('Error during onboarding:', error.message);
       await sendWhatsAppMessage(fromNumber, {
         type: 'text',
-        text: { 
-          body: '❌ *Registration Failed*\nSomething went wrong. Please try again or contact support.' 
-        }
+        text: { body: 'Error during registration. Please try again.' }
       });
     }
   } else {
@@ -269,13 +154,11 @@ app.post('/webhook', async (req, res) => {
       type: 'interactive',
       interactive: {
         type: 'button',
-        body: { 
-          text: '🏡 *MyTenants*\nYour friendly rental management assistant.\nHow can I help you today?' 
-        },
+        body: { text: 'Welcome to MyTenants!\nYour rental management assistant.' },
         action: {
           buttons: [
-            { type: 'reply', reply: { id: 'help', title: '📋 Dashboard' } },
-            { type: 'reply', reply: { id: 'ask_ai', title: '🤖 Ask AI' } }
+            { type: 'reply', reply: { id: 'help', title: 'Help' } },
+            { type: 'reply', reply: { id: 'ask_ai', title: 'Ask AI' } }
           ]
         }
       }
@@ -286,21 +169,19 @@ app.post('/webhook', async (req, res) => {
 });
 
 // Webhook verification
-app.get('/webhook', (req, res) => {
+app.get('/whatsapp', (req, res) => {
   const verifyToken = process.env.VERIFY_TOKEN;
 
   if (
     req.query['hub.mode'] === 'subscribe' &&
     req.query['hub.verify_token'] === verifyToken
   ) {
-    console.log('Webhook verified successfully');
     return res.send(req.query['hub.challenge']);
   }
-  console.error('Webhook verification failed');
   res.sendStatus(403);
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on  port ${PORT}`);
 });
