@@ -62,11 +62,13 @@ async function sendMessage(phoneNumber, message) {
 
 // Validation functions
 function isValidName(name) {
-  return typeof name === 'string' && name.trim().length > 0;
+  const regex = /^[a-zA-Z0-9 ]+$/; // Letters, numbers, and spaces only
+  return typeof name === 'string' && name.trim().length > 0 && name.length <= 40 && regex.test(name);
 }
 
 function isValidAddress(address) {
-  return typeof address === 'string' && address.trim().length > 0;
+  const regex = /^[a-zA-Z0-9 ]+$/; // Letters, numbers, and spaces only
+  return typeof address === 'string' && address.trim().length > 0 && address.length <= 40 && regex.test(address);
 }
 
 function isValidUnits(units) {
@@ -132,7 +134,7 @@ router.post('/', async (req, res) => {
             await sendMessage(fromNumber, '📍 *Property Address* \nPlease provide the address of the property.');
             sessions[fromNumber].action = 'add_property_address';
           } else {
-            await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease retry with a valid property name (e.g., "Sunset Apartments").');
+            await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease retry with a valid property name (e.g., "Sunset Apartments"). Max 40 characters, no special characters.');
           }
         } else if (sessions[fromNumber].action === 'add_property_address') {
           if (isValidAddress(text)) {
@@ -140,7 +142,7 @@ router.post('/', async (req, res) => {
             await sendMessage(fromNumber, '🏠 *Number of Units* \nHow many units does this property have? (e.g., 5)');
             sessions[fromNumber].action = 'add_property_units';
           } else {
-            await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease retry with a valid address (e.g., "123 Main St").');
+            await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease retry with a valid address (e.g., "123 Main St"). Max 40 characters, no special characters.');
           }
         } else if (sessions[fromNumber].action === 'add_property_units') {
           if (isValidUnits(text)) {
