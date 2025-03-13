@@ -27,10 +27,10 @@ async function shortenUrl(longUrl) {
   }
 }
 
-async function generateUploadToken(phoneNumber, type, entityId) {
+async function generateUploadToken(phoneNumber, type) {
   const token = crypto.randomBytes(16).toString('hex');
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-  const uploadToken = new UploadToken({ token, phoneNumber, type, entityId, expiresAt });
+  const uploadToken = new UploadToken({ token, phoneNumber, type, expiresAt });
   await uploadToken.save();
   return token;
 }
@@ -68,7 +68,7 @@ async function sendImageMessage(phoneNumber, imageUrl) {
   }
 }
 
-async function sendImageOption(phoneNumber, type, entityId) {
+async function sendImageOption(phoneNumber, type) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
     to: phoneNumber,
@@ -80,8 +80,8 @@ async function sendImageOption(phoneNumber, type, entityId) {
       footer: { text: 'Choose an option below' },
       action: {
         buttons: [
-          { type: 'reply', reply: { id: `upload_${type}_${entityId}`, title: 'Yes' } },
-          { type: 'reply', reply: { id: `no_upload_${type}_${entityId}`, title: 'No' } },
+          { type: 'reply', reply: { id: `upload_${type}`, title: 'Yes' } },
+          { type: 'reply', reply: { id: `no_upload_${type}`, title: 'No' } },
         ],
       },
     },
@@ -89,7 +89,8 @@ async function sendImageOption(phoneNumber, type, entityId) {
   await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
 }
 
-async function sendSummary(phoneNumber, type, data) {
+async function sendSummary(phoneNumber, type, data, imageUrl) {
+  await sendImageMessage(phoneNumber, imageUrl);
   let summary;
   if (type === 'property') {
     summary = `
@@ -99,8 +100,9 @@ async function sendSummary(phoneNumber, type, data) {
 📍 *Address*: ${data.address}
 🚪 *Units*: ${data.units}
 💰 *Total*: $${data.totalAmount}
+📸 *Image*: Attached above
 ━━━━━━━━━━━━━━━
-*Please review the details above.*`;
+*Please review the details.*`;
   } else if (type === 'unit') {
     const property = await Property.findById(data.property);
     summary = `
@@ -111,8 +113,9 @@ async function sendSummary(phoneNumber, type, data) {
 💰 *Rent*: $${data.rentAmount}
 📏 *Floor*: ${data.floor}
 📐 *Size*: ${data.size}
+📸 *Image*: Attached above
 ━━━━━━━━━━━━━━━
-*Please review the details above.*`;
+*Please review the details.*`;
   } else if (type === 'tenant') {
     const unit = await Unit.findById(data.unitAssigned);
     summary = `
@@ -125,8 +128,9 @@ async function sendSummary(phoneNumber, type, data) {
 💵 *Deposit*: $${data.deposit}
 💰 *Rent*: $${data.rent_amount}
 📋 *Tenant ID*: ${data.tenant_id}
+📸 *Image*: Attached above
 ━━━━━━━━━━━━━━━
-*Please review the details above.*`;
+*Please review the details.*`;
   }
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -148,21 +152,25 @@ async function sendSummary(phoneNumber, type, data) {
   await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
 }
 
-async function saveAndSendFinalSummary(phoneNumber, type, data, imageUrl) {
+async function saveAndSendFinalSummary(phoneNumber, type, data) {
+  const user = await User.findOne({ phoneNumber });
+  if (!user) {
+    await sendMessage(phoneNumber, '⚠️ User not found. Please restart by typing "help".');
+    return null;
+  }
   let entityId;
   if (type === 'property') {
-    const user = await User.findOne({ phoneNumber });
     const property = new Property({
       name: data.name,
       address: data.address,
       units: data.units,
       totalAmount: data.totalAmount,
       userId: user._id,
+      images: [data.imageUrl],
     });
     await property.save();
     entityId = property._id;
   } else if (type === 'unit') {
-    const user = await User.findOne({ phoneNumber });
     const unit = new Unit({
       property: data.property,
       unitId: data.unitId,
@@ -170,11 +178,11 @@ async function saveAndSendFinalSummary(phoneNumber, type, data, imageUrl) {
       floor: data.floor,
       size: data.size,
       userId: user._id,
+      images: [data.imageUrl],
     });
     await unit.save();
     entityId = unit._id;
   } else if (type === 'tenant') {
-    const user = await User.findOne({ phoneNumber });
     const tenant = new Tenant({
       name: data.name,
       phoneNumber: user.phoneNumber,
@@ -185,11 +193,11 @@ async function saveAndSendFinalSummary(phoneNumber, type, data, imageUrl) {
       deposit: data.deposit,
       rent_amount: data.rent_amount,
       tenant_id: data.tenant_id,
+      photo: data.imageUrl,
     });
     await tenant.save();
     entityId = tenant._id;
   }
-  await sendImageMessage(phoneNumber, imageUrl);
   let finalSummary;
   if (type === 'property') {
     finalSummary = `
@@ -199,6 +207,7 @@ async function saveAndSendFinalSummary(phoneNumber, type, data, imageUrl) {
 📍 *Address*: ${data.address}
 🚪 *Units*: ${data.units}
 💰 *Total*: $${data.totalAmount}
+📸 *Image*: Attached above
 ━━━━━━━━━━━━━━━
 *What’s next? Type "help" for options!*`;
   } else if (type === 'unit') {
@@ -211,6 +220,7 @@ async function saveAndSendFinalSummary(phoneNumber, type, data, imageUrl) {
 💰 *Rent*: $${data.rentAmount}
 📏 *Floor*: ${data.floor}
 📐 *Size*: ${data.size}
+📸 *Image*: Attached above
 ━━━━━━━━━━━━━━━
 *What’s next? Type "help" for options!*`;
   } else if (type === 'tenant') {
@@ -225,9 +235,11 @@ async function saveAndSendFinalSummary(phoneNumber, type, data, imageUrl) {
 💵 *Deposit*: $${data.deposit}
 💰 *Rent*: $${data.rent_amount}
 📋 *Tenant ID*: ${data.tenant_id}
+📸 *Image*: Attached above
 ━━━━━━━━━━━━━━━
 *What’s next? Type "help" for options!*`;
   }
+  await sendImageMessage(phoneNumber, data.imageUrl);
   await sendMessage(phoneNumber, finalSummary);
   return entityId;
 }
@@ -257,38 +269,4 @@ function isValidDate(dateStr) {
   if (!regex.test(dateStr)) return false;
   const [day, month, year] = dateStr.split('-').map(Number);
   const date = new Date(year, month - 1, day);
-  return date.getDate() === day && date.getMonth() === month - 1 && date.getFullYear() === year;
-}
-
-function isValidNumberInput(input, max) {
-  const num = parseInt(input);
-  return !isNaN(num) && num > 0 && num <= max;
-}
-
-function generateUnitId() {
-  const digits = Math.floor(1000 + Math.random() * 9000);
-  const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
-  return 'U' + digits + letter;
-}
-
-function generateTenantId() {
-  const digits = Math.floor(1000 + Math.random() * 9000);
-  const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
-  return 'T' + digits + letter;
-}
-
-router.get('/', (req, res) => {
-  const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
-
-  if (mode && token && mode === 'subscribe' && token === VERIFY_TOKEN) {
-    console.log('Webhook verified successfully');
-    return res.status(200).send(challenge);
-  }
-  res.sendStatus(403);
-});
-
-router.post('/', async (req, res) => {
-  const body
+  return date.getDate() === day && date.get
