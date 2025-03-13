@@ -1,12 +1,14 @@
 const express = require('express');
 const axios = require('axios');
-const mongoose = require('mongoose'); // Add mongoose for ObjectId
+const mongoose = require('mongoose');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const User = require('../models/User');
 const Tenant = require('../models/Tenant');
 const Property = require('../models/Property');
 const Unit = require('../models/Unit');
 const UploadToken = require('../models/UploadToken');
 const crypto = require('crypto');
+const multer = require('multer');
 
 const router = express.Router();
 
@@ -14,6 +16,21 @@ const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messa
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const GLITCH_HOST = process.env.GLITCH_HOST;
 const DEFAULT_IMAGE_URL = 'https://via.placeholder.com/150';
+
+// R2 Configuration
+const r2Client = new S3Client({
+  region: 'auto',
+  endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  },
+});
+
+const R2_BUCKET = process.env.R2_BUCKET_NAME || 'rentmaster-images';
+
+// Multer setup for memory storage (for R2 uploads)
+const upload = multer({ storage: multer.memoryStorage() });
 
 const sessions = {};
 let userResponses = {};
@@ -31,7 +48,6 @@ async function shortenUrl(longUrl) {
 async function generateUploadToken(phoneNumber, type) {
   const token = crypto.randomBytes(16).toString('hex');
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-  // Use a dummy ObjectId since entityId is required but not available yet
   const dummyEntityId = new mongoose.Types.ObjectId();
   const uploadToken = new UploadToken({ token, phoneNumber, type, entityId: dummyEntityId, expiresAt });
   await uploadToken.save();
@@ -247,6 +263,19 @@ async function saveAndSendFinalSummary(phoneNumber, type, data) {
   return entityId;
 }
 
+async function uploadImageToR2(phoneNumber, type, file) {
+  const key = `${phoneNumber}/${type}/${Date.now()}-${file.originalname}`;
+  const params = {
+    Bucket: R2_BUCKET,
+    Key: key,
+    Body: file.buffer,
+    ContentType: file.mimetype,
+  };
+
+  await r2Client.send(new PutObjectCommand(params));
+  return `https://${R2_BUCKET}.${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com/${key}`;
+}
+
 function isValidName(name) {
   const regex = /^[a-zA-Z0-9 ]+$/;
   return typeof name === 'string' && name.trim().length > 0 && name.length <= 40 && regex.test(name);
@@ -303,6 +332,91 @@ router.get('/', (req, res) => {
     return res.status(200).send(challenge);
   }
   res.sendStatus(403);
+});
+
+router.get('/upload-image/:phoneNumber/:type', async (req, res) => {
+  const { phoneNumber, type } = req.params;
+  const { token } = req.query;
+
+  const uploadToken = await UploadToken.findOne({ token, phoneNumber, type });
+  if (!uploadToken || uploadToken.expiresAt < new Date()) {
+    return res.status(403).send('Invalid or expired token');
+  }
+
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Image - RentMaster</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f0f0f0; }
+        .container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); text-align: center; max-width: 400px; width: 100%; }
+        h1 { color: #333; font-size: 24px; margin-bottom: 20px; }
+        input[type="file"] { display: block; margin: 20px auto; }
+        button { background-color: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #218838; }
+        .error { color: red; margin-top: 10px; display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Upload Image for Your ${type}</h1>
+        <form id="uploadForm" enctype="multipart/form-data" action="/upload-image/${phoneNumber}/${type}?token=${token}" method="POST">
+            <input type="file" name="image" id="imageInput" accept="image/*" required>
+            <input type="hidden" name="phoneNumber" value="${phoneNumber}">
+            <input type="hidden" name="type" value="${type}">
+            <input type="hidden" name="token" value="${token}">
+            <button type="submit">Upload</button>
+        </form>
+        <p id="errorMessage" class="error">Something went wrong. Please try again.</p>
+    </div>
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            try {
+                const response = await fetch('/upload-image/${phoneNumber}/${type}?token=${token}', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (response.ok) {
+                    alert('Image uploaded successfully! Check WhatsApp for the next step.');
+                    window.close();
+                } else {
+                    document.getElementById('errorMessage').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                document.getElementById('errorMessage').style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>
+  `;
+  res.send(html);
+});
+
+router.post('/upload-image/:phoneNumber/:type', upload.single('image'), async (req, res) => {
+  const { phoneNumber, type } = req.params;
+  const { token } = req.query;
+
+  const uploadToken = await UploadToken.findOne({ token, phoneNumber, type });
+  if (!uploadToken || uploadToken.expiresAt < new Date()) {
+    return res.status(403).send('Invalid or expired token');
+  }
+
+  if (!req.file) {
+    return res.status(400).send('No image uploaded');
+  }
+
+  const imageUrl = await uploadImageToR2(phoneNumber, type, req.file);
+  await handleImageUpload(phoneNumber, type, imageUrl);
+  await UploadToken.deleteOne({ token });
+
+  res.status(200).send('Image uploaded successfully');
 });
 
 router.post('/', async (req, res) => {
@@ -466,7 +580,7 @@ router.post('/', async (req, res) => {
           }
         } else if (text.toLowerCase() === 'help' || text.toLowerCase() === 'start') {
           await sendWelcomeMenu(fromNumber);
-          sessions[fromNumber] = { action: null }; // Reset session on help/start
+          sessions[fromNumber] = { action: null };
         } else {
           await sendMessage(fromNumber, '🤔 *Not sure what you mean!*\nType "help" to see what I can do for you!');
         }
@@ -790,96 +904,7 @@ async function sendTenantOptions(phoneNumber) {
   };
   await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
 }
-router.get('/upload-image/:phoneNumber/:type', async (req, res) => {
-  const { phoneNumber, type } = req.params;
-  const { token } = req.query;
 
-  // Validate token
-  const uploadToken = await UploadToken.findOne({ token, phoneNumber, type });
-  if (!uploadToken || uploadToken.expiresAt < new Date()) {
-    return res.status(403).send('Invalid or expired token');
-  }
-
-  // Serve HTML with dynamic values
-  const html = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Upload Image - RentMaster</title>
-    <style>
-        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f0f0f0; }
-        .container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); text-align: center; max-width: 400px; width: 100%; }
-        h1 { color: #333; font-size: 24px; margin-bottom: 20px; }
-        input[type="file"] { display: block; margin: 20px auto; }
-        button { background-color: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
-        button:hover { background-color: #218838; }
-        .error { color: red; margin-top: 10px; display: none; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Upload Image for Your ${type}</h1>
-        <form id="uploadForm" enctype="multipart/form-data" action="/upload-image/${phoneNumber}/${type}?token=${token}" method="POST">
-            <input type="file" name="image" id="imageInput" accept="image/*" required>
-            <input type="hidden" name="phoneNumber" value="${phoneNumber}">
-            <input type="hidden" name="type" value="${type}">
-            <input type="hidden" name="token" value="${token}">
-            <button type="submit">Upload</button>
-        </form>
-        <p id="errorMessage" class="error">Something went wrong. Please try again.</p>
-    </div>
-    <script>
-        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            try {
-                const response = await fetch('/upload-image/${phoneNumber}/${type}?token=${token}', {
-                    method: 'POST',
-                    body: formData
-                });
-                if (response.ok) {
-                    alert('Image uploaded successfully! Check WhatsApp for the next step.');
-                    window.close();
-                } else {
-                    document.getElementById('errorMessage').style.display = 'block';
-                }
-            } catch (error) {
-                console.error('Upload error:', error);
-                document.getElementById('errorMessage').style.display = 'block';
-            }
-        });
-    </script>
-</body>
-</html>
-  `;
-  res.send(html);
-});
-const upload = multer({ storage });
-router.post('/upload-image/:phoneNumber/:type', upload.single('image'), async (req, res) => {
-  const { phoneNumber, type } = req.params;
-  const { token } = req.query;
-
-  // Validate token
-  const uploadToken = await UploadToken.findOne({ token, phoneNumber, type });
-  if (!uploadToken || uploadToken.expiresAt < new Date()) {
-    return res.status(403).send('Invalid or expired token');
-  }
-
-  // Process uploaded image
-  if (!req.file) {
-    return res.status(400).send('No image uploaded');
-  }
-
-  const uploadedImageUrl = `${GLITCH_HOST}/uploads/${req.file.filename}`; // Adjust based on your hosting setup
-  await handleImageUpload(phoneNumber, type, uploadedImageUrl);
-
-  // Clean up the token after successful upload
-  await UploadToken.deleteOne({ token });
-
-  res.status(200).send('Image uploaded successfully');
-});
 module.exports = {
   router,
   sendMessage,
