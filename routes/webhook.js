@@ -333,4 +333,350 @@ router.post('/', async (req, res) => {
         } else if (text.toLowerCase() === 'help' || text.toLowerCase() === 'start') {
           await sendWelcomeMenu(fromNumber);
         } else {
-          await sendMessage
+                   await sendMessage(fromNumber, '🤔 *Not sure what you mean!*\nType "help" to see what I can do for you!');
+        }
+      }
+
+      if (interactive && userResponses[fromNumber]) {
+        const selectedOption = userResponses[fromNumber];
+
+        if (selectedOption === 'account_info') {
+          const user = await User.findOne({ phoneNumber });
+          const accountInfoMessage = user ? `
+👋 *Hi ${user.profileName || 'there'}!*
+━━━━━━━━━━━━━━━
+📞 *Phone*: ${user.phoneNumber}
+✅ *Verified*: ${user.verified ? 'Yes ✅' : 'No ❌'}
+📅 *Joined*: ${user.registrationDate ? user.registrationDate.toLocaleDateString() : 'N/A'}
+💰 *Plan*: ${user.subscription || 'Free'}
+━━━━━━━━━━━━━━━
+*Type "help" for more options!*` : '⚠️ *No Account Found*\nLet’s get you started! Type "help" to begin.';
+          await sendMessage(fromNumber, accountInfoMessage);
+        } else if (selectedOption === 'manage') {
+          await sendManageMenu(fromNumber);
+        } else if (selectedOption === 'tools') {
+          await sendToolsMenu(fromNumber);
+        } else if (selectedOption === 'manage_properties') {
+          await sendPropertyOptions(fromNumber);
+        } else if (selectedOption === 'manage_units') {
+          await sendUnitOptions(fromNumber);
+        } else if (selectedOption === 'manage_tenants') {
+          await sendTenantOptions(fromNumber);
+        } else if (selectedOption === 'add_property') {
+          await sendMessage(fromNumber, '🏠 *Let’s Add a Property!*\n*Step 1: Name*\nWhat’s the property called? (e.g., Sunset Apartments)');
+          sessions[fromNumber].action = 'add_property_name';
+        } else if (selectedOption === 'add_unit') {
+          const user = await User.findOne({ phoneNumber });
+          const properties = await Property.find({ userId: user._id });
+          if (!properties.length) {
+            await sendMessage(fromNumber, 'ℹ️ *No Properties Yet!*\nAdd a property first by selecting "Add Property" from the menu.\nType "help" to go back.');
+          } else {
+            sessions[fromNumber].properties = properties;
+            sessions[fromNumber].userId = user._id;
+            await sendPropertySelectionMenu(fromNumber, properties);
+            sessions[fromNumber].action = 'add_unit_select_property';
+          }
+        } else if (selectedOption === 'add_tenant') {
+          const user = await User.findOne({ phoneNumber });
+          const properties = await Property.find({ userId: user._id });
+          if (!properties.length) {
+            await sendMessage(fromNumber, 'ℹ️ *No Properties Yet!*\nAdd a property and unit first.\nType "help" to go back.');
+          } else {
+            sessions[fromNumber].properties = properties;
+            sessions[fromNumber].userId = user._id;
+            await sendPropertySelectionMenu(fromNumber, properties);
+            sessions[fromNumber].action = 'add_tenant_select_property';
+          }
+        } else if (sessions[fromNumber].action === 'add_unit_select_property') {
+          const propertyId = selectedOption;
+          const properties = sessions[fromNumber].properties;
+          const selectedProperty = properties.find(p => p._id.toString() === propertyId);
+          if (selectedProperty) {
+            sessions[fromNumber].unitData = { property: selectedProperty._id };
+            await sendMessage(fromNumber, `🏠 *Selected: ${selectedProperty.name}*\n*Step 1: Unit Number*\nWhat’s the unit number? (e.g., 101)`);
+            sessions[fromNumber].action = 'add_unit_number';
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Choice!*\nPlease select a property from the list.');
+            await sendPropertySelectionMenu(fromNumber, properties);
+          }
+        } else if (sessions[fromNumber].action === 'add_tenant_select_property') {
+          const propertyId = selectedOption;
+          const properties = sessions[fromNumber].properties;
+          const selectedProperty = properties.find(p => p._id.toString() === propertyId);
+          if (selectedProperty) {
+            const units = await Unit.find({ property: selectedProperty._id });
+            if (!units.length) {
+              await sendMessage(fromNumber, `ℹ️ *No Units in ${selectedProperty.name}!*\nAdd a unit first.\nType "help" to go back.`);
+              sessions[fromNumber].action = null;
+              delete sessions[fromNumber].tenantData;
+            } else {
+              sessions[fromNumber].tenantData = { propertyId: selectedProperty._id };
+              await sendUnitSelectionMenu(fromNumber, units);
+              sessions[fromNumber].action = 'add_tenant_select_unit';
+            }
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Choice!*\nPlease select a property from the list.');
+            await sendPropertySelectionMenu(fromNumber, properties);
+          }
+        } else if (sessions[fromNumber].action === 'add_tenant_select_unit') {
+          const unitId = selectedOption;
+          const units = await Unit.find({ property: sessions[fromNumber].tenantData.propertyId }).populate('property');
+          const selectedUnit = units.find(u => u._id.toString() === unitId);
+          if (selectedUnit) {
+            sessions[fromNumber].tenantData.unitAssigned = selectedUnit._id;
+            sessions[fromNumber].tenantData.propertyName = selectedUnit.property.name;
+            await sendMessage(fromNumber, `🚪 *Selected Unit: ${selectedUnit.unitNumber}*\n*Step 1: Tenant Name*\nWho’s moving in? (e.g., John Doe)`);
+            sessions[fromNumber].action = 'add_tenant_name';
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid Choice!*\nPlease select a unit from the list.');
+            await sendUnitSelectionMenu(fromNumber, units);
+          }
+        } else if (sessions[fromNumber].action === 'awaiting_image_choice') {
+          if (selectedOption.startsWith('upload_')) {
+            const [_, type, entityId] = selectedOption.split('_');
+            const token = await generateUploadToken(phoneNumber, type, entityId);
+            const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/${type}/${entityId}?token=${token}`;
+            const shortUrl = await shortenUrl(imageUploadUrl);
+            await sendMessage(fromNumber, `📸 *Great!*\nUpload your photo here (valid for 15 mins):\n${shortUrl}\n\n*Once uploaded, I’ll show you the summary!*`);
+            sessions[fromNumber].action = 'awaiting_image_upload';
+          } else if (selectedOption.startsWith('no_upload_')) {
+            const [_, type, entityId] = selectedOption.split('_');
+            let imageUrl = DEFAULT_IMAGE_URL;
+            if (type === 'property') {
+              const property = await Property.findById(entityId);
+              property.images = [imageUrl];
+              await property.save();
+            } else if (type === 'unit') {
+              const unit = await Unit.findById(entityId);
+              unit.images = [imageUrl];
+              await unit.save();
+            } else if (type === 'tenant') {
+              const tenant = await Tenant.findById(entityId);
+              tenant.photo = imageUrl;
+              await tenant.save();
+            }
+            await sendSummary(phoneNumber, type, entityId, imageUrl);
+            sessions[fromNumber].action = null;
+            delete sessions[fromNumber].entityType;
+            delete sessions[fromNumber].entityId;
+          }
+        }
+        delete userResponses[fromNumber];
+      }
+    }
+  }
+  res.sendStatus(200);
+});
+
+async function handleImageUpload(phoneNumber, type, entityId, uploadedImageUrl) {
+  if (sessions[phoneNumber] && sessions[phoneNumber].action === 'awaiting_image_upload') {
+    if (type === 'property') {
+      const property = await Property.findById(entityId);
+      property.images = [uploadedImageUrl];
+      await property.save();
+    } else if (type === 'unit') {
+      const unit = await Unit.findById(entityId);
+      unit.images = [uploadedImageUrl];
+      await unit.save();
+    } else if (type === 'tenant') {
+      const tenant = await Tenant.findById(entityId);
+      tenant.photo = uploadedImageUrl;
+      await tenant.save();
+    }
+    await sendSummary(phoneNumber, type, entityId, uploadedImageUrl);
+    sessions[phoneNumber].action = null;
+    delete sessions[phoneNumber].entityType;
+    delete sessions[phoneNumber].entityId;
+  } else {
+    await sendMessage(phoneNumber, '⚠️ *Upload Expired!*\nThe 15-minute window has passed. Start over by typing "help".');
+  }
+}
+
+async function sendWelcomeMenu(phoneNumber) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '🏠 RentMaster' },
+      body: { text: '👋 *Welcome!* I’m here to help you manage your rentals.\nWhat would you like to do?' },
+      footer: { text: 'Your Rental Assistant' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'account_info', title: '👤 My Account' } },
+          { type: 'reply', reply: { id: 'manage', title: '🛠️ Manage Rentals' } },
+          { type: 'reply', reply: { id: 'tools', title: '🧰 Tools' } },
+        ],
+      },
+    },
+  };
+  await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
+}
+
+async function sendManageMenu(phoneNumber) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '🛠️ Manage Rentals' },
+      body: { text: '*What would you like to manage?*' },
+      footer: { text: 'Pick an option' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'manage_properties', title: '🏠 Properties' } },
+          { type: 'reply', reply: { id: 'manage_units', title: '🚪 Units' } },
+          { type: 'reply', reply: { id: 'manage_tenants', title: '👥 Tenants' } },
+        ],
+      },
+    },
+  };
+  await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
+}
+
+async function sendToolsMenu(phoneNumber) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '🧰 Tools' },
+      body: { text: '*Explore some handy tools:*' },
+      footer: { text: 'Coming soon!' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'reports', title: '📊 Reports' } },
+          { type: 'reply', reply: { id: 'maintenance', title: '🔧 Maintenance' } },
+        ],
+      },
+    },
+  };
+  await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
+}
+
+async function sendPropertyOptions(phoneNumber) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '🏠 Properties' },
+      body: { text: '*What would you like to do?*' },
+      footer: { text: 'Let’s get started!' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'add_property', title: '➕ Add Property' } },
+        ],
+      },
+    },
+  };
+  await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
+}
+
+async function sendUnitOptions(phoneNumber) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '🚪 Units' },
+      body: { text: '*What would you like to do?*' },
+      footer: { text: 'Let’s get started!' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'add_unit', title: '➕ Add Unit' } },
+        ],
+      },
+    },
+  };
+  await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
+}
+
+async function sendTenantOptions(phoneNumber) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '👥 Tenants' },
+      body: { text: '*What would you like to do?*' },
+      footer: { text: 'Let’s get started!' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'add_tenant', title: '➕ Add Tenant' } },
+        ],
+      },
+    },
+  };
+  await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
+}
+
+async function sendPropertySelectionMenu(phoneNumber, properties) {
+  const listMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'list',
+      header: { type: 'text', text: '🏠 Pick a Property' },
+      body: { text: 'Which property are we working with?' },
+      footer: { text: 'Scroll to choose' },
+      action: {
+        button: 'Select Property',
+        sections: [{
+          title: 'Your Properties',
+          rows: properties.map(p => ({
+            id: p._id.toString(),
+            title: p.name.slice(0, 24),
+            description: p.address.slice(0, 72),
+          })),
+        }],
+      },
+    },
+  };
+  await axios.post(WHATSAPP_API_URL, listMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
+}
+
+async function sendUnitSelectionMenu(phoneNumber, units) {
+  const listMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'list',
+      header: { type: 'text', text: '🚪 Pick a Unit' },
+      body: { text: 'Which unit are we assigning?' },
+      footer: { text: 'Scroll to choose' },
+      action: {
+        button: 'Select Unit',
+        sections: [{
+          title: 'Available Units',
+          rows: units.map(u => ({
+            id: u._id.toString(),
+            title: u.unitNumber.slice(0, 24),
+            description: `${u.property.name} - Floor: ${u.floor}`.slice(0, 72),
+          })),
+        }],
+      },
+    },
+  };
+  await axios.post(WHATSAPP_API_URL, listMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
+}
+
+function generateTenantId() {
+  const digits = Math.floor(1000 + Math.random() * 9000);
+  const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+  return 'T' + digits + letter;
+}
+
+module.exports = {
+  router,
+  sendMessage,
+  handleImageUpload,
+};
