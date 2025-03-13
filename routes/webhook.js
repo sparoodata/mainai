@@ -397,29 +397,32 @@ router.post('/', async (req, res) => {
             if (!units.length) {
               await sendMessage(fromNumber, `🏠 *Selected: ${selectedProperty.name}*\n*Step 1: Unit Number*\nWhat’s the unit number? (e.g., 101)`);
               sessions[fromNumber].action = 'add_unit_number';
-            } else if (units.length > 10) {
-              await sendUnitSelectionMenu(fromNumber, units.slice(0, 10)); // Limit to 10
-              await sendMessage(fromNumber, `ℹ️ *Showing 10 of ${units.length} units.*\nIf your unit isn’t listed, type its number (e.g., 101).`);
-              sessions[fromNumber].action = 'add_unit_select_unit_or_type';
             } else {
-              await sendUnitSelectionMenu(fromNumber, units);
-              sessions[fromNumber].action = 'add_unit_select_unit_or_type';
+              sessions[fromNumber].unitData.units = units;
+              await sendUnitPageMenu(fromNumber, units, 0);
+              sessions[fromNumber].action = 'add_unit_select_page';
             }
           } else {
             await sendMessage(fromNumber, '⚠️ *Invalid Choice!*\nPlease select a property from the list.');
             await sendPropertySelectionMenu(fromNumber, properties);
           }
-        } else if (sessions[fromNumber].action === 'add_unit_select_unit_or_type') {
-          const units = await Unit.find({ property: sessions[fromNumber].unitData.property });
+        } else if (sessions[fromNumber].action === 'add_unit_select_page') {
+          if (selectedOption.startsWith('page_')) {
+            const pageNum = parseInt(selectedOption.split('_')[1]);
+            const units = sessions[fromNumber].unitData.units;
+            await sendUnitSelectionMenu(fromNumber, units, pageNum);
+            sessions[fromNumber].action = 'add_unit_select_unit';
+          }
+        } else if (sessions[fromNumber].action === 'add_unit_select_unit') {
+          const units = sessions[fromNumber].unitData.units;
           const selectedUnit = units.find(u => u._id.toString() === selectedOption);
           if (selectedUnit) {
-            await sendMessage(fromNumber, `ℹ️ *Unit ${selectedUnit.unitNumber} already exists!*\nPlease enter a new unit number (e.g., 102).`);
+            await sendMessage(fromNumber, `ℹ️ *Unit ${selectedUnit.unitNumber} already exists!*\nPlease enter a new unit number (e.g., ${selectedUnit.unitNumber + 1}).`);
             sessions[fromNumber].action = 'add_unit_number';
           } else {
-            // Assume user typed a unit number if not a valid selection
-            sessions[fromNumber].unitData.unitNumber = text || selectedOption;
-            await sendMessage(fromNumber, '💰 *Step 2: Rent*\nWhat’s the monthly rent? (e.g., 1000)');
-            sessions[fromNumber].action = 'add_unit_rent';
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection!*\nPlease choose a page or type a new unit number.');
+            await sendUnitPageMenu(fromNumber, units, 0);
+            sessions[fromNumber].action = 'add_unit_select_page';
           }
         } else if (sessions[fromNumber].action === 'add_tenant_select_property') {
           const propertyId = selectedOption;
@@ -431,42 +434,34 @@ router.post('/', async (req, res) => {
               await sendMessage(fromNumber, `ℹ️ *No Units in ${selectedProperty.name}!*\nAdd a unit first.\nType "help" to go back.`);
               sessions[fromNumber].action = null;
               delete sessions[fromNumber].tenantData;
-            } else if (units.length > 10) {
-              await sendUnitSelectionMenu(fromNumber, units.slice(0, 10));
-              await sendMessage(fromNumber, `ℹ️ *Showing 10 of ${units.length} units.*\nIf your unit isn’t listed, type its number (e.g., 101).`);
-              sessions[fromNumber].tenantData = { propertyId: selectedProperty._id };
-              sessions[fromNumber].action = 'add_tenant_select_unit_or_type';
             } else {
-              await sendUnitSelectionMenu(fromNumber, units);
-              sessions[fromNumber].tenantData = { propertyId: selectedProperty._id };
-              sessions[fromNumber].action = 'add_tenant_select_unit_or_type';
+              sessions[fromNumber].tenantData = { propertyId: selectedProperty._id, units };
+              await sendUnitPageMenu(fromNumber, units, 0);
+              sessions[fromNumber].action = 'add_tenant_select_page';
             }
           } else {
             await sendMessage(fromNumber, '⚠️ *Invalid Choice!*\nPlease select a property from the list.');
             await sendPropertySelectionMenu(fromNumber, properties);
           }
-        } else if (sessions[fromNumber].action === 'add_tenant_select_unit_or_type') {
-          const units = await Unit.find({ property: sessions[fromNumber].tenantData.propertyId }).populate('property');
+        } else if (sessions[fromNumber].action === 'add_tenant_select_page') {
+          if (selectedOption.startsWith('page_')) {
+            const pageNum = parseInt(selectedOption.split('_')[1]);
+            const units = sessions[fromNumber].tenantData.units;
+            await sendUnitSelectionMenu(fromNumber, units, pageNum);
+            sessions[fromNumber].action = 'add_tenant_select_unit';
+          }
+        } else if (sessions[fromNumber].action === 'add_tenant_select_unit') {
+          const units = sessions[fromNumber].tenantData.units;
           const selectedUnit = units.find(u => u._id.toString() === selectedOption);
           if (selectedUnit) {
             sessions[fromNumber].tenantData.unitAssigned = selectedUnit._id;
-            sessions[fromNumber].tenantData.propertyName = selectedUnit.property.name;
+            sessions[fromNumber].tenantData.propertyName = (await Property.findById(sessions[fromNumber].tenantData.propertyId)).name;
             await sendMessage(fromNumber, `🚪 *Selected Unit: ${selectedUnit.unitNumber}*\n*Step 1: Tenant Name*\nWho’s moving in? (e.g., John Doe)`);
             sessions[fromNumber].action = 'add_tenant_name';
-          } else if (text) {
-            const typedUnit = units.find(u => u.unitNumber === text);
-            if (typedUnit) {
-              sessions[fromNumber].tenantData.unitAssigned = typedUnit._id;
-              sessions[fromNumber].tenantData.propertyName = typedUnit.property.name;
-              await sendMessage(fromNumber, `🚪 *Selected Unit: ${typedUnit.unitNumber}*\n*Step 1: Tenant Name*\nWho’s moving in? (e.g., John Doe)`);
-              sessions[fromNumber].action = 'add_tenant_name';
-            } else {
-              await sendMessage(fromNumber, '⚠️ *Unit Not Found!*\nPlease select from the list or type a valid unit number.');
-              await sendUnitSelectionMenu(fromNumber, units.slice(0, 10));
-            }
           } else {
-            await sendMessage(fromNumber, '⚠️ *Invalid Choice!*\nPlease select a unit from the list or type its number.');
-            await sendUnitSelectionMenu(fromNumber, units.slice(0, 10));
+            await sendMessage(fromNumber, '⚠️ *Invalid Selection!*\nPlease choose a page or select a unit.');
+            await sendUnitPageMenu(fromNumber, units, 0);
+            sessions[fromNumber].action = 'add_tenant_select_page';
           }
         } else if (sessions[fromNumber].action === 'awaiting_image_choice') {
           if (selectedOption.startsWith('upload_')) {
@@ -680,21 +675,52 @@ async function sendPropertySelectionMenu(phoneNumber, properties) {
   await axios.post(WHATSAPP_API_URL, listMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
 }
 
-async function sendUnitSelectionMenu(phoneNumber, units) {
+async function sendUnitPageMenu(phoneNumber, units, startPage) {
+  const totalUnits = units.length;
+  const pages = Math.ceil(totalUnits / 10);
+  const buttons = [];
+  
+  for (let i = startPage; i < Math.min(startPage + 3, pages); i++) {
+    const start = i * 10 + 1;
+    const end = Math.min((i + 1) * 10, totalUnits);
+    buttons.push({
+      type: 'reply',
+      reply: { id: `page_${i}`, title: `Units ${start}-${end}` },
+    });
+  }
+
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '🚪 Choose Unit Page' },
+      body: { text: `We’ve got ${totalUnits} units! Pick a page:` },
+      footer: { text: `${pages} page${pages > 1 ? 's' : ''} total` },
+      action: { buttons },
+    },
+  };
+  await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
+}
+
+async function sendUnitSelectionMenu(phoneNumber, units, pageNum) {
+  const start = pageNum * 10;
+  const pageUnits = units.slice(start, start + 10);
   const listMenu = {
     messaging_product: 'whatsapp',
     to: phoneNumber,
     type: 'interactive',
     interactive: {
       type: 'list',
-      header: { type: 'text', text: '🚪 Pick a Unit' },
-      body: { text: 'Which unit are we working with?' },
+      header: { type: 'text', text: `🚪 Units ${start + 1}-${start + pageUnits.length}` },
+      body: { text: 'Select an existing unit or type a new one:' },
       footer: { text: 'Scroll to choose' },
       action: {
         button: 'Select Unit',
         sections: [{
           title: 'Available Units',
-          rows: units.map(u => ({
+          rows: pageUnits.map(u => ({
             id: u._id.toString(),
             title: u.unitNumber.slice(0, 24),
             description: `${u.property.name} - Floor: ${u.floor}`.slice(0, 72),
