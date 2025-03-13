@@ -1,5 +1,6 @@
 const express = require('express');
 const axios = require('axios');
+const mongoose = require('mongoose'); // Add mongoose for ObjectId
 const User = require('../models/User');
 const Tenant = require('../models/Tenant');
 const Property = require('../models/Property');
@@ -30,7 +31,9 @@ async function shortenUrl(longUrl) {
 async function generateUploadToken(phoneNumber, type) {
   const token = crypto.randomBytes(16).toString('hex');
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-  const uploadToken = new UploadToken({ token, phoneNumber, type, expiresAt }); // No entityId
+  // Use a dummy ObjectId since entityId is required but not available yet
+  const dummyEntityId = new mongoose.Types.ObjectId();
+  const uploadToken = new UploadToken({ token, phoneNumber, type, entityId: dummyEntityId, expiresAt });
   await uploadToken.save();
   return token;
 }
@@ -232,7 +235,7 @@ async function saveAndSendFinalSummary(phoneNumber, type, data) {
 🏠 *Property*: ${data.propertyName}
 🚪 *Unit ID*: ${unit.unitId}
 📅 *Lease Start*: ${data.lease_start}
-💵 *Deposit*: ${data.deposit}
+💵 *Deposit*: $${data.deposit}
 💰 *Rent*: $${data.rent_amount}
 📋 *Tenant ID*: ${data.tenant_id}
 📸 *Image*: Attached above
