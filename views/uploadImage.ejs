@@ -1,37 +1,94 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Upload Image</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Arial', sans-serif; background-color: #f4f6f8; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
-    .container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); padding: 30px; width: 100%; max-width: 400px; text-align: center; }
-    h1 { font-size: 24px; color: #333; margin-bottom: 20px; font-weight: 600; }
-    form { display: flex; flex-direction: column; gap: 20px; }
-    input[type="file"] { font-size: 16px; color: #555; border: 2px dashed #ccc; border-radius: 5px; padding: 15px; width: 100%; cursor: pointer; transition: border-color 0.3s ease; }
-    input[type="file"]:hover { border-color: #007bff; }
-    input[type="file"]::-webkit-file-upload-button { display: none; }
-    button { background-color: #007bff; color: #fff; border: none; border-radius: 5px; padding: 12px 20px; font-size: 16px; font-weight: 500; cursor: pointer; transition: background-color 0.3s ease; }
-    button:hover { background-color: #0056b3; }
-    button:active { background-color: #004085; }
-    @media (max-width: 480px) {
-      .container { padding: 20px; max-width: 100%; }
-      h1 { font-size: 20px; }
-      input[type="file"] { font-size: 14px; padding: 10px; }
-      button { font-size: 14px; padding: 10px 15px; }
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Image - RentMaster</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+        }
+        h1 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        input[type="file"] {
+            display: block;
+            margin: 20px auto;
+        }
+        button {
+            background-color: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+            display: none;
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Upload Image for <%= type.charAt(0).toUpperCase() + type.slice(1) %></h1>
-    <form action="/upload-image/<%= phoneNumber %>/<%= type %>/<%= id %>" method="POST" enctype="multipart/form-data">
-      <input type="file" name="image" accept="image/*" required>
-      <input type="hidden" name="token" value="<%= token %>">
-      <button type="submit">Upload</button>
-    </form>
-  </div>
+    <div class="container">
+        <h1>Upload Image for Your {{type}}</h1>
+        <form id="uploadForm" enctype="multipart/form-data">
+            <input type="file" name="image" id="imageInput" accept="image/*" required>
+            <input type="hidden" name="phoneNumber" value="{{phoneNumber}}">
+            <input type="hidden" name="type" value="{{type}}">
+            <input type="hidden" name="token" value="{{token}}">
+            <button type="submit">Upload</button>
+        </form>
+        <p id="errorMessage" class="error">Something went wrong. Please try again.</p>
+    </div>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const phoneNumber = formData.get('phoneNumber');
+            const type = formData.get('type');
+            const token = formData.get('token');
+
+            try {
+                const response = await fetch(`/upload-image/${phoneNumber}/${type}?token=${token}`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    alert('Image uploaded successfully! Check WhatsApp for the next step.');
+                    window.close(); // Optionally close the window after success
+                } else {
+                    document.getElementById('errorMessage').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                document.getElementById('errorMessage').style.display = 'block';
+            }
+        });
+    </script>
 </body>
 </html>
