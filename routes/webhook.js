@@ -95,7 +95,7 @@ async function sendImageMessage(phoneNumber, imageUrl, caption) {
 }
 
 // ----- sendImageOption -----
-// Sends an interactive prompt asking whether the user wants to upload an image.
+// Prompts the user if they wish to upload an image.
 async function sendImageOption(phoneNumber, type, entityId) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -121,7 +121,6 @@ async function sendImageOption(phoneNumber, type, entityId) {
 }
 
 // ----- Summary Function with Edit Prompt -----
-// Sends a summary (as image and text) then prompts the user with an "Edit Summary?" option.
 async function sendSummary(phoneNumber, type, entityId, imageUrl) {
   let caption;
   if (type === 'property') {
@@ -141,7 +140,6 @@ async function sendSummary(phoneNumber, type, entityId, imageUrl) {
 }
 
 // ----- Edit Confirmation & Field Selection -----
-// Sends an interactive prompt with "Edit" or "Confirm" options.
 async function sendEditConfirmation(phoneNumber, type, entityId) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -195,7 +193,6 @@ async function askPropertyEditOptions(phoneNumber, entityId) {
 }
 
 // ----- List Selection Functions (Numbered Text) -----
-// Always sends a numbered list.
 async function sendPropertySelectionMenu(phoneNumber, properties) {
   let message = '🏠 *Select a Property*\n';
   const selectionMap = {};
@@ -211,16 +208,16 @@ async function sendPropertySelectionMenu(phoneNumber, properties) {
 }
 
 async function sendUnitSelectionMenu(phoneNumber, units) {
-  let message = '🚪 *Select a Unit*\n';
+  let message = '🚪 *Select a Property for Unit*\n';
   const selectionMap = {};
   units.forEach((u, index) => {
     const num = index + 1;
-    message += `${num}. ${u.unitNumber} - Floor: ${u.floor}\n`;
+    message += `${num}. ${u.name} - ${u.address}\n`;
     selectionMap[num] = u._id.toString();
   });
   message += '\nPlease reply with the number corresponding to your choice.';
   sessions[phoneNumber] = sessions[phoneNumber] || {};
-  sessions[phoneNumber].unitSelectionMap = selectionMap;
+  sessions[phoneNumber].propertySelectionMap = selectionMap;
   await sendMessage(phoneNumber, message);
 }
 
@@ -403,34 +400,28 @@ router.post('/', async (req, res) => {
         delete userResponses[fromNumber];
         return res.sendStatus(200);
       }
-      // ----- Handle "manage_properties" option -----
       if (userResponses[fromNumber] === 'manage_properties') {
         await sendPropertyOptions(phoneNumber);
         delete userResponses[fromNumber];
         return res.sendStatus(200);
       }
-      // ----- Handle "manage_units" option -----
       if (userResponses[fromNumber] === 'manage_units') {
         await sendUnitOptions(phoneNumber);
         delete userResponses[fromNumber];
         return res.sendStatus(200);
       }
-      // ----- Handle "manage_tenants" option -----
       if (userResponses[fromNumber] === 'manage_tenants') {
         await sendTenantOptions(phoneNumber);
         delete userResponses[fromNumber];
         return res.sendStatus(200);
       }
-      // ----- Handle "add_property" option -----
       if (userResponses[fromNumber] === 'add_property') {
         await sendMessage(phoneNumber, '🏠 *Add Property*\nLet’s start! Please provide the property name.');
         sessions[fromNumber].action = 'add_property_name';
         delete userResponses[fromNumber];
         return res.sendStatus(200);
       }
-      // ----- Handle "add_unit" option -----
       if (userResponses[fromNumber] === 'add_unit') {
-        // Instead of extra info, immediately check for properties.
         const user = await User.findOne({ phoneNumber });
         const properties = await Property.find({ userId: user._id });
         if (!properties.length) {
@@ -446,7 +437,6 @@ router.post('/', async (req, res) => {
           return res.sendStatus(200);
         }
       }
-      // ----- Handle "add_tenant" option -----
       if (userResponses[fromNumber] === 'add_tenant') {
         const user = await User.findOne({ phoneNumber });
         const properties = await Property.find({ userId: user._id });
@@ -461,6 +451,28 @@ router.post('/', async (req, res) => {
           sessions[fromNumber].action = 'add_tenant_select_property';
           delete userResponses[fromNumber];
           return res.sendStatus(200);
+        }
+      }
+      
+      // ----- Handle Numeric Selection for "add_unit_select_property" -----
+      if (sessions[fromNumber].action === 'add_unit_select_property' && text && isNumeric(text)) {
+        const num = parseInt(text);
+        if (sessions[fromNumber].propertySelectionMap && sessions[fromNumber].propertySelectionMap[num]) {
+          const propertyId = sessions[fromNumber].propertySelectionMap[num];
+          const properties = sessions[fromNumber].properties || await Property.find({ userId: sessions[fromNumber].userId });
+          const selectedProperty = properties.find(p => p._id.toString() === propertyId);
+          if (selectedProperty) {
+            sessions[fromNumber].unitData = { property: selectedProperty._id };
+            sessions[fromNumber].unitData.unitNumber = generateUnitId();
+            await sendMessage(phoneNumber, `Unit ID generated: ${sessions[fromNumber].unitData.unitNumber}. Please provide the rent amount for this unit.`);
+            sessions[fromNumber].action = 'add_unit_rent';
+            delete sessions[fromNumber].propertySelectionMap;
+            return res.sendStatus(200);
+          } else {
+            await sendMessage(phoneNumber, '⚠️ *Invalid Selection* \nPlease select a valid property.');
+            await sendPropertySelectionMenu(phoneNumber, properties);
+            return res.sendStatus(200);
+          }
         }
       }
       
@@ -593,7 +605,7 @@ router.post('/', async (req, res) => {
             await sendMessage(phoneNumber, '⚠️ *Invalid entry*\nPlease provide a valid total amount.');
           }
         }
-        // UNIT ADDING FLOW (auto-generates unit ID)
+        // UNIT ADDING FLOW
         else if (sessions[fromNumber].action === 'add_unit_rent') {
           if (isNumeric(text)) {
             sessions[fromNumber].unitData.rentAmount = parseFloat(text);
