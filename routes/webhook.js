@@ -87,6 +87,35 @@ async function sendMessage(phoneNumber, message) {
   }
 }
 
+/**
+ * Sends an Image (with optional caption) to the user on WhatsApp
+ * e.g. usage: await sendImageMessage('+123456789', 'https://domain.com/image.jpg', 'Your caption here!')
+ */
+async function sendImageMessage(phoneNumber, imageUrl, caption = '') {
+  try {
+    await axios.post(WHATSAPP_API_URL,
+      {
+        messaging_product: 'whatsapp',
+        to: phoneNumber,
+        type: 'image',
+        image: {
+          link: imageUrl,
+          caption: caption
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    console.log(`Image message sent to ${phoneNumber}`);
+  } catch (error) {
+    console.error('Error sending image message:', error?.response?.data || error.message);
+  }
+}
+
 /** 
  * Sends a button-based message letting the user choose to upload or not
  */
@@ -291,6 +320,15 @@ router.post('/', async (req, res) => {
       // In-memory session
       if (!sessions[fromNumber]) {
         sessions[fromNumber] = { action: null };
+      }
+
+      // === EXAMPLE USAGE: If user types "image test", send an image with a caption
+      if (text && text.toLowerCase() === 'image test') {
+        await sendImageMessage(
+          phoneNumber,
+          'https://via.placeholder.com/350x200.png?text=Sample+Image',
+          'Hey, this is an example of sending an image with a caption!'
+        );
       }
 
       // === Handle text-based flows ===
@@ -879,5 +917,6 @@ function generateTenantId() {
 
 module.exports = {
   router,
-  sendMessage,
+  sendMessage
+  // If needed, you can also export sendImageMessage here
 };
