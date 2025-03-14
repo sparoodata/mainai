@@ -89,7 +89,6 @@ async function sendMessage(phoneNumber, message) {
 
 /**
  * Sends an Image (with optional caption) to the user on WhatsApp
- * e.g. usage: await sendImageMessage('+123456789', 'https://domain.com/image.jpg', 'Your caption here!')
  */
 async function sendImageMessage(phoneNumber, imageUrl, caption = '') {
   try {
@@ -114,6 +113,50 @@ async function sendImageMessage(phoneNumber, imageUrl, caption = '') {
   } catch (error) {
     console.error('Error sending image message:', error?.response?.data || error.message);
   }
+}
+
+/**
+ * Sends a plain-text, numbered list of properties.
+ * The user must reply with a number (1..N).
+ */
+async function sendPropertySelectionText(phoneNumber, properties) {
+  // Limit to 10 items to avoid confusion
+  if (properties.length > 10) {
+    properties = properties.slice(0, 10);
+  }
+
+  let message = '🏠 *Select a Property*\n\nReply with the *number* of the property you want:\n\n';
+  
+  properties.forEach((prop, index) => {
+    const num = index + 1;
+    message += `${num}) *${prop.name}*\n   ${prop.address}\n\n`;
+  });
+
+  message += 'For example, reply "1" for the first property.';
+
+  await sendMessage(phoneNumber, message);
+}
+
+/**
+ * Sends a plain-text, numbered list of units.
+ * The user must reply with a number (1..N).
+ */
+async function sendUnitSelectionText(phoneNumber, units) {
+  // Limit to 10
+  if (units.length > 10) {
+    units = units.slice(0, 10);
+  }
+
+  let message = '🚪 *Select a Unit*\n\nReply with the *number* of the unit you want:\n\n';
+
+  units.forEach((u, index) => {
+    const num = index + 1;
+    message += `${num}) *Unit: ${u.unitNumber}*\n   Property: ${u.property.name} (Floor: ${u.floor})\n\n`;
+  });
+
+  message += 'For example, reply "1" for the first unit.';
+
+  await sendMessage(phoneNumber, message);
 }
 
 /** 
@@ -449,7 +492,7 @@ router.post('/', async (req, res) => {
           sessions[fromNumber].action = 'awaiting_image_choice';
         }
 
-        // 4) User typed "help"
+        // 4) "help" command
         else if (text.toLowerCase() === 'help') {
           const buttonMenu = {
             messaging_product: 'whatsapp',
@@ -476,9 +519,86 @@ router.post('/', async (req, res) => {
             },
           });
         }
+
+        // === Handle user replies with property or unit "numbers" ===
+        else if (sessions[fromNumber].action === 'add_unit_select_property_number') {
+          // The user must reply with a number to pick a property
+          const choice = parseInt(text, 10);
+          const properties = sessions[fromNumber].properties || [];
+          
+          if (!isNaN(choice) && choice >= 1 && choice <= properties.length) {
+            const selectedProperty = properties[choice - 1];
+            sessions[fromNumber].unitData = { property: selectedProperty._id };
+
+            // Now show a numbered list of existing units, or if none, prompt for new unit number
+            const units = await Unit.find({ property: selectedProperty._id }).populate('property');
+            if (!units.length) {
+              await sendMessage(fromNumber, 'ℹ️ *No Units* \nNo units found for this property. Please enter a new unit number:');
+              sessions[fromNumber].action = 'add_unit_number';
+            } else {
+              sessions[fromNumber].units = units;
+              await sendUnitSelectionText(fromNumber, units);
+              sessions[fromNumber].action = 'add_unit_select_unit_number';
+            }
+          } else {
+            await sendMessage(fromNumber, `⚠️ *Invalid choice.* Please reply with a number between 1 and ${properties.length}.`);
+          }
+        } else if (sessions[fromNumber].action === 'add_unit_select_unit_number') {
+          // The user must reply with a number to pick a unit
+          const choice = parseInt(text, 10);
+          const units = sessions[fromNumber].units || [];
+          
+          if (!isNaN(choice) && choice >= 1 && choice <= units.length) {
+            const selectedUnit = units[choice - 1];
+            // If user picks an existing unit, you can decide what to do:
+            await sendMessage(fromNumber, `You selected an existing unit: ${selectedUnit.unitNumber}.\nTo add a new one, type a new unit number or proceed with editing existing?`);
+            // This is up to your logic. For now, let's just ask for new unit number:
+            sessions[fromNumber].action = 'add_unit_number';
+          } else {
+            await sendMessage(fromNumber, `⚠️ *Invalid choice.* Please reply with a number between 1 and ${units.length}.`);
+          }
+        }
+
+        // TENANT numeric flow
+        else if (sessions[fromNumber].action === 'add_tenant_select_property_number') {
+          const choice = parseInt(text, 10);
+          const properties = sessions[fromNumber].properties || [];
+          
+          if (!isNaN(choice) && choice >= 1 && choice <= properties.length) {
+            const selectedProperty = properties[choice - 1];
+            sessions[fromNumber].tenantData = { propertyId: selectedProperty._id };
+
+            // Now show units for that property
+            const units = await Unit.find({ property: selectedProperty._id }).populate('property');
+            if (!units.length) {
+              await sendMessage(fromNumber, 'ℹ️ *No Units* \nPlease add a unit to this property first.');
+              sessions[fromNumber].action = null;
+              delete sessions[fromNumber].tenantData;
+            } else {
+              sessions[fromNumber].units = units;
+              await sendUnitSelectionText(fromNumber, units);
+              sessions[fromNumber].action = 'add_tenant_select_unit_number';
+            }
+          } else {
+            await sendMessage(fromNumber, `⚠️ *Invalid choice.* Please reply with a number between 1 and ${properties.length}.`);
+          }
+        } else if (sessions[fromNumber].action === 'add_tenant_select_unit_number') {
+          const choice = parseInt(text, 10);
+          const units = sessions[fromNumber].units || [];
+          
+          if (!isNaN(choice) && choice >= 1 && choice <= units.length) {
+            const selectedUnit = units[choice - 1];
+            sessions[fromNumber].tenantData.unitAssigned = selectedUnit._id;
+            sessions[fromNumber].tenantData.propertyName = selectedUnit.property.name;
+            await sendMessage(fromNumber, '👤 *Tenant Name* \nPlease provide the tenant’s full name.');
+            sessions[fromNumber].action = 'add_tenant_name';
+          } else {
+            await sendMessage(fromNumber, `⚠️ *Invalid choice.* Please reply with a number between 1 and ${units.length}.`);
+          }
+        }
       }
 
-      // === Handle Interactive (button/list) flows ===
+      // === Handle Interactive (button) flows (like "manage", "tools") ===
       if (interactive && userResponses[fromNumber]) {
         const selectedOption = userResponses[fromNumber];
         
@@ -529,100 +649,30 @@ router.post('/', async (req, res) => {
             await sendMessage(fromNumber, 'ℹ️ *No Properties* \nPlease add a property first.');
           } else {
             sessions[fromNumber].properties = properties;
-            sessions[fromNumber].userId = user._id;
-            await sendPropertySelectionMenu(fromNumber, properties);
-            sessions[fromNumber].action = 'add_unit_select_property';
-          }
-        } else if (sessions[fromNumber].action === 'add_unit_select_property') {
-          const propertyId = selectedOption;
-          const properties = sessions[fromNumber].properties || await Property.find({ userId: sessions[fromNumber].userId });
-          const selectedProperty = properties.find(p => p._id.toString() === propertyId);
+            // Instead of an interactive list, we do a text-based list:
+            await sendPropertySelectionText(fromNumber, properties);
 
-          if (selectedProperty) {
-            sessions[fromNumber].unitData = { property: selectedProperty._id };
-            const units = await Unit.find({ property: selectedProperty._id });
-            if (!units.length) {
-              // No units yet, prompt user to create new
-              await sendMessage(fromNumber, 'ℹ️ *No Units* \nPlease add a new unit. Enter the unit number:');
-              sessions[fromNumber].action = 'add_unit_number';
-            } else {
-              await sendUnitSelectionMenu(fromNumber, units);
-              sessions[fromNumber].action = 'add_unit_select_unit';
-            }
-          } else {
-            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease select a valid property from the menu.');
-            await sendPropertySelectionMenu(fromNumber, properties);
-          }
-        } else if (sessions[fromNumber].action === 'add_unit_select_unit') {
-          const unitId = selectedOption;
-          const units = await Unit.find({ property: sessions[fromNumber].unitData.property }).populate('property');
-          const selectedUnit = units.find(u => u._id.toString() === unitId);
-
-          if (selectedUnit) {
-            // If user selects an existing unit, we can decide how to handle. 
-            // Example: "That unit already exists; please add a different unit number."
-            await sendMessage(fromNumber, 'ℹ️ This unit already exists. To add a new unit, please enter a new unit number.');
-            sessions[fromNumber].action = 'add_unit_number';
-          } else {
-            // If no match, user is effectively creating a new one
-            await sendMessage(fromNumber, '🚪 *Unit Number* \nPlease provide the unit number.');
-            sessions[fromNumber].action = 'add_unit_number';
+            // We’ll handle the user’s numeric reply in the text-based flow
+            sessions[fromNumber].action = 'add_unit_select_property_number';
           }
         }
 
         // -- TENANT HANDLERS --
-        else if (selectedOption === 'manage_tenants') {
-          // Already handled above - if you add more tenant management features, do so here
-        } else if (selectedOption === 'add_tenant') {
+        else if (selectedOption === 'add_tenant') {
           const user = await User.findOne({ phoneNumber });
           const properties = await Property.find({ userId: user._id });
           if (!properties.length) {
             await sendMessage(fromNumber, 'ℹ️ *No Properties* \nPlease add a property first.');
           } else {
             sessions[fromNumber].properties = properties;
-            sessions[fromNumber].userId = user._id;
-            await sendPropertySelectionMenu(fromNumber, properties);
-            sessions[fromNumber].action = 'add_tenant_select_property';
-          }
-        } else if (sessions[fromNumber].action === 'add_tenant_select_property') {
-          const propertyId = selectedOption;
-          const properties = sessions[fromNumber].properties || await Property.find({ userId: sessions[fromNumber].userId });
-          const selectedProperty = properties.find(p => p._id.toString() === propertyId);
+            await sendPropertySelectionText(fromNumber, properties);
 
-          if (selectedProperty) {
-            sessions[fromNumber].tenantData = { propertyId: selectedProperty._id };
-            const units = await Unit.find({ property: selectedProperty._id });
-            if (!units.length) {
-              await sendMessage(fromNumber, 'ℹ️ *No Units* \nPlease add a unit to this property first.');
-              sessions[fromNumber].action = null;
-              delete sessions[fromNumber].tenantData;
-            } else {
-              await sendUnitSelectionMenu(fromNumber, units);
-              sessions[fromNumber].action = 'add_tenant_select_unit';
-            }
-          } else {
-            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease select a valid property from the menu.');
-            await sendPropertySelectionMenu(fromNumber, properties);
-          }
-        } else if (sessions[fromNumber].action === 'add_tenant_select_unit') {
-          const unitId = selectedOption;
-          const units = await Unit.find({ property: sessions[fromNumber].tenantData.propertyId }).populate('property');
-          const selectedUnit = units.find(u => u._id.toString() === unitId);
-
-          if (selectedUnit) {
-            sessions[fromNumber].tenantData.unitAssigned = selectedUnit._id;
-            sessions[fromNumber].tenantData.propertyName = selectedUnit.property.name;
-            await sendMessage(fromNumber, '👤 *Tenant Name* \nPlease provide the tenant’s full name.');
-            sessions[fromNumber].action = 'add_tenant_name';
-          } else {
-            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease select a valid unit from the menu.');
-            await sendUnitSelectionMenu(fromNumber, units);
+            sessions[fromNumber].action = 'add_tenant_select_property_number';
           }
         }
 
-        // -- IMAGE UPLOAD CHOICE --
+        // -- IMAGE UPLOAD CHOICE (Yes/No) --
         else if (sessions[fromNumber].action === 'awaiting_image_choice') {
-          // The format is "upload_type_id" or "no_upload_type_id"
           if (selectedOption.startsWith('upload_')) {
             const [_, type, entityId] = selectedOption.split('_');
             const token = await generateUploadToken(phoneNumber, type, entityId);
@@ -666,86 +716,6 @@ router.post('/', async (req, res) => {
   // Let the meta webhook server know we received the request
   res.sendStatus(200);
 });
-
-/**
- * Helper to send a property selection menu
- */
-async function sendPropertySelectionMenu(phoneNumber, properties) {
-  const listMenu = {
-    messaging_product: 'whatsapp',
-    to: phoneNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'list',
-      header: { type: 'text', text: '🏠 Select a Property' },
-      body: { text: 'Please choose a property:' },
-      footer: { text: 'Select from the list below' },
-      action: {
-        button: 'Choose Property',
-        sections: [
-          {
-            title: 'Properties',
-            rows: properties.map(p => ({
-              id: p._id.toString(),
-              title: p.name.slice(0, 24),
-              description: p.address.slice(0, 72),
-            })),
-          },
-        ],
-      },
-    },
-  };
-  try {
-    await axios.post(WHATSAPP_API_URL, listMenu, {
-      headers: {
-        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-    });
-  } catch (error) {
-    console.error('Error sending property selection menu:', error.response ? error.response.data : error);
-  }
-}
-
-/**
- * Helper to send a unit selection menu
- */
-async function sendUnitSelectionMenu(phoneNumber, units) {
-  const listMenu = {
-    messaging_product: 'whatsapp',
-    to: phoneNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'list',
-      header: { type: 'text', text: '🚪 Select a Unit' },
-      body: { text: 'Please choose a unit:' },
-      footer: { text: 'Select from the list below' },
-      action: {
-        button: 'Choose Unit',
-        sections: [
-          {
-            title: 'Units',
-            rows: units.map(u => ({
-              id: u._id.toString(),
-              title: u.unitNumber.slice(0, 24),
-              description: `${u.property.name} - Floor: ${u.floor}`.slice(0, 72),
-            })),
-          },
-        ],
-      },
-    },
-  };
-  try {
-    await axios.post(WHATSAPP_API_URL, listMenu, {
-      headers: {
-        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-    });
-  } catch (error) {
-    console.error('Error sending unit selection menu:', error.response ? error.response.data : error);
-  }
-}
 
 /**
  * Sends the "Manage" submenu with 3 buttons
@@ -917,6 +887,6 @@ function generateTenantId() {
 
 module.exports = {
   router,
-  sendMessage
-  // If needed, you can also export sendImageMessage here
+  sendMessage,
+  // You can export sendImageMessage if you want to call it from server.js, etc.
 };
