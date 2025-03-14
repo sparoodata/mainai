@@ -16,13 +16,6 @@ const User = require('./models/User');
 const Unit = require('./models/Unit');
 const UploadToken = require('./models/UploadToken');
 const AWS = require('aws-sdk');
-const imageUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
-const signedUrl = s3.getSignedUrl('getObject', {
-  Bucket: process.env.R2_BUCKET,
-  Key: key,
-  Expires: 300, // URL is valid for 300 seconds (5 minutes)
-});
-
 
 // Import the webhook router and messaging functions
 const { router, sendMessage, sendSummary } = require('./routes/webhook');
@@ -85,6 +78,7 @@ app.use('/webhook', router);
 
 // Middleware to validate the upload token for image uploads
 async function validateUploadToken(req, res, next) {
+  // For GET requests, token is in query; for POST requests, it's in the body
   const token = req.method === 'GET' ? req.query.token : req.body.token;
   console.log(`Validating token: ${token}, Method: ${req.method}`);
   if (!token) {
@@ -113,7 +107,8 @@ async function validateUploadToken(req, res, next) {
   }
 }
 
-// GET route to render the image upload page (ensure you have an "uploadImage.ejs" view)
+// GET route to render the image upload page
+// (Ensure you have an "uploadImage.ejs" file in your views folder)
 app.get('/upload-image/:phoneNumber/:type/:id', validateUploadToken, (req, res) => {
   const { phoneNumber, type, id } = req.params;
   const { token } = req.query;
@@ -127,6 +122,7 @@ app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validat
   const { token } = req.body;
   console.log(`POST request received - Token: ${token}, File: ${req.file ? req.file.originalname : 'No file'}`);
   try {
+    // Create an object key for the image in R2
     const key = `images/${Date.now()}-${req.file.originalname}`;
     const uploadParams = {
       Bucket: process.env.R2_BUCKET,
@@ -135,18 +131,20 @@ app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validat
       ContentType: req.file.mimetype,
     };
 
+    // Upload the image to R2
     await s3.upload(uploadParams).promise();
 
     // Generate a pre-signed URL for secure, temporary access (valid for 5 minutes)
     const signedUrl = s3.getSignedUrl('getObject', {
       Bucket: process.env.R2_BUCKET,
       Key: key,
-      Expires: 300,
+      Expires: 300, // URL valid for 300 seconds (5 minutes)
     });
     console.log(`Image uploaded to R2 and signed URL generated: ${signedUrl}`);
     
-    // Save image details to the database
-    const image = new Image({ [`${type}Id`]: id, imageUrl: key }); // optionally store the key or signedUrl
+    // Save the image record to the database
+    // (You can choose to store the object key rather than the signed URL because the URL expires)
+    const image = new Image({ [`${type}Id`]: id, imageUrl: key });
     await image.save();
 
     let entity;
@@ -164,7 +162,7 @@ app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validat
       await entity.save();
     }
 
-    // Send the summary using the signed URL so that access is secure and temporary
+    // Send the summary using the pre-signed URL so that access is secure and temporary.
     console.log(`Sending summary for ${type} with signed URL: ${signedUrl}`);
     await sendSummary(phoneNumber, type, id, signedUrl);
 
@@ -176,7 +174,7 @@ app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validat
     console.error(`Error uploading image for ${type}:`, error);
     const retryUrl = `${process.env.GLITCH_HOST}/upload-image/${phoneNumber}/${type}/${id}?token=${token}`;
     const shortUrl = await axios.post('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(retryUrl))
-      .then(res => res.data);
+      .then(response => response.data);
     await sendMessage(phoneNumber, `❌ *Error* \nFailed to upload image. Please try again using this link: ${shortUrl}`);
     res.status(500).send('Error uploading image.');
   }
