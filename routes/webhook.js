@@ -16,22 +16,20 @@ const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const GLITCH_HOST = process.env.GLITCH_HOST;
 const DEFAULT_IMAGE_URL = 'https://via.placeholder.com/150';
 
-const sessions = {};
+const sessions = {}; // Used to store session-specific data for each phone number.
 let userResponses = {};
 
-// Helper: Check if a string is numeric
+// ----- Helper Functions -----
 function isNumeric(value) {
   return /^-?\d+$/.test(value);
 }
 
-// Helper: Generate a Unit ID in format U<4-digit><Caps Letter>
 function generateUnitId() {
   const digits = Math.floor(1000 + Math.random() * 9000);
   const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
   return 'U' + digits + letter;
 }
 
-// URL shortener helper
 async function shortenUrl(longUrl) {
   try {
     const response = await axios.post('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(longUrl));
@@ -45,62 +43,52 @@ async function shortenUrl(longUrl) {
 async function generateUploadToken(phoneNumber, type, entityId) {
   const token = crypto.randomBytes(16).toString('hex');
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-  const uploadToken = new UploadToken({
-    token,
-    phoneNumber,
-    type,
-    entityId,
-    expiresAt,
-  });
+  const uploadToken = new UploadToken({ token, phoneNumber, type, entityId, expiresAt });
   await uploadToken.save();
   return token;
 }
 
-// Sends a text message via WhatsApp
 async function sendMessage(phoneNumber, message) {
   try {
     await axios.post(WHATSAPP_API_URL, {
       messaging_product: 'whatsapp',
       to: phoneNumber,
       type: 'text',
-      text: { body: message },
+      text: { body: message }
     }, {
       headers: {
         'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
+        'Content-Type': 'application/json'
+      }
     });
   } catch (err) {
     console.error('Error sending WhatsApp message:', err.response ? err.response.data : err);
   }
 }
 
-// Sends an image message with caption via WhatsApp
 async function sendImageMessage(phoneNumber, imageUrl, caption) {
   try {
     const response = await axios.post(WHATSAPP_API_URL, {
       messaging_product: 'whatsapp',
       to: phoneNumber,
       type: 'image',
-      image: {
-        link: imageUrl,
-        caption: caption,
-      },
+      image: { link: imageUrl, caption }
     }, {
       headers: {
         'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
+        'Content-Type': 'application/json'
+      }
     });
     console.log('Image message sent:', response.data);
   } catch (err) {
     console.error('Error sending WhatsApp image message:', err.response ? err.response.data : err);
-    // Fallback: Send a text message with the summary caption
+    // Fallback: send the caption as a text message
     await sendMessage(phoneNumber, caption);
   }
 }
 
-// Sends a summary message as both an image message (with caption) and a separate text message
+// ----- Summary Function with Edit Prompt -----
+// This function sends a summary (as an image message and as text) and then prompts the user to either edit or confirm.
 async function sendSummary(phoneNumber, type, entityId, imageUrl) {
   let caption;
   if (type === 'property') {
@@ -114,79 +102,232 @@ async function sendSummary(phoneNumber, type, entityId, imageUrl) {
     const unit = await Unit.findById(tenant.unitAssigned);
     caption = `✅ *Tenant Added*\n━━━━━━━━━━━━━━━\n👤 *Name*: ${tenant.name}\n🏠 *Property*: ${tenant.propertyName}\n🚪 *Unit*: ${unit ? unit.unitNumber : 'N/A'}\n📅 *Lease Start*: ${tenant.lease_start}\n💵 *Deposit*: ${tenant.deposit}\n💰 *Rent Amount*: ${tenant.rent_amount}\n━━━━━━━━━━━━━━━`;
   }
-  // First try to send the image message with caption
   await sendImageMessage(phoneNumber, imageUrl, caption);
-  // Also send a text message so the summary is clearly visible
   await sendMessage(phoneNumber, caption);
+  // Now send an interactive prompt asking if they want to edit the summary.
+  await sendEditConfirmation(phoneNumber, type, entityId);
 }
 
-// Sends an interactive image upload option
-async function sendImageOption(phoneNumber, type, entityId) {
+// ----- Edit Confirmation & Field Selection -----
+// Sends an interactive prompt with two options: "Edit" or "Confirm".
+async function sendEditConfirmation(phoneNumber, type, entityId) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
     to: phoneNumber,
     type: 'interactive',
     interactive: {
       type: 'button',
-      header: { type: 'text', text: `📸 Add Image to ${type.charAt(0).toUpperCase() + type.slice(1)}` },
-      body: { text: `Would you like to upload an image for this ${type}?` },
+      header: { type: 'text', text: 'Edit Summary?' },
+      body: { text: 'Would you like to edit any details?' },
       action: {
         buttons: [
-          { type: 'reply', reply: { id: `upload_${type}_${entityId}`, title: 'Yes' } },
-          { type: 'reply', reply: { id: `no_upload_${type}_${entityId}`, title: 'No' } },
-        ],
-      },
-    },
+          { type: 'reply', reply: { id: `edit_${type}_${entityId}`, title: 'Edit' } },
+          { type: 'reply', reply: { id: `confirm_${type}_${entityId}`, title: 'Confirm' } }
+        ]
+      }
+    }
   };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: {
+      'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
 }
 
-// Basic validation functions
-function isValidName(name) {
-  const regex = /^[a-zA-Z0-9 ]+$/;
-  return typeof name === 'string' && name.trim().length > 0 && name.length <= 40 && regex.test(name);
+// For properties, ask which field to edit
+async function askPropertyEditOptions(phoneNumber, entityId) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: 'Edit Property Details' },
+      body: { text: 'Which field would you like to edit?\n1. Name\n2. Address\n3. Units\n4. Total Amount\n5. Image' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: `edit_field_property_name_${entityId}`, title: 'Name' } },
+          { type: 'reply', reply: { id: `edit_field_property_address_${entityId}`, title: 'Address' } },
+          { type: 'reply', reply: { id: `edit_field_property_units_${entityId}`, title: 'Units' } },
+          { type: 'reply', reply: { id: `edit_field_property_total_${entityId}`, title: 'Total Amount' } },
+          { type: 'reply', reply: { id: `edit_field_property_image_${entityId}`, title: 'Image' } }
+        ]
+      }
+    }
+  };
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: {
+      'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
 }
 
-function isValidAddress(address) {
-  const regex = /^[a-zA-Z0-9 ]+$/;
-  return typeof address === 'string' && address.trim().length > 0 && address.length <= 40 && regex.test(address);
+// ----- List Selection Functions -----
+// These functions send a numbered text list so the user can reply with a number.
+async function sendPropertySelectionMenu(phoneNumber, properties) {
+  let message = '🏠 *Select a Property*\n';
+  const selectionMap = {};
+  properties.forEach((p, index) => {
+    const num = index + 1;
+    message += `${num}. ${p.name} - ${p.address}\n`;
+    selectionMap[num] = p._id.toString();
+  });
+  message += '\nPlease reply with the number corresponding to your choice.';
+  sessions[phoneNumber] = sessions[phoneNumber] || {};
+  sessions[phoneNumber].propertySelectionMap = selectionMap;
+  await sendMessage(phoneNumber, message);
 }
 
-function isValidUnits(units) {
-  const num = parseInt(units);
-  return !isNaN(num) && num > 0 && Number.isInteger(num);
+async function sendUnitSelectionMenu(phoneNumber, units) {
+  let message = '🚪 *Select a Unit*\n';
+  const selectionMap = {};
+  units.forEach((u, index) => {
+    const num = index + 1;
+    message += `${num}. ${u.unitNumber} - Floor: ${u.floor}\n`;
+    selectionMap[num] = u._id.toString();
+  });
+  message += '\nPlease reply with the number corresponding to your choice.';
+  sessions[phoneNumber] = sessions[phoneNumber] || {};
+  sessions[phoneNumber].unitSelectionMap = selectionMap;
+  await sendMessage(phoneNumber, message);
 }
 
-function isValidTotalAmount(amount) {
-  const num = parseFloat(amount);
-  return !isNaN(num) && num > 0;
+// ----- Additional Management Options -----
+async function sendManageSubmenu(phoneNumber) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '🛠️ Manage Options' },
+      body: { text: '*What would you like to manage?*' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'manage_properties', title: '🏠 Properties' } },
+          { type: 'reply', reply: { id: 'manage_units', title: '🚪 Units' } },
+          { type: 'reply', reply: { id: 'manage_tenants', title: '👥 Tenants' } }
+        ]
+      }
+    }
+  };
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: {
+      'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
 }
 
-function isValidDate(dateStr) {
-  const regex = /^(\d{2})-(\d{2})-(\d{4})$/;
-  if (!regex.test(dateStr)) return false;
-  const [day, month, year] = dateStr.split('-').map(Number);
-  const date = new Date(year, month - 1, day);
-  return date.getDate() === day && date.getMonth() === month - 1 && date.getFullYear() === year;
+async function sendToolsSubmenu(phoneNumber) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '🧰 Tools' },
+      body: { text: '*Select a tool:*' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'reports', title: '📊 Reports' } },
+          { type: 'reply', reply: { id: 'manage', title: '🔧 Maintenance' } },
+          { type: 'reply', reply: { id: 'info', title: 'ℹ️ Info' } }
+        ]
+      }
+    }
+  };
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: {
+      'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
 }
 
-router.get('/', (req, res) => {
-  const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
+async function sendPropertyOptions(phoneNumber) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '🏠 Property Management' },
+      body: { text: '*Manage your properties:*' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'add_property', title: '➕ Add Property' } }
+        ]
+      }
+    }
+  };
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: {
+      'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
+}
 
-  if (mode && token && mode === 'subscribe' && token === VERIFY_TOKEN) {
-    console.log('Webhook verified successfully');
-    return res.status(200).send(challenge);
-  }
-  res.sendStatus(403);
-});
+async function sendUnitOptions(phoneNumber) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '🚪 Unit Management' },
+      body: { text: '*Manage your units:*' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'add_unit', title: '➕ Add Unit' } }
+        ]
+      }
+    }
+  };
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: {
+      'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
+}
 
-// Main webhook POST handler
+async function sendTenantOptions(phoneNumber) {
+  const buttonMenu = {
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '👥 Tenant Management' },
+      body: { text: '*Manage your tenants:*' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'add_tenant', title: '➕ Add Tenant' } }
+        ]
+      }
+    }
+  };
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: {
+      'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
+}
+
+function generateTenantId() {
+  const digits = Math.floor(1000 + Math.random() * 9000);
+  const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+  return 'T' + digits + letter;
+}
+
+// ----- Main Webhook POST Handler -----
 router.post('/', async (req, res) => {
   const body = req.body;
-
   if (body.object === 'whatsapp_business_account') {
     const entry = body.entry[0];
     const changes = entry.changes[0];
@@ -207,41 +348,92 @@ router.post('/', async (req, res) => {
       const phoneNumber = `+${fromNumber}`;
       const text = message.text ? message.text.body.trim() : null;
       const interactive = message.interactive || null;
-
       console.log(`Message from ${fromNumber}:`, { text, interactive });
 
-      // Capture interactive replies
+      // Capture interactive replies (list or button)
       if (interactive && interactive.type === 'list_reply') {
         userResponses[fromNumber] = interactive.list_reply.id;
-        console.log(`List reply received: ${userResponses[fromNumber]}`);
       } else if (interactive && interactive.type === 'button_reply') {
         userResponses[fromNumber] = interactive.button_reply.id;
-        console.log(`Button reply received: ${userResponses[fromNumber]}`);
       }
+      sessions[fromNumber] = sessions[fromNumber] || { action: null };
 
-      if (!sessions[fromNumber]) {
-        sessions[fromNumber] = { action: null };
-      }
-
-      // Handle numeric responses when expecting a selection
+      // Handle numeric selections for lists
       if (text && sessions[fromNumber].action &&
-         (sessions[fromNumber].action === 'add_unit_select_property' ||
-          sessions[fromNumber].action === 'add_tenant_select_property' ||
-          sessions[fromNumber].action === 'add_tenant_select_unit')) {
+          (sessions[fromNumber].action === 'add_unit_select_property' ||
+           sessions[fromNumber].action === 'add_tenant_select_property' ||
+           sessions[fromNumber].action === 'add_tenant_select_unit')) {
         if (isNumeric(text)) {
           const num = parseInt(text);
-          if (sessions[fromNumber].action === 'add_unit_select_property' && sessions[fromNumber].propertySelectionMap && sessions[fromNumber].propertySelectionMap[num]) {
+          if (sessions[fromNumber].action === 'add_unit_select_property' &&
+              sessions[fromNumber].propertySelectionMap && sessions[fromNumber].propertySelectionMap[num]) {
             userResponses[fromNumber] = sessions[fromNumber].propertySelectionMap[num];
           }
-          if (sessions[fromNumber].action === 'add_tenant_select_property' && sessions[fromNumber].propertySelectionMap && sessions[fromNumber].propertySelectionMap[num]) {
+          if (sessions[fromNumber].action === 'add_tenant_select_property' &&
+              sessions[fromNumber].propertySelectionMap && sessions[fromNumber].propertySelectionMap[num]) {
             userResponses[fromNumber] = sessions[fromNumber].propertySelectionMap[num];
           }
-          if (sessions[fromNumber].action === 'add_tenant_select_unit' && sessions[fromNumber].unitSelectionMap && sessions[fromNumber].unitSelectionMap[num]) {
+          if (sessions[fromNumber].action === 'add_tenant_select_unit' &&
+              sessions[fromNumber].unitSelectionMap && sessions[fromNumber].unitSelectionMap[num]) {
             userResponses[fromNumber] = sessions[fromNumber].unitSelectionMap[num];
           }
         }
       }
 
+      // ----- Handle Editing Responses -----
+      if (interactive && userResponses[fromNumber]) {
+        const selectedOption = userResponses[fromNumber];
+        if (selectedOption.startsWith('edit_')) {
+          // Format: "edit_property_<entityId>" etc.
+          const parts = selectedOption.split('_');
+          const type = parts[1];
+          const entityId = parts.slice(2).join('_');
+          sessions[fromNumber].editing = { type, entityId };
+          if (type === 'property') {
+            await askPropertyEditOptions(phoneNumber, entityId);
+          }
+          // Extend for unit/tenant as needed.
+          delete userResponses[fromNumber];
+          return res.sendStatus(200);
+        } else if (selectedOption.startsWith('confirm_')) {
+          await sendMessage(fromNumber, 'Summary confirmed.');
+          delete sessions[fromNumber].editing;
+          delete userResponses[fromNumber];
+          return res.sendStatus(200);
+        } else if (selectedOption.startsWith('edit_field_property_')) {
+          // Format: "edit_field_property_<field>_<entityId>"
+          const parts = selectedOption.split('_');
+          const field = parts[3]; // e.g., "name", "address", etc.
+          const entityId = parts.slice(4).join('_');
+          sessions[fromNumber].editing.field = field;
+          await sendMessage(fromNumber, `Please provide the new value for ${field}:`);
+          delete userResponses[fromNumber];
+          return res.sendStatus(200);
+        }
+      }
+
+      // If in editing mode and receiving a new value via text:
+      if (text && sessions[fromNumber].editing && sessions[fromNumber].editing.field) {
+        const editing = sessions[fromNumber].editing;
+        if (editing.type === 'property') {
+          const property = await Property.findById(editing.entityId);
+          const field = editing.field;
+          if (field === 'name') property.name = text;
+          else if (field === 'address') property.address = text;
+          else if (field === 'units') property.units = parseInt(text);
+          else if (field === 'total') property.totalAmount = parseFloat(text);
+          // For image editing, a new upload flow would be triggered.
+          await property.save();
+          await sendMessage(fromNumber, `${field} updated successfully.`);
+          delete sessions[fromNumber].editing.field;
+          // Resend updated summary (using DEFAULT_IMAGE_URL if image not updated)
+          await sendSummary(phoneNumber, 'property', editing.entityId, DEFAULT_IMAGE_URL);
+          return res.sendStatus(200);
+        }
+        // Extend for unit and tenant if needed.
+      }
+
+      // ----- Existing Flows for Adding Entities -----
       if (text) {
         // PROPERTY ADDING FLOW
         if (sessions[fromNumber].action === 'add_property_name') {
@@ -276,10 +468,9 @@ router.post('/', async (req, res) => {
               address: sessions[fromNumber].propertyData.address,
               units: sessions[fromNumber].propertyData.units,
               totalAmount: parseFloat(text),
-              userId: user._id,
+              userId: user._id
             });
             await property.save();
-
             sessions[fromNumber].entityType = 'property';
             sessions[fromNumber].entityId = property._id;
             await sendImageOption(fromNumber, 'property', property._id);
@@ -288,7 +479,7 @@ router.post('/', async (req, res) => {
             await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease retry with a valid total amount (e.g., 5000). Must be a positive number.');
           }
         }
-        // UNIT ADDING FLOW (auto‑generates a unit ID)
+        // UNIT ADDING FLOW (auto-generates a unit ID)
         else if (sessions[fromNumber].action === 'add_unit_rent') {
           const rent = parseFloat(text);
           if (!isNaN(rent) && rent > 0) {
@@ -306,11 +497,11 @@ router.post('/', async (req, res) => {
           const user = await User.findOne({ phoneNumber });
           const unit = new Unit({
             property: sessions[fromNumber].unitData.property,
-            unitNumber: sessions[fromNumber].unitData.unitNumber, // auto‑generated earlier
+            unitNumber: sessions[fromNumber].unitData.unitNumber,
             rentAmount: sessions[fromNumber].unitData.rentAmount,
             floor: sessions[fromNumber].unitData.floor,
             size: text,
-            userId: user._id,
+            userId: user._id
           });
           await unit.save();
           sessions[fromNumber].entityType = 'unit';
@@ -353,7 +544,7 @@ router.post('/', async (req, res) => {
               lease_start: sessions[fromNumber].tenantData.lease_start,
               deposit: sessions[fromNumber].tenantData.deposit,
               rent_amount: rent,
-              tenant_id: generateTenantId(),
+              tenant_id: generateTenantId()
             });
             await tenant.save();
             sessions[fromNumber].entityType = 'tenant';
@@ -377,350 +568,26 @@ router.post('/', async (req, res) => {
                 buttons: [
                   { type: 'reply', reply: { id: 'account_info', title: '👤 Account Info' } },
                   { type: 'reply', reply: { id: 'manage', title: '🛠️ Manage' } },
-                  { type: 'reply', reply: { id: 'tools', title: '🧰 Tools' } },
-                ],
-              },
-            },
+                  { type: 'reply', reply: { id: 'tools', title: '🧰 Tools' } }
+                ]
+              }
+            }
           };
-          await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
-        }
-      }
-
-      // Handle interactive replies
-      if (interactive && userResponses[fromNumber]) {
-        const selectedOption = userResponses[fromNumber];
-
-        if (selectedOption === 'account_info') {
-          const user = await User.findOne({ phoneNumber });
-          const accountInfoMessage = user ? `
-*👤 Account Information*
-━━━━━━━━━━━━━━━
-📞 *Phone*: ${user.phoneNumber}
-✅ *Verified*: ${user.verified ? 'Yes' : 'No'}
-🧑 *Profile Name*: ${user.profileName || 'N/A'}
-📅 *Registration Date*: ${user.registrationDate ? user.registrationDate.toLocaleDateString() : 'N/A'}
-💰 *Subscription*: ${user.subscription}
-━━━━━━━━━━━━━━━
-          ` : '⚠️ *No Account Found* \nNo account information is available for this number.';
-          await sendMessage(fromNumber, accountInfoMessage);
-        } else if (selectedOption === 'manage') {
-          await sendManageSubmenu(fromNumber);
-        } else if (selectedOption === 'tools') {
-          await sendToolsSubmenu(fromNumber);
-        } else if (selectedOption === 'manage_properties') {
-          await sendPropertyOptions(fromNumber);
-        } else if (selectedOption === 'manage_units') {
-          await sendUnitOptions(fromNumber);
-        } else if (selectedOption === 'manage_tenants') {
-          await sendTenantOptions(fromNumber);
-        } else if (selectedOption === 'add_property') {
-          await sendMessage(fromNumber, '🏠 *Add Property* \nLet’s start! Please provide the property name.');
-          sessions[fromNumber].action = 'add_property_name';
-        } else if (selectedOption === 'add_unit') {
-          const user = await User.findOne({ phoneNumber });
-          const properties = await Property.find({ userId: user._id });
-          if (!properties.length) {
-            await sendMessage(fromNumber, 'ℹ️ *No Properties* \nPlease add a property first.');
-          } else {
-            sessions[fromNumber].properties = properties;
-            sessions[fromNumber].userId = user._id;
-            await sendPropertySelectionMenu(fromNumber, properties);
-            sessions[fromNumber].action = 'add_unit_select_property';
-          }
-        } else if (selectedOption === 'add_tenant') {
-          const user = await User.findOne({ phoneNumber });
-          const properties = await Property.find({ userId: user._id });
-          if (!properties.length) {
-            await sendMessage(fromNumber, 'ℹ️ *No Properties* \nPlease add a property first.');
-          } else {
-            sessions[fromNumber].properties = properties;
-            sessions[fromNumber].userId = user._id;
-            await sendPropertySelectionMenu(fromNumber, properties);
-            sessions[fromNumber].action = 'add_tenant_select_property';
-          }
-        }
-        // Handle selection from a numbered property list (for units)
-        else if (sessions[fromNumber].action === 'add_unit_select_property') {
-          const propertyId = selectedOption;
-          const properties = sessions[fromNumber].properties || await Property.find({ userId: sessions[fromNumber].userId });
-          const selectedProperty = properties.find(p => p._id.toString() === propertyId);
-          if (selectedProperty) {
-            sessions[fromNumber].unitData = { property: selectedProperty._id };
-            sessions[fromNumber].unitData.unitNumber = generateUnitId();
-            await sendMessage(fromNumber, `Unit ID generated: ${sessions[fromNumber].unitData.unitNumber}. Please provide the rent amount for this unit.`);
-            sessions[fromNumber].action = 'add_unit_rent';
-            delete sessions[fromNumber].propertySelectionMap;
-          } else {
-            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease select a valid property.');
-            await sendPropertySelectionMenu(fromNumber, properties);
-          }
-        }
-        // Handle selection from a numbered property list (for tenants)
-        else if (sessions[fromNumber].action === 'add_tenant_select_property') {
-          const propertyId = selectedOption;
-          const properties = sessions[fromNumber].properties || await Property.find({ userId: sessions[fromNumber].userId });
-          const selectedProperty = properties.find(p => p._id.toString() === propertyId);
-          if (selectedProperty) {
-            sessions[fromNumber].tenantData = { propertyId: selectedProperty._id, propertyName: selectedProperty.name };
-            const units = await Unit.find({ property: selectedProperty._id });
-            if (!units.length) {
-              await sendMessage(fromNumber, 'ℹ️ *No Units* \nPlease add a unit to this property first.');
-              sessions[fromNumber].action = null;
-              delete sessions[fromNumber].tenantData;
-            } else {
-              await sendUnitSelectionMenu(fromNumber, units);
-              sessions[fromNumber].action = 'add_tenant_select_unit';
+          await axios.post(WHATSAPP_API_URL, buttonMenu, {
+            headers: {
+              'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json'
             }
-          } else {
-            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease select a valid property.');
-            await sendPropertySelectionMenu(fromNumber, properties);
-          }
+          });
         }
-        // Handle selection from a numbered unit list for tenant assignment
-        else if (sessions[fromNumber].action === 'add_tenant_select_unit') {
-          const unitId = selectedOption;
-          const units = await Unit.find({ property: sessions[fromNumber].tenantData.propertyId });
-          const selectedUnit = units.find(u => u._id.toString() === unitId);
-          if (selectedUnit) {
-            sessions[fromNumber].tenantData.unitAssigned = selectedUnit._id;
-            sessions[fromNumber].tenantData.propertyName = selectedUnit.property.name;
-            await sendMessage(fromNumber, '👤 *Tenant Name* \nPlease provide the tenant’s full name.');
-            sessions[fromNumber].action = 'add_tenant_name';
-          } else {
-            await sendMessage(fromNumber, '⚠️ *Invalid Selection* \nPlease select a valid unit.');
-            await sendUnitSelectionMenu(fromNumber, units);
-          }
-        }
-        // Handle image upload option reply
-        else if (sessions[fromNumber].action === 'awaiting_image_choice') {
-          if (selectedOption.startsWith('upload_')) {
-            const [ , type, entityId ] = selectedOption.split('_');
-            const token = await generateUploadToken(phoneNumber, type, entityId);
-            const imageUploadUrl = `${GLITCH_HOST}/upload-image/${phoneNumber}/${type}/${entityId}?token=${token}`;
-            const shortUrl = await shortenUrl(imageUploadUrl);
-            await sendMessage(fromNumber, `Please upload the image here (valid for 15 minutes): ${shortUrl}`);
-            sessions[fromNumber].action = null;
-            delete sessions[fromNumber].entityType;
-            delete sessions[fromNumber].entityId;
-          } else if (selectedOption.startsWith('no_upload_')) {
-            const [ , type, entityId ] = selectedOption.split('_');
-            if (type === 'property') {
-              const property = await Property.findById(entityId);
-              property.images.push(DEFAULT_IMAGE_URL);
-              await property.save();
-              await sendSummary(fromNumber, 'property', entityId, DEFAULT_IMAGE_URL);
-            } else if (type === 'unit') {
-              const unit = await Unit.findById(entityId);
-              unit.images.push(DEFAULT_IMAGE_URL);
-              await unit.save();
-              await sendSummary(fromNumber, 'unit', entityId, DEFAULT_IMAGE_URL);
-            } else if (type === 'tenant') {
-              const tenant = await Tenant.findById(entityId);
-              tenant.photo = DEFAULT_IMAGE_URL;
-              await tenant.save();
-              await sendSummary(fromNumber, 'tenant', entityId, DEFAULT_IMAGE_URL);
-            }
-            sessions[fromNumber].action = null;
-            delete sessions[fromNumber].entityType;
-            delete sessions[fromNumber].entityId;
-          }
-        }
-        delete userResponses[fromNumber];
       }
     }
   }
   res.sendStatus(200);
 });
 
-// If there are 10 or fewer items, send a numbered text list; otherwise, send an interactive list
-async function sendPropertySelectionMenu(phoneNumber, properties) {
-  if (properties.length <= 10) {
-    let message = '🏠 *Select a Property*\n';
-    const selectionMap = {};
-    properties.forEach((p, index) => {
-      const num = index + 1;
-      message += `${num}. ${p.name} - ${p.address}\n`;
-      selectionMap[num] = p._id.toString();
-    });
-    message += '\nPlease reply with the number corresponding to your choice.';
-    sessions[phoneNumber] = sessions[phoneNumber] || {};
-    sessions[phoneNumber].propertySelectionMap = selectionMap;
-    await sendMessage(phoneNumber, message);
-  } else {
-    const listMenu = {
-      messaging_product: 'whatsapp',
-      to: phoneNumber,
-      type: 'interactive',
-      interactive: {
-        type: 'list',
-        header: { type: 'text', text: '🏠 Select a Property' },
-        body: { text: 'Please choose a property:' },
-        footer: { text: 'Select from the list below' },
-        action: {
-          button: 'Choose Property',
-          sections: [{
-            title: 'Properties',
-            rows: properties.map(p => ({
-              id: p._id.toString(),
-              title: p.name.slice(0, 24),
-              description: p.address.slice(0, 72),
-            })),
-          }],
-        },
-      },
-    };
-    await axios.post(WHATSAPP_API_URL, listMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
-  }
-}
-
-// Similarly for unit selection when assigning a tenant
-async function sendUnitSelectionMenu(phoneNumber, units) {
-  if (units.length <= 10) {
-    let message = '🚪 *Select a Unit*\n';
-    const selectionMap = {};
-    units.forEach((u, index) => {
-      const num = index + 1;
-      message += `${num}. ${u.unitNumber} - Floor: ${u.floor}\n`;
-      selectionMap[num] = u._id.toString();
-    });
-    message += '\nPlease reply with the number corresponding to your choice.';
-    sessions[phoneNumber] = sessions[phoneNumber] || {};
-    sessions[phoneNumber].unitSelectionMap = selectionMap;
-    await sendMessage(phoneNumber, message);
-  } else {
-    const listMenu = {
-      messaging_product: 'whatsapp',
-      to: phoneNumber,
-      type: 'interactive',
-      interactive: {
-        type: 'list',
-        header: { type: 'text', text: '🚪 Select a Unit' },
-        body: { text: 'Please choose a unit:' },
-        footer: { text: 'Select from the list below' },
-        action: {
-          button: 'Choose Unit',
-          sections: [{
-            title: 'Units',
-            rows: units.map(u => ({
-              id: u._id.toString(),
-              title: u.unitNumber.slice(0, 24),
-              description: `Floor: ${u.floor}`.slice(0, 72),
-            })),
-          }],
-        },
-      },
-    };
-    await axios.post(WHATSAPP_API_URL, listMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
-  }
-}
-
-async function sendManageSubmenu(phoneNumber) {
-  const buttonMenu = {
-    messaging_product: 'whatsapp',
-    to: phoneNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      header: { type: 'text', text: '🛠️ Manage Options' },
-      body: { text: '*What would you like to manage?*' },
-      action: {
-        buttons: [
-          { type: 'reply', reply: { id: 'manage_properties', title: '🏠 Properties' } },
-          { type: 'reply', reply: { id: 'manage_units', title: '🚪 Units' } },
-          { type: 'reply', reply: { id: 'manage_tenants', title: '👥 Tenants' } },
-        ],
-      },
-    },
-  };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
-}
-
-async function sendToolsSubmenu(phoneNumber) {
-  const buttonMenu = {
-    messaging_product: 'whatsapp',
-    to: phoneNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      header: { type: 'text', text: '🧰 Tools' },
-      body: { text: '*Select a tool:*' },
-      action: {
-        buttons: [
-          { type: 'reply', reply: { id: 'reports', title: '📊 Reports' } },
-          { type: 'reply', reply: { id: 'manage', title: '🔧 Maintenance' } },
-          { type: 'reply', reply: { id: 'info', title: 'ℹ️ Info' } },
-        ],
-      },
-    },
-  };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
-}
-
-async function sendPropertyOptions(phoneNumber) {
-  const buttonMenu = {
-    messaging_product: 'whatsapp',
-    to: phoneNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      header: { type: 'text', text: '🏠 Property Management' },
-      body: { text: '*Manage your properties:*' },
-      action: {
-        buttons: [
-          { type: 'reply', reply: { id: 'add_property', title: '➕ Add Property' } },
-        ],
-      },
-    },
-  };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
-}
-
-async function sendUnitOptions(phoneNumber) {
-  const buttonMenu = {
-    messaging_product: 'whatsapp',
-    to: phoneNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      header: { type: 'text', text: '🚪 Unit Management' },
-      body: { text: '*Manage your units:*' },
-      action: {
-        buttons: [
-          { type: 'reply', reply: { id: 'add_unit', title: '➕ Add Unit' } },
-        ],
-      },
-    },
-  };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
-}
-
-async function sendTenantOptions(phoneNumber) {
-  const buttonMenu = {
-    messaging_product: 'whatsapp',
-    to: phoneNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      header: { type: 'text', text: '👥 Tenant Management' },
-      body: { text: '*Manage your tenants:*' },
-      action: {
-        buttons: [
-          { type: 'reply', reply: { id: 'add_tenant', title: '➕ Add Tenant' } },
-        ],
-      },
-    },
-  };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } });
-}
-
-function generateTenantId() {
-  const digits = Math.floor(1000 + Math.random() * 9000);
-  const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
-  return 'T' + digits + letter;
-}
-
 module.exports = {
   router,
   sendMessage,
-  sendSummary,
+  sendSummary
 };
