@@ -92,14 +92,20 @@ async function sendImageOption(phoneNumber, type, entityId) {
       type: 'button',
       header: {
         type: 'text',
-        text: `📸 Add Image to ${type.charAt(0).toUpperCase() +
-          type.slice(1)}`,
+        text:
+          `📸 Add Image to ${type.charAt(0).toUpperCase() + type.slice(1)}`,
       },
       body: { text: `Would you like to upload an image for this ${type}?` },
       action: {
         buttons: [
-          { type: 'reply', reply: { id: `upload_${type}_${entityId}`, title: 'Yes' } },
-          { type: 'reply', reply: { id: `no_upload_${type}_${entityId}`, title: 'No' } },
+          {
+            type: 'reply',
+            reply: { id: `upload_${type}_${entityId}`, title: 'Yes' },
+          },
+          {
+            type: 'reply',
+            reply: { id: `no_upload_${type}_${entityId}`, title: 'No' },
+          },
         ],
       },
     },
@@ -159,16 +165,26 @@ async function sendSummary(phoneNumber, type, entityId, imageUrl) {
 }
 
 /**
- * Validation Helpers (could be replaced by a library such as express-validator)
+ * Validation Helpers
  */
 function isValidName(name) {
   const regex = /^[a-zA-Z0-9 ]+$/;
-  return typeof name === 'string' && name.trim().length > 0 && name.length <= 40 && regex.test(name);
+  return (
+    typeof name === 'string' &&
+    name.trim().length > 0 &&
+    name.length <= 40 &&
+    regex.test(name)
+  );
 }
 
 function isValidAddress(address) {
   const regex = /^[a-zA-Z0-9 ]+$/;
-  return typeof address === 'string' && address.trim().length > 0 && address.length <= 40 && regex.test(address);
+  return (
+    typeof address === 'string' &&
+    address.trim().length > 0 &&
+    address.length <= 40 &&
+    regex.test(address)
+  );
 }
 
 function isValidUnits(units) {
@@ -186,7 +202,11 @@ function isValidDate(dateStr) {
   if (!regex.test(dateStr)) return false;
   const [day, month, year] = dateStr.split('-').map(Number);
   const date = new Date(year, month - 1, day);
-  return date.getDate() === day && date.getMonth() === month - 1 && date.getFullYear() === year;
+  return (
+    date.getDate() === day &&
+    date.getMonth() === month - 1 &&
+    date.getFullYear() === year
+  );
 }
 
 // --- Webhook Verification Endpoint ---
@@ -206,6 +226,7 @@ router.get('/', (req, res) => {
 // --- Webhook POST Handler ---
 router.post('/', async (req, res) => {
   const body = req.body;
+
   if (body.object === 'whatsapp_business_account') {
     const entry = body.entry[0];
     const changes = entry.changes[0];
@@ -216,7 +237,9 @@ router.post('/', async (req, res) => {
       const contact = value.contacts[0];
       const contactPhoneNumber = `+${contact.wa_id}`;
       const profileName = contact.profile.name;
-      const user = (await User.findOne({ phoneNumber: contactPhoneNumber })) || new User({ phoneNumber: contactPhoneNumber });
+      const user =
+        (await User.findOne({ phoneNumber: contactPhoneNumber })) ||
+        new User({ phoneNumber: contactPhoneNumber });
       user.profileName = profileName || user.profileName;
       await user.save();
     }
@@ -230,16 +253,17 @@ router.post('/', async (req, res) => {
 
       console.log(`Message from ${fromNumber}:`, { text, interactive });
 
-      // Handle interactive replies (list or button)
+      // Process interactive responses
       if (interactive) {
-        if (interactive.type === 'list_reply' || interactive.type === 'button_reply') {
-          // Save the selected option for further processing
-          // (In a production app, you might want to persist this state in a database or cache)
+        if (
+          interactive.type === 'list_reply' ||
+          interactive.type === 'button_reply'
+        ) {
           processInteractiveResponse(fromNumber, interactive);
         }
       }
 
-      // Handle text commands and session state (sessions can be managed with a persistent store)
+      // Process text commands
       await processTextMessage(phoneNumber, text);
     }
   }
@@ -247,8 +271,8 @@ router.post('/', async (req, res) => {
 });
 
 /**
- * Example helper for processing interactive responses.
- * In a business app, consider storing session state in Redis or a database.
+ * Helper for processing interactive responses.
+ * (In production, consider storing session state in a persistent store.)
  */
 const sessions = {};
 function processInteractiveResponse(fromNumber, interactive) {
@@ -258,18 +282,16 @@ function processInteractiveResponse(fromNumber, interactive) {
       : interactive.button_reply.id;
   sessions[fromNumber] = sessions[fromNumber] || { action: null };
   sessions[fromNumber].selectedOption = selectedOption;
-  console.log(`Interactive option received from ${fromNumber}: ${selectedOption}`);
+  console.log(
+    `Interactive option received from ${fromNumber}: ${selectedOption}`
+  );
 }
 
 /**
- * Example helper for processing text messages.
- * In a production scenario, use more robust state management.
+ * Helper for processing text messages.
  */
 async function processTextMessage(phoneNumber, text) {
-  // Implementation of your business logic and session flow goes here.
-  // This might include creating or updating properties, units, or tenants,
-  // then sending the appropriate responses via WhatsApp.
-  // For brevity, we only handle a simple help command here.
+  // Example: Handle a simple "help" command
   if (text && text.toLowerCase() === 'help') {
     const buttonMenu = {
       messaging_product: 'whatsapp',
@@ -282,9 +304,18 @@ async function processTextMessage(phoneNumber, text) {
         footer: { text: 'Powered by Your Rental App' },
         action: {
           buttons: [
-            { type: 'reply', reply: { id: 'account_info', title: '👤 Account Info' } },
-            { type: 'reply', reply: { id: 'manage', title: '🛠️ Manage' } },
-            { type: 'reply', reply: { id: 'tools', title: '🧰 Tools' } },
+            {
+              type: 'reply',
+              reply: { id: 'account_info', title: '👤 Account Info' },
+            },
+            {
+              type: 'reply',
+              reply: { id: 'manage', title: '🛠️ Manage' },
+            },
+            {
+              type: 'reply',
+              reply: { id: 'tools', title: '🧰 Tools' },
+            },
           ],
         },
       },
@@ -299,9 +330,7 @@ async function processTextMessage(phoneNumber, text) {
 }
 
 /**
- * Additional helper functions to send menus (e.g., property selection, unit selection)
- * would follow the pattern below. In a business application, these can be refactored into
- * separate controller or service modules.
+ * Additional helper functions to send menus (e.g., property selection) can be added here.
  */
 async function sendPropertySelectionMenu(phoneNumber, properties) {
   const listMenu = {

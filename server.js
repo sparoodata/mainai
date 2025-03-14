@@ -15,11 +15,11 @@ const port = process.env.PORT || 3000;
 
 // --- Security & Performance Middleware ---
 app.use(helmet());
-app.use(morgan('combined')); // Logging HTTP requests
+app.use(morgan('combined'));
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // limit each IP to 100 requests per window
+    max: 100, // limit each IP to 100 requests per windowMs
     message: 'Too many requests from this IP, please try again later.',
   })
 );
@@ -90,6 +90,7 @@ const { router: webhookRouter, sendMessage } = require('./routes/webhook');
 
 // --- Custom Middleware: Validate Upload Token ---
 async function validateUploadToken(req, res, next) {
+  // For GET, token is in query; for POST, it’s in body
   const token = req.method === 'GET' ? req.query.token : req.body.token;
   console.log(`Validating token: ${token}, Method: ${req.method}`);
 
@@ -143,6 +144,7 @@ app.post(
 
       await s3.upload(uploadParams).promise();
       const imageUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
+      console.log(`Image uploaded to R2: ${process.env.R2_BUCKET}/${key}`);
       const image = new Image({ [`${type}Id`]: id, imageUrl });
       await image.save();
 
@@ -175,10 +177,11 @@ app.post(
 
       req.uploadToken.used = true;
       await req.uploadToken.save();
+
       res.send('Image uploaded successfully!');
     } catch (error) {
       console.error(`Error uploading image for ${type}:`, error);
-      // Generate retry URL and send a message with a short URL
+      // Generate a retry URL and shorten it
       const retryUrl = `${process.env.GLITCH_HOST}/upload-image/${phoneNumber}/${type}/${id}?token=${token}`;
       const axios = require('axios');
       const shortUrl = await axios

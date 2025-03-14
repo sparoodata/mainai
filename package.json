@@ -4,7 +4,7 @@
   "description": "A simple Node app",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "NODE_NO_WARNINGS=1 node server.js"
   },
   "dependencies": {
     "express": "^4.19.2",
@@ -32,7 +32,8 @@
     "groq-sdk": "^0.15.0",
     "csurf": "^1.11.0",
     "@aws-sdk/client-s3": "^3.758.0",
-    "@aws-sdk/s3-request-presigner": "^3.758.0"
+    "@aws-sdk/s3-request-presigner": "^3.758.0",
+    "morgan": "^1.10.0"
   },
   "engines": {
     "node": "16.x"
@@ -40,9 +41,6 @@
   "repository": {
     "url": "https://glitch.com/edit/#!/glitch-hello-node"
   },
-  "scripts": {
-  "start": "NODE_NO_WARNINGS=1 node server.js"
-},
   "license": "MIT",
   "keywords": [
     "node",
