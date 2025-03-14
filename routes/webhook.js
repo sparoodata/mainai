@@ -90,7 +90,6 @@ async function sendImageMessage(phoneNumber, imageUrl, caption) {
     console.log('Image message sent:', response.data);
   } catch (err) {
     console.error('Error sending WhatsApp image message:', err.response ? err.response.data : err);
-    // Fallback: send the caption as text.
     await sendMessage(phoneNumber, caption);
   }
 }
@@ -117,14 +116,12 @@ async function sendImageOption(phoneNumber, type, entityId) {
   await axios.post(
     WHATSAPP_API_URL,
     buttonMenu,
-    {
-      headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-    }
+    { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
   );
 }
 
 // ----- Summary Function with Edit Prompt -----
-// Sends a summary (as image and text) then prompts the user to edit or confirm.
+// Sends a summary (as image and text) then prompts the user with an "Edit Summary?" option.
 async function sendSummary(phoneNumber, type, entityId, imageUrl) {
   let caption;
   if (type === 'property') {
@@ -140,12 +137,11 @@ async function sendSummary(phoneNumber, type, entityId, imageUrl) {
   }
   await sendImageMessage(phoneNumber, imageUrl, caption);
   await sendMessage(phoneNumber, caption);
-  // After sending the summary, prompt the user with an "Edit Summary?" option.
   await sendEditConfirmation(phoneNumber, type, entityId);
 }
 
 // ----- Edit Confirmation & Field Selection -----
-// Sends an interactive prompt with options "Edit" or "Confirm".
+// Sends an interactive prompt with "Edit" or "Confirm" options.
 async function sendEditConfirmation(phoneNumber, type, entityId) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -166,9 +162,7 @@ async function sendEditConfirmation(phoneNumber, type, entityId) {
   await axios.post(
     WHATSAPP_API_URL,
     buttonMenu,
-    {
-      headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-    }
+    { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
   );
 }
 
@@ -196,14 +190,12 @@ async function askPropertyEditOptions(phoneNumber, entityId) {
   await axios.post(
     WHATSAPP_API_URL,
     buttonMenu,
-    {
-      headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-    }
+    { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
   );
 }
 
 // ----- List Selection Functions (Numbered Text) -----
-// These functions always send a numbered text list.
+// Always sends a numbered list.
 async function sendPropertySelectionMenu(phoneNumber, properties) {
   let message = '🏠 *Select a Property*\n';
   const selectionMap = {};
@@ -254,9 +246,7 @@ async function sendManageSubmenu(phoneNumber) {
   await axios.post(
     WHATSAPP_API_URL,
     buttonMenu,
-    {
-      headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-    }
+    { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
   );
 }
 
@@ -281,9 +271,7 @@ async function sendToolsSubmenu(phoneNumber) {
   await axios.post(
     WHATSAPP_API_URL,
     buttonMenu,
-    {
-      headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-    }
+    { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
   );
 }
 
@@ -306,9 +294,7 @@ async function sendPropertyOptions(phoneNumber) {
   await axios.post(
     WHATSAPP_API_URL,
     buttonMenu,
-    {
-      headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-    }
+    { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
   );
 }
 
@@ -331,9 +317,7 @@ async function sendUnitOptions(phoneNumber) {
   await axios.post(
     WHATSAPP_API_URL,
     buttonMenu,
-    {
-      headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-    }
+    { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
   );
 }
 
@@ -356,9 +340,7 @@ async function sendTenantOptions(phoneNumber) {
   await axios.post(
     WHATSAPP_API_URL,
     buttonMenu,
-    {
-      headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-    }
+    { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
   );
 }
 
@@ -421,36 +403,65 @@ router.post('/', async (req, res) => {
         delete userResponses[fromNumber];
         return res.sendStatus(200);
       }
+      // ----- Handle "manage_properties" option -----
       if (userResponses[fromNumber] === 'manage_properties') {
         await sendPropertyOptions(phoneNumber);
         delete userResponses[fromNumber];
         return res.sendStatus(200);
       }
+      // ----- Handle "manage_units" option -----
       if (userResponses[fromNumber] === 'manage_units') {
         await sendUnitOptions(phoneNumber);
         delete userResponses[fromNumber];
         return res.sendStatus(200);
       }
+      // ----- Handle "manage_tenants" option -----
       if (userResponses[fromNumber] === 'manage_tenants') {
         await sendTenantOptions(phoneNumber);
         delete userResponses[fromNumber];
         return res.sendStatus(200);
       }
+      // ----- Handle "add_property" option -----
       if (userResponses[fromNumber] === 'add_property') {
         await sendMessage(phoneNumber, '🏠 *Add Property*\nLet’s start! Please provide the property name.');
         sessions[fromNumber].action = 'add_property_name';
         delete userResponses[fromNumber];
         return res.sendStatus(200);
       }
+      // ----- Handle "add_unit" option -----
       if (userResponses[fromNumber] === 'add_unit') {
-        await sendMessage(phoneNumber, 'Please follow the prompts to add a new unit.');
-        delete userResponses[fromNumber];
-        return res.sendStatus(200);
+        // Instead of extra info, immediately check for properties.
+        const user = await User.findOne({ phoneNumber });
+        const properties = await Property.find({ userId: user._id });
+        if (!properties.length) {
+          await sendMessage(phoneNumber, 'ℹ️ *No Properties*\nPlease add a property first.');
+          delete userResponses[fromNumber];
+          return res.sendStatus(200);
+        } else {
+          sessions[fromNumber].properties = properties;
+          sessions[fromNumber].userId = user._id;
+          await sendPropertySelectionMenu(phoneNumber, properties);
+          sessions[fromNumber].action = 'add_unit_select_property';
+          delete userResponses[fromNumber];
+          return res.sendStatus(200);
+        }
       }
+      // ----- Handle "add_tenant" option -----
       if (userResponses[fromNumber] === 'add_tenant') {
-        await sendMessage(phoneNumber, 'Please follow the prompts to add a new tenant.');
-        delete userResponses[fromNumber];
-        return res.sendStatus(200);
+        const user = await User.findOne({ phoneNumber });
+        const properties = await Property.find({ userId: user._id });
+        if (!properties.length) {
+          await sendMessage(phoneNumber, 'ℹ️ *No Properties*\nPlease add a property first.');
+          delete userResponses[fromNumber];
+          return res.sendStatus(200);
+        } else {
+          sessions[fromNumber].properties = properties;
+          sessions[fromNumber].userId = user._id;
+          await sendPropertySelectionMenu(phoneNumber, properties);
+          sessions[fromNumber].action = 'add_tenant_select_property';
+          delete userResponses[fromNumber];
+          return res.sendStatus(200);
+        }
       }
       
       // ----- Handle Image Upload Option when awaiting image choice -----
@@ -508,7 +519,6 @@ router.post('/', async (req, res) => {
           if (type === 'property') {
             await askPropertyEditOptions(phoneNumber, entityId);
           }
-          // Extend for unit/tenant if desired.
           delete userResponses[fromNumber];
           return res.sendStatus(200);
         } else if (selectedOption.startsWith('confirm_')) {
@@ -518,7 +528,7 @@ router.post('/', async (req, res) => {
           return res.sendStatus(200);
         } else if (selectedOption.startsWith('edit_field_property_')) {
           const parts = selectedOption.split('_');
-          const field = parts[3]; // e.g., name, address, etc.
+          const field = parts[3];
           const entityId = parts.slice(4).join('_');
           sessions[fromNumber].editing.field = field;
           await sendMessage(phoneNumber, `Please provide the new value for ${field}:`);
@@ -543,7 +553,6 @@ router.post('/', async (req, res) => {
           await sendSummary(phoneNumber, 'property', editing.entityId, DEFAULT_IMAGE_URL);
           return res.sendStatus(200);
         }
-        // Extend for unit/tenant if needed.
       }
       
       // ----- Existing Flows for Adding Entities -----
