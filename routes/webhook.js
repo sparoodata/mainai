@@ -16,7 +16,7 @@ const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const GLITCH_HOST = process.env.GLITCH_HOST;
 const DEFAULT_IMAGE_URL = 'https://via.placeholder.com/150';
 
-const sessions = {}; // Stores session data by phone number.
+const sessions = {}; // Stores session data keyed by phone number.
 let userResponses = {}; // Temporarily stores interactive reply IDs.
 
 // ----- Helper Functions -----
@@ -50,21 +50,17 @@ async function generateUploadToken(phoneNumber, type, entityId) {
 
 async function sendMessage(phoneNumber, message) {
   try {
-    await axios.post(
-      WHATSAPP_API_URL,
-      {
-        messaging_product: 'whatsapp',
-        to: phoneNumber,
-        type: 'text',
-        text: { body: message }
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json'
-        }
+    await axios.post(WHATSAPP_API_URL, {
+      messaging_product: 'whatsapp',
+      to: phoneNumber,
+      type: 'text',
+      text: { body: message }
+    }, {
+      headers: {
+        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json'
       }
-    );
+    });
   } catch (err) {
     console.error('Error sending WhatsApp message:', err.response ? err.response.data : err);
   }
@@ -72,21 +68,17 @@ async function sendMessage(phoneNumber, message) {
 
 async function sendImageMessage(phoneNumber, imageUrl, caption) {
   try {
-    const response = await axios.post(
-      WHATSAPP_API_URL,
-      {
-        messaging_product: 'whatsapp',
-        to: phoneNumber,
-        type: 'image',
-        image: { link: imageUrl, caption }
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json'
-        }
+    const response = await axios.post(WHATSAPP_API_URL, {
+      messaging_product: 'whatsapp',
+      to: phoneNumber,
+      type: 'image',
+      image: { link: imageUrl, caption }
+    }, {
+      headers: {
+        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json'
       }
-    );
+    });
     console.log('Image message sent:', response.data);
   } catch (err) {
     console.error('Error sending WhatsApp image message:', err.response ? err.response.data : err);
@@ -95,7 +87,7 @@ async function sendImageMessage(phoneNumber, imageUrl, caption) {
 }
 
 // ----- sendImageOption -----
-// Prompts the user if they wish to upload an image.
+// Prompts the user whether they want to upload an image.
 async function sendImageOption(phoneNumber, type, entityId) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -113,11 +105,9 @@ async function sendImageOption(phoneNumber, type, entityId) {
       }
     }
   };
-  await axios.post(
-    WHATSAPP_API_URL,
-    buttonMenu,
-    { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
-  );
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+  });
 }
 
 // ----- Summary Function with Edit Prompt -----
@@ -157,11 +147,9 @@ async function sendEditConfirmation(phoneNumber, type, entityId) {
       }
     }
   };
-  await axios.post(
-    WHATSAPP_API_URL,
-    buttonMenu,
-    { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
-  );
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+  });
 }
 
 // For properties, ask which field to edit.
@@ -185,14 +173,13 @@ async function askPropertyEditOptions(phoneNumber, entityId) {
       }
     }
   };
-  await axios.post(
-    WHATSAPP_API_URL,
-    buttonMenu,
-    { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
-  );
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+  });
 }
 
 // ----- List Selection Functions (Numbered Text) -----
+// Sends a numbered list of properties.
 async function sendPropertySelectionMenu(phoneNumber, properties) {
   let message = '🏠 *Select a Property*\n';
   const selectionMap = {};
@@ -204,20 +191,7 @@ async function sendPropertySelectionMenu(phoneNumber, properties) {
   message += '\nPlease reply with the number corresponding to your choice.';
   sessions[phoneNumber] = sessions[phoneNumber] || {};
   sessions[phoneNumber].propertySelectionMap = selectionMap;
-  await sendMessage(phoneNumber, message);
-}
-
-async function sendUnitSelectionMenu(phoneNumber, units) {
-  let message = '🚪 *Select a Property for Unit*\n';
-  const selectionMap = {};
-  units.forEach((u, index) => {
-    const num = index + 1;
-    message += `${num}. ${u.name} - ${u.address}\n`;
-    selectionMap[num] = u._id.toString();
-  });
-  message += '\nPlease reply with the number corresponding to your choice.';
-  sessions[phoneNumber] = sessions[phoneNumber] || {};
-  sessions[phoneNumber].propertySelectionMap = selectionMap;
+  console.log(`Property Selection Map for ${phoneNumber}:`, selectionMap);
   await sendMessage(phoneNumber, message);
 }
 
@@ -240,11 +214,9 @@ async function sendManageSubmenu(phoneNumber) {
       }
     }
   };
-  await axios.post(
-    WHATSAPP_API_URL,
-    buttonMenu,
-    { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
-  );
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+  });
 }
 
 async function sendToolsSubmenu(phoneNumber) {
@@ -265,11 +237,9 @@ async function sendToolsSubmenu(phoneNumber) {
       }
     }
   };
-  await axios.post(
-    WHATSAPP_API_URL,
-    buttonMenu,
-    { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
-  );
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+  });
 }
 
 async function sendPropertyOptions(phoneNumber) {
@@ -288,11 +258,9 @@ async function sendPropertyOptions(phoneNumber) {
       }
     }
   };
-  await axios.post(
-    WHATSAPP_API_URL,
-    buttonMenu,
-    { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
-  );
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+  });
 }
 
 async function sendUnitOptions(phoneNumber) {
@@ -311,11 +279,9 @@ async function sendUnitOptions(phoneNumber) {
       }
     }
   };
-  await axios.post(
-    WHATSAPP_API_URL,
-    buttonMenu,
-    { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
-  );
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+  });
 }
 
 async function sendTenantOptions(phoneNumber) {
@@ -334,11 +300,9 @@ async function sendTenantOptions(phoneNumber) {
       }
     }
   };
-  await axios.post(
-    WHATSAPP_API_URL,
-    buttonMenu,
-    { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
-  );
+  await axios.post(WHATSAPP_API_URL, buttonMenu, {
+    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+  });
 }
 
 function generateTenantId() {
@@ -454,9 +418,10 @@ router.post('/', async (req, res) => {
         }
       }
       
-      // ----- Handle Numeric Selection for "add_unit_select_property" -----
+      // ----- Handle Numeric Selection for add_unit_select_property -----
       if (sessions[fromNumber].action === 'add_unit_select_property' && text && isNumeric(text)) {
         const num = parseInt(text);
+        console.log(`Received numeric selection "${num}" for unit addition.`);
         if (sessions[fromNumber].propertySelectionMap && sessions[fromNumber].propertySelectionMap[num]) {
           const propertyId = sessions[fromNumber].propertySelectionMap[num];
           const properties = sessions[fromNumber].properties || await Property.find({ userId: sessions[fromNumber].userId });
@@ -464,15 +429,53 @@ router.post('/', async (req, res) => {
           if (selectedProperty) {
             sessions[fromNumber].unitData = { property: selectedProperty._id };
             sessions[fromNumber].unitData.unitNumber = generateUnitId();
+            console.log(`Unit ID generated: ${sessions[fromNumber].unitData.unitNumber}`);
             await sendMessage(phoneNumber, `Unit ID generated: ${sessions[fromNumber].unitData.unitNumber}. Please provide the rent amount for this unit.`);
             sessions[fromNumber].action = 'add_unit_rent';
             delete sessions[fromNumber].propertySelectionMap;
             return res.sendStatus(200);
           } else {
-            await sendMessage(phoneNumber, '⚠️ *Invalid Selection* \nPlease select a valid property.');
+            await sendMessage(phoneNumber, '⚠️ *Invalid Selection*\nPlease select a valid property.');
             await sendPropertySelectionMenu(phoneNumber, properties);
             return res.sendStatus(200);
           }
+        } else {
+          await sendMessage(phoneNumber, '⚠️ *Selection Not Found*\nPlease reply with a valid number.');
+          return res.sendStatus(200);
+        }
+      }
+      
+      // ----- Handle Unit Adding Flow -----
+      if (text) {
+        if (sessions[fromNumber].action === 'add_unit_rent') {
+          if (isNumeric(text)) {
+            sessions[fromNumber].unitData.rentAmount = parseFloat(text);
+            console.log(`Rent amount set to: ${sessions[fromNumber].unitData.rentAmount}`);
+            await sendMessage(phoneNumber, '📏 *Floor*\nWhich floor is this unit on? (e.g., 1, Ground)');
+            sessions[fromNumber].action = 'add_unit_floor';
+          } else {
+            await sendMessage(phoneNumber, '⚠️ *Invalid entry*\nPlease provide a valid rent amount.');
+          }
+        } else if (sessions[fromNumber].action === 'add_unit_floor') {
+          sessions[fromNumber].unitData.floor = text;
+          await sendMessage(phoneNumber, '📐 *Size*\nWhat is the size of this unit (e.g., 500 sq ft)?');
+          sessions[fromNumber].action = 'add_unit_size';
+        } else if (sessions[fromNumber].action === 'add_unit_size') {
+          const user = await User.findOne({ phoneNumber });
+          const unit = new Unit({
+            property: sessions[fromNumber].unitData.property,
+            unitNumber: sessions[fromNumber].unitData.unitNumber,
+            rentAmount: sessions[fromNumber].unitData.rentAmount,
+            floor: sessions[fromNumber].unitData.floor,
+            size: text,
+            userId: user._id
+          });
+          await unit.save();
+          sessions[fromNumber].entityType = 'unit';
+          sessions[fromNumber].entityId = unit._id;
+          await sendImageOption(phoneNumber, 'unit', unit._id);
+          sessions[fromNumber].action = 'awaiting_image_choice';
+          return res.sendStatus(200);
         }
       }
       
@@ -531,6 +534,7 @@ router.post('/', async (req, res) => {
           if (type === 'property') {
             await askPropertyEditOptions(phoneNumber, entityId);
           }
+          // Extend for unit/tenant if desired.
           delete userResponses[fromNumber];
           return res.sendStatus(200);
         } else if (selectedOption.startsWith('confirm_')) {
@@ -692,11 +696,9 @@ router.post('/', async (req, res) => {
               }
             }
           };
-          await axios.post(
-            WHATSAPP_API_URL,
-            buttonMenu,
-            { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
-          );
+          await axios.post(WHATSAPP_API_URL, buttonMenu, {
+            headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+          });
         }
       }
     }
