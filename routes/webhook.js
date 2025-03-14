@@ -17,7 +17,7 @@ const GLITCH_HOST = process.env.GLITCH_HOST;
 const DEFAULT_IMAGE_URL = 'https://via.placeholder.com/150';
 
 const sessions = {}; // Stores session data by phone number.
-let userResponses = {}; // Temporarily stores responses from interactive messages.
+let userResponses = {}; // Temporarily stores interactive reply IDs.
 
 // ----- Helper Functions -----
 function isNumeric(value) {
@@ -50,17 +50,21 @@ async function generateUploadToken(phoneNumber, type, entityId) {
 
 async function sendMessage(phoneNumber, message) {
   try {
-    await axios.post(WHATSAPP_API_URL, {
-      messaging_product: 'whatsapp',
-      to: phoneNumber,
-      type: 'text',
-      text: { body: message }
-    }, {
-      headers: {
-        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json'
+    await axios.post(
+      WHATSAPP_API_URL,
+      {
+        messaging_product: 'whatsapp',
+        to: phoneNumber,
+        type: 'text',
+        text: { body: message }
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
       }
-    });
+    );
   } catch (err) {
     console.error('Error sending WhatsApp message:', err.response ? err.response.data : err);
   }
@@ -68,21 +72,26 @@ async function sendMessage(phoneNumber, message) {
 
 async function sendImageMessage(phoneNumber, imageUrl, caption) {
   try {
-    const response = await axios.post(WHATSAPP_API_URL, {
-      messaging_product: 'whatsapp',
-      to: phoneNumber,
-      type: 'image',
-      image: { link: imageUrl, caption }
-    }, {
-      headers: {
-        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json'
+    const response = await axios.post(
+      WHATSAPP_API_URL,
+      {
+        messaging_product: 'whatsapp',
+        to: phoneNumber,
+        type: 'image',
+        image: { link: imageUrl, caption }
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
       }
-    });
+    );
     console.log('Image message sent:', response.data);
   } catch (err) {
     console.error('Error sending WhatsApp image message:', err.response ? err.response.data : err);
-    await sendMessage(phoneNumber, caption); // Fallback if image message fails.
+    // Fallback: send the caption as text.
+    await sendMessage(phoneNumber, caption);
   }
 }
 
@@ -105,13 +114,17 @@ async function sendImageOption(phoneNumber, type, entityId) {
       }
     }
   };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, {
-    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-  });
+  await axios.post(
+    WHATSAPP_API_URL,
+    buttonMenu,
+    {
+      headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+    }
+  );
 }
 
 // ----- Summary Function with Edit Prompt -----
-// Sends a summary (image message and text) and then prompts the user to edit or confirm.
+// Sends a summary (as image and text) then prompts the user to edit or confirm.
 async function sendSummary(phoneNumber, type, entityId, imageUrl) {
   let caption;
   if (type === 'property') {
@@ -127,11 +140,12 @@ async function sendSummary(phoneNumber, type, entityId, imageUrl) {
   }
   await sendImageMessage(phoneNumber, imageUrl, caption);
   await sendMessage(phoneNumber, caption);
+  // After sending the summary, prompt the user with an "Edit Summary?" option.
   await sendEditConfirmation(phoneNumber, type, entityId);
 }
 
 // ----- Edit Confirmation & Field Selection -----
-// Sends an interactive prompt with "Edit" or "Confirm" options.
+// Sends an interactive prompt with options "Edit" or "Confirm".
 async function sendEditConfirmation(phoneNumber, type, entityId) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -149,9 +163,13 @@ async function sendEditConfirmation(phoneNumber, type, entityId) {
       }
     }
   };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, {
-    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-  });
+  await axios.post(
+    WHATSAPP_API_URL,
+    buttonMenu,
+    {
+      headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+    }
+  );
 }
 
 // For properties, ask which field to edit.
@@ -175,12 +193,17 @@ async function askPropertyEditOptions(phoneNumber, entityId) {
       }
     }
   };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, {
-    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-  });
+  await axios.post(
+    WHATSAPP_API_URL,
+    buttonMenu,
+    {
+      headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+    }
+  );
 }
 
 // ----- List Selection Functions (Numbered Text) -----
+// These functions always send a numbered text list.
 async function sendPropertySelectionMenu(phoneNumber, properties) {
   let message = '🏠 *Select a Property*\n';
   const selectionMap = {};
@@ -228,9 +251,13 @@ async function sendManageSubmenu(phoneNumber) {
       }
     }
   };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, {
-    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-  });
+  await axios.post(
+    WHATSAPP_API_URL,
+    buttonMenu,
+    {
+      headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+    }
+  );
 }
 
 async function sendToolsSubmenu(phoneNumber) {
@@ -251,9 +278,13 @@ async function sendToolsSubmenu(phoneNumber) {
       }
     }
   };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, {
-    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-  });
+  await axios.post(
+    WHATSAPP_API_URL,
+    buttonMenu,
+    {
+      headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+    }
+  );
 }
 
 async function sendPropertyOptions(phoneNumber) {
@@ -272,9 +303,13 @@ async function sendPropertyOptions(phoneNumber) {
       }
     }
   };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, {
-    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-  });
+  await axios.post(
+    WHATSAPP_API_URL,
+    buttonMenu,
+    {
+      headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+    }
+  );
 }
 
 async function sendUnitOptions(phoneNumber) {
@@ -293,9 +328,13 @@ async function sendUnitOptions(phoneNumber) {
       }
     }
   };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, {
-    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-  });
+  await axios.post(
+    WHATSAPP_API_URL,
+    buttonMenu,
+    {
+      headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+    }
+  );
 }
 
 async function sendTenantOptions(phoneNumber) {
@@ -314,9 +353,13 @@ async function sendTenantOptions(phoneNumber) {
       }
     }
   };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, {
-    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-  });
+  await axios.post(
+    WHATSAPP_API_URL,
+    buttonMenu,
+    {
+      headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+    }
+  );
 }
 
 function generateTenantId() {
@@ -332,16 +375,16 @@ router.post('/', async (req, res) => {
     const entry = body.entry[0];
     const changes = entry.changes[0];
     const value = changes.value;
-
+    
     if (value.contacts) {
       const contact = value.contacts[0];
       const contactPhoneNumber = `+${contact.wa_id}`;
       const profileName = contact.profile.name;
-      const user = await User.findOne({ phoneNumber: contactPhoneNumber }) || new User({ phoneNumber: contactPhoneNumber });
+      const user = (await User.findOne({ phoneNumber: contactPhoneNumber })) || new User({ phoneNumber: contactPhoneNumber });
       user.profileName = profileName || user.profileName;
       await user.save();
     }
-
+    
     if (value.messages) {
       const message = value.messages[0];
       const fromNumber = message.from;
@@ -349,7 +392,7 @@ router.post('/', async (req, res) => {
       const text = message.text ? message.text.body.trim() : null;
       const interactive = message.interactive || null;
       console.log(`Message from ${fromNumber}:`, { text, interactive });
-
+      
       // Capture interactive replies
       if (interactive && interactive.type === 'list_reply') {
         userResponses[fromNumber] = interactive.list_reply.id;
@@ -357,8 +400,8 @@ router.post('/', async (req, res) => {
         userResponses[fromNumber] = interactive.button_reply.id;
       }
       sessions[fromNumber] = sessions[fromNumber] || { action: null };
-
-      // ----- Handle Management Interactive Replies -----
+      
+      // ----- Handle Management Options -----
       if (userResponses[fromNumber] === 'manage') {
         await sendManageSubmenu(phoneNumber);
         delete userResponses[fromNumber];
@@ -371,21 +414,25 @@ router.post('/', async (req, res) => {
       }
       if (userResponses[fromNumber] === 'account_info') {
         const user = await User.findOne({ phoneNumber });
-        const accountInfo = user ? 
-          `*👤 Account Information*\n📞 Phone: ${user.phoneNumber}\n🧑 Profile: ${user.profileName || 'N/A'}` : 
-          'No account information found.';
+        const accountInfo = user
+          ? `*👤 Account Information*\n📞 Phone: ${user.phoneNumber}\n🧑 Profile: ${user.profileName || 'N/A'}`
+          : 'No account information found.';
         await sendMessage(phoneNumber, accountInfo);
         delete userResponses[fromNumber];
         return res.sendStatus(200);
       }
-      if (userResponses[fromNumber] === 'add_unit') {
-        // Trigger add_unit flow here (similar to how add_property is handled)
-        await sendMessage(phoneNumber, 'Please follow the prompts to add a new unit.');
+      if (userResponses[fromNumber] === 'manage_properties') {
+        await sendPropertyOptions(phoneNumber);
         delete userResponses[fromNumber];
         return res.sendStatus(200);
       }
-      if (userResponses[fromNumber] === 'add_tenant') {
-        await sendMessage(phoneNumber, 'Please follow the prompts to add a new tenant.');
+      if (userResponses[fromNumber] === 'manage_units') {
+        await sendUnitOptions(phoneNumber);
+        delete userResponses[fromNumber];
+        return res.sendStatus(200);
+      }
+      if (userResponses[fromNumber] === 'manage_tenants') {
+        await sendTenantOptions(phoneNumber);
         delete userResponses[fromNumber];
         return res.sendStatus(200);
       }
@@ -395,7 +442,61 @@ router.post('/', async (req, res) => {
         delete userResponses[fromNumber];
         return res.sendStatus(200);
       }
-
+      if (userResponses[fromNumber] === 'add_unit') {
+        await sendMessage(phoneNumber, 'Please follow the prompts to add a new unit.');
+        delete userResponses[fromNumber];
+        return res.sendStatus(200);
+      }
+      if (userResponses[fromNumber] === 'add_tenant') {
+        await sendMessage(phoneNumber, 'Please follow the prompts to add a new tenant.');
+        delete userResponses[fromNumber];
+        return res.sendStatus(200);
+      }
+      
+      // ----- Handle Image Upload Option when awaiting image choice -----
+      if (sessions[fromNumber].action === 'awaiting_image_choice' && userResponses[fromNumber]) {
+        const selectedOption = userResponses[fromNumber];
+        if (selectedOption.startsWith('upload_')) {
+          const parts = selectedOption.split('_');
+          const type = parts[1];
+          const entityId = parts.slice(2).join('_');
+          const token = await generateUploadToken(phoneNumber, type, entityId);
+          const imageUploadUrl = `${GLITCH_HOST}/upload-image/${phoneNumber}/${type}/${entityId}?token=${token}`;
+          const shortUrl = await shortenUrl(imageUploadUrl);
+          await sendMessage(phoneNumber, `Please upload the image here (valid for 15 minutes): ${shortUrl}`);
+          sessions[fromNumber].action = null;
+          delete sessions[fromNumber].entityType;
+          delete sessions[fromNumber].entityId;
+          delete userResponses[fromNumber];
+          return res.sendStatus(200);
+        } else if (selectedOption.startsWith('no_upload_')) {
+          const parts = selectedOption.split('_');
+          const type = parts[1];
+          const entityId = parts.slice(2).join('_');
+          if (type === 'property') {
+            const property = await Property.findById(entityId);
+            property.images.push(DEFAULT_IMAGE_URL);
+            await property.save();
+            await sendSummary(phoneNumber, 'property', entityId, DEFAULT_IMAGE_URL);
+          } else if (type === 'unit') {
+            const unit = await Unit.findById(entityId);
+            unit.images.push(DEFAULT_IMAGE_URL);
+            await unit.save();
+            await sendSummary(phoneNumber, 'unit', entityId, DEFAULT_IMAGE_URL);
+          } else if (type === 'tenant') {
+            const tenant = await Tenant.findById(entityId);
+            tenant.photo = DEFAULT_IMAGE_URL;
+            await tenant.save();
+            await sendSummary(phoneNumber, 'tenant', entityId, DEFAULT_IMAGE_URL);
+          }
+          sessions[fromNumber].action = null;
+          delete sessions[fromNumber].entityType;
+          delete sessions[fromNumber].entityId;
+          delete userResponses[fromNumber];
+          return res.sendStatus(200);
+        }
+      }
+      
       // ----- Handle Editing Interactive Replies -----
       if (interactive && userResponses[fromNumber]) {
         const selectedOption = userResponses[fromNumber];
@@ -417,7 +518,7 @@ router.post('/', async (req, res) => {
           return res.sendStatus(200);
         } else if (selectedOption.startsWith('edit_field_property_')) {
           const parts = selectedOption.split('_');
-          const field = parts[3];
+          const field = parts[3]; // e.g., name, address, etc.
           const entityId = parts.slice(4).join('_');
           sessions[fromNumber].editing.field = field;
           await sendMessage(phoneNumber, `Please provide the new value for ${field}:`);
@@ -425,8 +526,8 @@ router.post('/', async (req, res) => {
           return res.sendStatus(200);
         }
       }
-
-      // If in editing mode and receiving a new text value:
+      
+      // If in editing mode and receiving new text:
       if (text && sessions[fromNumber].editing && sessions[fromNumber].editing.field) {
         const editing = sessions[fromNumber].editing;
         if (editing.type === 'property') {
@@ -439,13 +540,12 @@ router.post('/', async (req, res) => {
           await property.save();
           await sendMessage(phoneNumber, `${field} updated successfully.`);
           delete sessions[fromNumber].editing.field;
-          // Resend updated summary (using DEFAULT_IMAGE_URL if image unchanged)
           await sendSummary(phoneNumber, 'property', editing.entityId, DEFAULT_IMAGE_URL);
           return res.sendStatus(200);
         }
-        // Extend similar handling for unit and tenant if needed.
+        // Extend for unit/tenant if needed.
       }
-
+      
       // ----- Existing Flows for Adding Entities -----
       if (text) {
         // PROPERTY ADDING FLOW
@@ -484,7 +584,7 @@ router.post('/', async (req, res) => {
             await sendMessage(phoneNumber, '⚠️ *Invalid entry*\nPlease provide a valid total amount.');
           }
         }
-        // UNIT ADDING FLOW (auto-generates a unit ID)
+        // UNIT ADDING FLOW (auto-generates unit ID)
         else if (sessions[fromNumber].action === 'add_unit_rent') {
           if (isNumeric(text)) {
             sessions[fromNumber].unitData.rentAmount = parseFloat(text);
@@ -571,9 +671,11 @@ router.post('/', async (req, res) => {
               }
             }
           };
-          await axios.post(WHATSAPP_API_URL, buttonMenu, {
-            headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-          });
+          await axios.post(
+            WHATSAPP_API_URL,
+            buttonMenu,
+            { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
+          );
         }
       }
     }
