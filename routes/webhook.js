@@ -56,7 +56,7 @@ async function generateUploadToken(phoneNumber, type, entityId) {
   return token;
 }
 
-// Send a text message via WhatsApp
+// Sends a text message via WhatsApp
 async function sendMessage(phoneNumber, message) {
   try {
     await axios.post(WHATSAPP_API_URL, {
@@ -75,7 +75,7 @@ async function sendMessage(phoneNumber, message) {
   }
 }
 
-// Send an image message with caption via WhatsApp
+// Sends an image message with caption via WhatsApp
 async function sendImageMessage(phoneNumber, imageUrl, caption) {
   try {
     const response = await axios.post(WHATSAPP_API_URL, {
@@ -95,12 +95,12 @@ async function sendImageMessage(phoneNumber, imageUrl, caption) {
     console.log('Image message sent:', response.data);
   } catch (err) {
     console.error('Error sending WhatsApp image message:', err.response ? err.response.data : err);
-    // Fallback: Send a text summary if image message fails
+    // Fallback: Send a text message with the summary caption
     await sendMessage(phoneNumber, caption);
   }
 }
 
-// Send a summary message as an image message (or fallback text)
+// Sends a summary message as both an image message (with caption) and a separate text message
 async function sendSummary(phoneNumber, type, entityId, imageUrl) {
   let caption;
   if (type === 'property') {
@@ -114,7 +114,10 @@ async function sendSummary(phoneNumber, type, entityId, imageUrl) {
     const unit = await Unit.findById(tenant.unitAssigned);
     caption = `✅ *Tenant Added*\n━━━━━━━━━━━━━━━\n👤 *Name*: ${tenant.name}\n🏠 *Property*: ${tenant.propertyName}\n🚪 *Unit*: ${unit ? unit.unitNumber : 'N/A'}\n📅 *Lease Start*: ${tenant.lease_start}\n💵 *Deposit*: ${tenant.deposit}\n💰 *Rent Amount*: ${tenant.rent_amount}\n━━━━━━━━━━━━━━━`;
   }
+  // First try to send the image message with caption
   await sendImageMessage(phoneNumber, imageUrl, caption);
+  // Also send a text message so the summary is clearly visible
+  await sendMessage(phoneNumber, caption);
 }
 
 // Sends an interactive image upload option

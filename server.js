@@ -16,6 +16,13 @@ const User = require('./models/User');
 const Unit = require('./models/Unit');
 const UploadToken = require('./models/UploadToken');
 const AWS = require('aws-sdk');
+const imageUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
+const signedUrl = s3.getSignedUrl('getObject', {
+  Bucket: process.env.R2_BUCKET,
+  Key: key,
+  Expires: 300, // URL is valid for 300 seconds (5 minutes)
+});
+
 
 // Import the webhook router and messaging functions
 const { router, sendMessage, sendSummary } = require('./routes/webhook');
@@ -76,7 +83,7 @@ const upload = multer({
 // Use the webhook router for WhatsApp interactions
 app.use('/webhook', router);
 
-// Middleware to validate upload token
+// Middleware to validate the upload token for image uploads
 async function validateUploadToken(req, res, next) {
   const token = req.method === 'GET' ? req.query.token : req.body.token;
   console.log(`Validating token: ${token}, Method: ${req.method}`);
@@ -106,7 +113,7 @@ async function validateUploadToken(req, res, next) {
   }
 }
 
-// GET route to render the image upload page (ensure you have an uploadImage.ejs view)
+// GET route to render the image upload page (ensure you have an "uploadImage.ejs" view)
 app.get('/upload-image/:phoneNumber/:type/:id', validateUploadToken, (req, res) => {
   const { phoneNumber, type, id } = req.params;
   const { token } = req.query;
@@ -129,11 +136,17 @@ app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validat
     };
 
     await s3.upload(uploadParams).promise();
-    const imageUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
-    console.log(`Image uploaded to R2: ${process.env.R2_BUCKET}/${key}`);
+
+    // Generate a pre-signed URL for secure, temporary access (valid for 5 minutes)
+    const signedUrl = s3.getSignedUrl('getObject', {
+      Bucket: process.env.R2_BUCKET,
+      Key: key,
+      Expires: 300,
+    });
+    console.log(`Image uploaded to R2 and signed URL generated: ${signedUrl}`);
     
-    // Save image record to DB
-    const image = new Image({ [`${type}Id`]: id, imageUrl });
+    // Save image details to the database
+    const image = new Image({ [`${type}Id`]: id, imageUrl: key }); // optionally store the key or signedUrl
     await image.save();
 
     let entity;
@@ -147,13 +160,13 @@ app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validat
       await entity.save();
     } else if (type === 'tenant') {
       entity = await Tenant.findById(id);
-      entity.photo = imageUrl;
+      entity.photo = signedUrl;
       await entity.save();
     }
 
-    // Attempt to send a summary image message with details
-    console.log(`Sending summary for ${type} with image URL: ${imageUrl}`);
-    await sendSummary(phoneNumber, type, id, imageUrl);
+    // Send the summary using the signed URL so that access is secure and temporary
+    console.log(`Sending summary for ${type} with signed URL: ${signedUrl}`);
+    await sendSummary(phoneNumber, type, id, signedUrl);
 
     req.uploadToken.used = true;
     await req.uploadToken.save();
