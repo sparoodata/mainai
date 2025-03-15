@@ -19,6 +19,17 @@ const DEFAULT_IMAGE_URL = 'https://via.placeholder.com/150';
 const sessions = {};
 let userResponses = {};
 
+/**
+ * Helper to chunk an array into subarrays of up to `size` items each.
+ */
+function chunkArray(array, size) {
+  const result = [];
+  for (let i = 0; i < array.length; i += size) {
+    result.push(array.slice(i, i + size));
+  }
+  return result;
+}
+
 // Helper: Check if a string is numeric
 function isNumeric(value) {
   return /^-?\d+$/.test(value);
@@ -31,10 +42,19 @@ function generateUnitId() {
   return 'U' + digits + letter;
 }
 
+// Helper: Generate a Tenant ID in format T<4-digit><Caps Letter>
+function generateTenantId() {
+  const digits = Math.floor(1000 + Math.random() * 9000);
+  const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+  return 'T' + digits + letter;
+}
+
 // URL shortener helper
 async function shortenUrl(longUrl) {
   try {
-    const response = await axios.post('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(longUrl));
+    const response = await axios.post(
+      'https://tinyurl.com/api-create.php?url=' + encodeURIComponent(longUrl)
+    );
     return response.data;
   } catch (error) {
     console.error('Error shortening URL:', error);
@@ -126,7 +146,11 @@ async function sendSummary(phoneNumber, type, entityId, imageUrl) {
   } else if (type === 'tenant') {
     const tenant = await Tenant.findById(entityId);
     const unit = await Unit.findById(tenant.unitAssigned);
-    caption = `✅ *Tenant Added*\n━━━━━━━━━━━━━━━\n👤 *Name*: ${tenant.name}\n🏠 *Property*: ${tenant.propertyName}\n🚪 *Unit*: ${unit ? unit.unitNumber : 'N/A'}\n📅 *Lease Start*: ${tenant.lease_start}\n💵 *Deposit*: ${tenant.deposit}\n💰 *Rent Amount*: ${tenant.rent_amount}\n━━━━━━━━━━━━━━━`;
+    caption = `✅ *Tenant Added*\n━━━━━━━━━━━━━━━\n👤 *Name*: ${tenant.name}\n🏠 *Property*: ${tenant.propertyName}\n🚪 *Unit*: ${
+      unit ? unit.unitNumber : 'N/A'
+    }\n📅 *Lease Start*: ${tenant.lease_start}\n💵 *Deposit*: ${
+      tenant.deposit
+    }\n💰 *Rent Amount*: ${tenant.rent_amount}\n━━━━━━━━━━━━━━━`;
   }
   // First try to send the image message with caption
   await sendImageMessage(phoneNumber, imageUrl, caption);
@@ -234,6 +258,7 @@ router.post('/', async (req, res) => {
     const changes = entry.changes[0];
     const value = changes.value;
 
+    // Capture contact info
     if (value.contacts) {
       const contact = value.contacts[0];
       const contactPhoneNumber = `+${contact.wa_id}`;
@@ -245,6 +270,7 @@ router.post('/', async (req, res) => {
       await user.save();
     }
 
+    // Capture messages
     if (value.messages) {
       const message = value.messages[0];
       const fromNumber = message.from;
@@ -267,7 +293,7 @@ router.post('/', async (req, res) => {
         sessions[fromNumber] = { action: null };
       }
 
-      // Handle numeric responses when expecting a selection
+      // Handle numeric responses (if we revert to numeric selection flows)
       if (
         text &&
         sessions[fromNumber].action &&
@@ -275,34 +301,12 @@ router.post('/', async (req, res) => {
           sessions[fromNumber].action === 'add_tenant_select_property' ||
           sessions[fromNumber].action === 'add_tenant_select_unit')
       ) {
-        if (isNumeric(text)) {
-          const num = parseInt(text);
-          if (
-            sessions[fromNumber].action === 'add_unit_select_property' &&
-            sessions[fromNumber].propertySelectionMap &&
-            sessions[fromNumber].propertySelectionMap[num]
-          ) {
-            userResponses[fromNumber] = sessions[fromNumber].propertySelectionMap[num];
-          }
-          if (
-            sessions[fromNumber].action === 'add_tenant_select_property' &&
-            sessions[fromNumber].propertySelectionMap &&
-            sessions[fromNumber].propertySelectionMap[num]
-          ) {
-            userResponses[fromNumber] = sessions[fromNumber].propertySelectionMap[num];
-          }
-          if (
-            sessions[fromNumber].action === 'add_tenant_select_unit' &&
-            sessions[fromNumber].unitSelectionMap &&
-            sessions[fromNumber].unitSelectionMap[num]
-          ) {
-            userResponses[fromNumber] = sessions[fromNumber].unitSelectionMap[num];
-          }
-        }
+        // If we used text-based numeric selection, we’d handle it here.
+        // Currently, we are using chunked interactive lists, so we might not rely on this.
       }
 
+      // ======== Add-Property Flow ========
       if (text) {
-        // PROPERTY ADDING FLOW
         if (sessions[fromNumber].action === 'add_property_name') {
           if (isValidName(text)) {
             sessions[fromNumber].propertyData = { name: text };
@@ -368,7 +372,7 @@ router.post('/', async (req, res) => {
             );
           }
         }
-        // UNIT ADDING FLOW (auto‑generates a unit ID)
+        // ======== Add-Unit Flow ========
         else if (sessions[fromNumber].action === 'add_unit_rent') {
           const rent = parseFloat(text);
           if (!isNaN(rent) && rent > 0) {
@@ -395,7 +399,7 @@ router.post('/', async (req, res) => {
           const user = await User.findOne({ phoneNumber });
           const unit = new Unit({
             property: sessions[fromNumber].unitData.property,
-            unitNumber: sessions[fromNumber].unitData.unitNumber, // auto‑generated earlier
+            unitNumber: sessions[fromNumber].unitData.unitNumber, // auto-generated earlier
             rentAmount: sessions[fromNumber].unitData.rentAmount,
             floor: sessions[fromNumber].unitData.floor,
             size: text,
@@ -407,7 +411,7 @@ router.post('/', async (req, res) => {
           await sendImageOption(fromNumber, 'unit', unit._id);
           sessions[fromNumber].action = 'awaiting_image_choice';
         }
-        // TENANT ADDING FLOW
+        // ======== Add-Tenant Flow ========
         else if (sessions[fromNumber].action === 'add_tenant_name') {
           sessions[fromNumber].tenantData.name = text;
           await sendMessage(
@@ -470,7 +474,9 @@ router.post('/', async (req, res) => {
               '⚠️ *Invalid entry* \nPlease provide a valid rent amount.'
             );
           }
-        } else if (text.toLowerCase() === 'help') {
+        }
+        // ========== “Help” Flow ==========
+        else if (text.toLowerCase() === 'help') {
           const buttonMenu = {
             messaging_product: 'whatsapp',
             to: fromNumber,
@@ -482,7 +488,10 @@ router.post('/', async (req, res) => {
               footer: { text: 'Powered by Your Rental App' },
               action: {
                 buttons: [
-                  { type: 'reply', reply: { id: 'account_info', title: '👤 Account Info' } },
+                  {
+                    type: 'reply',
+                    reply: { id: 'account_info', title: '👤 Account Info' },
+                  },
                   { type: 'reply', reply: { id: 'manage', title: '🛠️ Manage' } },
                   { type: 'reply', reply: { id: 'tools', title: '🧰 Tools' } },
                 ],
@@ -498,7 +507,7 @@ router.post('/', async (req, res) => {
         }
       }
 
-      // Handle interactive replies
+      // Handle interactive replies (button or list)
       if (interactive && userResponses[fromNumber]) {
         const selectedOption = userResponses[fromNumber];
 
@@ -548,6 +557,7 @@ router.post('/', async (req, res) => {
           } else {
             sessions[fromNumber].properties = properties;
             sessions[fromNumber].userId = user._id;
+            // Now we send chunked interactive lists of properties:
             await sendPropertySelectionMenu(fromNumber, properties);
             sessions[fromNumber].action = 'add_unit_select_property';
           }
@@ -562,95 +572,87 @@ router.post('/', async (req, res) => {
           } else {
             sessions[fromNumber].properties = properties;
             sessions[fromNumber].userId = user._id;
+            // Now we send chunked interactive lists of properties:
             await sendPropertySelectionMenu(fromNumber, properties);
             sessions[fromNumber].action = 'add_tenant_select_property';
           }
         }
-        // Handle selection from a numbered property list (for units)
+        // Handle property selection from chunked lists (for adding a Unit):
         else if (sessions[fromNumber].action === 'add_unit_select_property') {
-          const propertyId = selectedOption;
-          const properties =
-            sessions[fromNumber].properties ||
-            (await Property.find({ userId: sessions[fromNumber].userId }));
-          const selectedProperty = properties.find(
-            (p) => p._id.toString() === propertyId
-          );
-          if (selectedProperty) {
-            sessions[fromNumber].unitData = { property: selectedProperty._id };
-            sessions[fromNumber].unitData.unitNumber = generateUnitId();
-            await sendMessage(
-              fromNumber,
-              `Unit ID generated: ${sessions[fromNumber].unitData.unitNumber}. Please provide the rent amount for this unit.`
-            );
-            sessions[fromNumber].action = 'add_unit_rent';
-            delete sessions[fromNumber].propertySelectionMap;
-          } else {
-            await sendMessage(
-              fromNumber,
-              '⚠️ *Invalid Selection* \nPlease select a valid property.'
-            );
-            await sendPropertySelectionMenu(fromNumber, properties);
-          }
-        }
-        // Handle selection from a numbered property list (for tenants)
-        else if (sessions[fromNumber].action === 'add_tenant_select_property') {
-          const propertyId = selectedOption;
-          const properties =
-            sessions[fromNumber].properties ||
-            (await Property.find({ userId: sessions[fromNumber].userId }));
-          const selectedProperty = properties.find(
-            (p) => p._id.toString() === propertyId
-          );
-          if (selectedProperty) {
-            sessions[fromNumber].tenantData = {
-              propertyId: selectedProperty._id,
-              propertyName: selectedProperty.name,
-            };
-            const units = await Unit.find({ property: selectedProperty._id });
-            if (!units.length) {
+          // The incoming selectedOption might look like: "chunk0_<propertyId>"
+          if (selectedOption.startsWith('chunk')) {
+            // Parse out the propertyId
+            const [chunkTag, propertyId] = selectedOption.split('_');
+            const foundProperty = await Property.findById(propertyId);
+            if (foundProperty) {
+              sessions[fromNumber].unitData = { property: foundProperty._id };
+              sessions[fromNumber].unitData.unitNumber = generateUnitId();
               await sendMessage(
                 fromNumber,
-                'ℹ️ *No Units* \nPlease add a unit to this property first.'
+                `Unit ID generated: ${sessions[fromNumber].unitData.unitNumber}. Please provide the rent amount for this unit.`
               );
-              sessions[fromNumber].action = null;
-              delete sessions[fromNumber].tenantData;
+              sessions[fromNumber].action = 'add_unit_rent';
             } else {
-              await sendUnitSelectionMenu(fromNumber, units);
-              sessions[fromNumber].action = 'add_tenant_select_unit';
+              await sendMessage(
+                fromNumber,
+                '⚠️ *Invalid Selection* \nPlease select a valid property.'
+              );
             }
-          } else {
-            await sendMessage(
-              fromNumber,
-              '⚠️ *Invalid Selection* \nPlease select a valid property.'
-            );
-            await sendPropertySelectionMenu(fromNumber, properties);
           }
         }
-        // Handle selection from a numbered unit list for tenant assignment
+        // Handle property selection from chunked lists (for adding a Tenant):
+        else if (sessions[fromNumber].action === 'add_tenant_select_property') {
+          if (selectedOption.startsWith('chunk')) {
+            const [chunkTag, propertyId] = selectedOption.split('_');
+            const foundProperty = await Property.findById(propertyId);
+            if (foundProperty) {
+              sessions[fromNumber].tenantData = {
+                propertyId: foundProperty._id,
+                propertyName: foundProperty.name,
+              };
+              const units = await Unit.find({ property: foundProperty._id });
+              if (!units.length) {
+                await sendMessage(
+                  fromNumber,
+                  'ℹ️ *No Units* \nPlease add a unit to this property first.'
+                );
+                sessions[fromNumber].action = null;
+                delete sessions[fromNumber].tenantData;
+              } else {
+                await sendUnitSelectionMenu(fromNumber, units);
+                sessions[fromNumber].action = 'add_tenant_select_unit';
+              }
+            } else {
+              await sendMessage(
+                fromNumber,
+                '⚠️ *Invalid Selection* \nPlease select a valid property.'
+              );
+            }
+          }
+        }
+        // Handle unit selection from chunked lists (for adding a Tenant):
         else if (sessions[fromNumber].action === 'add_tenant_select_unit') {
-          const unitId = selectedOption;
-          const units = await Unit.find({
-            property: sessions[fromNumber].tenantData.propertyId,
-          });
-          const selectedUnit = units.find((u) => u._id.toString() === unitId);
-          if (selectedUnit) {
-            sessions[fromNumber].tenantData.unitAssigned = selectedUnit._id;
-            sessions[fromNumber].tenantData.propertyName =
-              selectedUnit.property.name;
-            await sendMessage(
-              fromNumber,
-              '👤 *Tenant Name* \nPlease provide the tenant’s full name.'
-            );
-            sessions[fromNumber].action = 'add_tenant_name';
-          } else {
-            await sendMessage(
-              fromNumber,
-              '⚠️ *Invalid Selection* \nPlease select a valid unit.'
-            );
-            await sendUnitSelectionMenu(fromNumber, units);
+          if (selectedOption.startsWith('chunk')) {
+            const [chunkTag, unitId] = selectedOption.split('_');
+            const foundUnit = await Unit.findById(unitId).populate('property');
+            if (foundUnit) {
+              sessions[fromNumber].tenantData.unitAssigned = foundUnit._id;
+              sessions[fromNumber].tenantData.propertyName =
+                foundUnit.property.name;
+              await sendMessage(
+                fromNumber,
+                '👤 *Tenant Name* \nPlease provide the tenant’s full name.'
+              );
+              sessions[fromNumber].action = 'add_tenant_name';
+            } else {
+              await sendMessage(
+                fromNumber,
+                '⚠️ *Invalid Selection* \nPlease select a valid unit.'
+              );
+            }
           }
         }
-        // Handle image upload option reply
+        // Handle image upload choice
         else if (sessions[fromNumber].action === 'awaiting_image_choice') {
           if (selectedOption.startsWith('upload_')) {
             const [, type, entityId] = selectedOption.split('_');
@@ -670,7 +672,12 @@ router.post('/', async (req, res) => {
               const property = await Property.findById(entityId);
               property.images.push(DEFAULT_IMAGE_URL);
               await property.save();
-              await sendSummary(fromNumber, 'property', entityId, DEFAULT_IMAGE_URL);
+              await sendSummary(
+                fromNumber,
+                'property',
+                entityId,
+                DEFAULT_IMAGE_URL
+              );
             } else if (type === 'unit') {
               const unit = await Unit.findById(entityId);
               unit.images.push(DEFAULT_IMAGE_URL);
@@ -687,6 +694,7 @@ router.post('/', async (req, res) => {
             delete sessions[fromNumber].entityId;
           }
         }
+        // Clear the user response so it doesn't interfere later
         delete userResponses[fromNumber];
       }
     }
@@ -695,41 +703,141 @@ router.post('/', async (req, res) => {
 });
 
 /**
- * Instead of using interactive lists (which fail if items > 10),
- * we'll always send a text-based list with numbered choices.
+ * Sends one or more interactive lists of up to 10 properties each.
+ * If `properties.length` > 10, we chunk into multiple messages.
  */
 async function sendPropertySelectionMenu(phoneNumber, properties) {
-  // Send a simple text-based menu
-  let message = '🏠 *Select a Property*\n';
-  const selectionMap = {};
-  properties.forEach((p, index) => {
-    const num = index + 1;
-    message += `${num}. ${p.name} - ${p.address}\n`;
-    selectionMap[num] = p._id.toString();
-  });
-  message += '\nReply with the *number* corresponding to your choice.';
-  sessions[phoneNumber] = sessions[phoneNumber] || {};
-  sessions[phoneNumber].propertySelectionMap = selectionMap;
+  const chunks = chunkArray(properties, 10);
 
-  await sendMessage(phoneNumber, message);
+  // For each chunk, send an interactive list message
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const sectionTitle = `Properties ${i + 1}/${chunks.length}`;
+
+    // Build the rows for this chunk
+    const rows = chunk.map((prop) => ({
+      // Example row ID: "chunk0_<propertyId>"
+      id: `chunk${i}_${prop._id}`,
+      title: prop.name.slice(0, 24),
+      description: prop.address.slice(0, 72),
+    }));
+
+    const listMenu = {
+      messaging_product: 'whatsapp',
+      to: phoneNumber,
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        header: { type: 'text', text: '🏠 Select a Property' },
+        body: {
+          text:
+            chunks.length > 1
+              ? `Showing chunk ${i + 1}/${chunks.length} of your properties.`
+              : 'Please choose a property:',
+        },
+        footer: { text: `Chunk ${i + 1}/${chunks.length}` },
+        action: {
+          button: 'Select',
+          sections: [
+            {
+              title: sectionTitle,
+              rows: rows,
+            },
+          ],
+        },
+      },
+    };
+
+    // Send the interactive list
+    try {
+      await axios.post(WHATSAPP_API_URL, listMenu, {
+        headers: {
+          Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+      });
+    } catch (err) {
+      console.error('Error sending property chunk list:', err.response?.data || err);
+      // Fallback: send them as text if needed
+      let fallbackMsg = `🏠 *Select a Property (Chunk ${i + 1}/${
+        chunks.length
+      })*\n`;
+      chunk.forEach((p, index) => {
+        fallbackMsg += `${index + 1}. ${p.name} - ${p.address}\n`;
+      });
+      fallbackMsg += '\n[Please pick an item by name or ID]';
+      await sendMessage(phoneNumber, fallbackMsg);
+    }
+  }
 }
 
+/**
+ * Sends one or more interactive lists of up to 10 units each.
+ */
 async function sendUnitSelectionMenu(phoneNumber, units) {
-  // Send a simple text-based menu
-  let message = '🚪 *Select a Unit*\n';
-  const selectionMap = {};
-  units.forEach((u, index) => {
-    const num = index + 1;
-    message += `${num}. ${u.unitNumber} - Floor: ${u.floor}\n`;
-    selectionMap[num] = u._id.toString();
-  });
-  message += '\nReply with the *number* corresponding to your choice.';
-  sessions[phoneNumber] = sessions[phoneNumber] || {};
-  sessions[phoneNumber].unitSelectionMap = selectionMap;
+  const chunks = chunkArray(units, 10);
 
-  await sendMessage(phoneNumber, message);
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const sectionTitle = `Units ${i + 1}/${chunks.length}`;
+
+    // Build the rows for this chunk
+    const rows = chunk.map((u) => ({
+      id: `chunk${i}_${u._id}`,
+      title: u.unitNumber.slice(0, 24),
+      description: `Floor: ${u.floor}`.slice(0, 72),
+    }));
+
+    const listMenu = {
+      messaging_product: 'whatsapp',
+      to: phoneNumber,
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        header: { type: 'text', text: '🚪 Select a Unit' },
+        body: {
+          text:
+            chunks.length > 1
+              ? `Showing chunk ${i + 1}/${chunks.length} of your units.`
+              : 'Please choose a unit:',
+        },
+        footer: { text: `Chunk ${i + 1}/${chunks.length}` },
+        action: {
+          button: 'Select',
+          sections: [
+            {
+              title: sectionTitle,
+              rows: rows,
+            },
+          ],
+        },
+      },
+    };
+
+    // Send the interactive list
+    try {
+      await axios.post(WHATSAPP_API_URL, listMenu, {
+        headers: {
+          Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+      });
+    } catch (err) {
+      console.error('Error sending unit chunk list:', err.response?.data || err);
+      // Fallback: send them as text if needed
+      let fallbackMsg = `🚪 *Select a Unit (Chunk ${i + 1}/${
+        chunks.length
+      })*\n`;
+      chunk.forEach((u, index) => {
+        fallbackMsg += `${index + 1}. ${u.unitNumber} - Floor: ${u.floor}\n`;
+      });
+      fallbackMsg += '\n[Please pick an item by name or ID]';
+      await sendMessage(phoneNumber, fallbackMsg);
+    }
+  }
 }
 
+// Submenu for Manage
 async function sendManageSubmenu(phoneNumber) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -741,7 +849,10 @@ async function sendManageSubmenu(phoneNumber) {
       body: { text: '*What would you like to manage?*' },
       action: {
         buttons: [
-          { type: 'reply', reply: { id: 'manage_properties', title: '🏠 Properties' } },
+          {
+            type: 'reply',
+            reply: { id: 'manage_properties', title: '🏠 Properties' },
+          },
           { type: 'reply', reply: { id: 'manage_units', title: '🚪 Units' } },
           { type: 'reply', reply: { id: 'manage_tenants', title: '👥 Tenants' } },
         ],
@@ -756,6 +867,7 @@ async function sendManageSubmenu(phoneNumber) {
   });
 }
 
+// Submenu for Tools
 async function sendToolsSubmenu(phoneNumber) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -782,6 +894,7 @@ async function sendToolsSubmenu(phoneNumber) {
   });
 }
 
+// Property management submenu
 async function sendPropertyOptions(phoneNumber) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -794,6 +907,7 @@ async function sendPropertyOptions(phoneNumber) {
       action: {
         buttons: [
           { type: 'reply', reply: { id: 'add_property', title: '➕ Add Property' } },
+          // You can add more property-related buttons here as needed...
         ],
       },
     },
@@ -806,6 +920,7 @@ async function sendPropertyOptions(phoneNumber) {
   });
 }
 
+// Unit management submenu
 async function sendUnitOptions(phoneNumber) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -818,6 +933,7 @@ async function sendUnitOptions(phoneNumber) {
       action: {
         buttons: [
           { type: 'reply', reply: { id: 'add_unit', title: '➕ Add Unit' } },
+          // You can add more unit-related buttons here as needed...
         ],
       },
     },
@@ -830,6 +946,7 @@ async function sendUnitOptions(phoneNumber) {
   });
 }
 
+// Tenant management submenu
 async function sendTenantOptions(phoneNumber) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -842,6 +959,7 @@ async function sendTenantOptions(phoneNumber) {
       action: {
         buttons: [
           { type: 'reply', reply: { id: 'add_tenant', title: '➕ Add Tenant' } },
+          // You can add more tenant-related buttons here as needed...
         ],
       },
     },
@@ -852,12 +970,6 @@ async function sendTenantOptions(phoneNumber) {
       'Content-Type': 'application/json',
     },
   });
-}
-
-function generateTenantId() {
-  const digits = Math.floor(1000 + Math.random() * 9000);
-  const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
-  return 'T' + digits + letter;
 }
 
 module.exports = {
