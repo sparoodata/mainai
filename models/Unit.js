@@ -1,13 +1,18 @@
 const mongoose = require('mongoose');
 
-const unitSchema = new mongoose.Schema({
-  unitNumber: { type: String, required: true },
+const UnitSchema = new mongoose.Schema({
+  unit_id: { type: String, required: true, unique: true },
   property: { type: mongoose.Schema.Types.ObjectId, ref: 'Property', required: true },
-  rentAmount: { type: Number, required: true },
+  unitNumber: { type: String, required: true },
   floor: { type: String },
   size: { type: String },
-  images: [{ type: String }], // Array of bucket paths (e.g., ["images/1741474825521-HEIF Image.jpeg"])
-  createdAt: { type: Date, default: Date.now },
-});
+  rentAmount: { type: Number, required: true },
+  deposit: { type: Number },
+  status: { type: String, default: 'Vacant' },
+  images: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Image' }],
+  tenant: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant' },
+  description: { type: String },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+}, { timestamps: true });
 
-module.exports = mongoose.model('Unit', unitSchema);
+module.exports = mongoose.model('Unit', UnitSchema);

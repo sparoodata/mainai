@@ -1,16 +1,20 @@
 const express = require('express');
 const axios = require('axios');
-const User = require('../models/User');
+const crypto = require('crypto');
+const Groq = require('groq-sdk');
+
+const User = require('../models/User');   // Your user model
 const Tenant = require('../models/Tenant');
 const Property = require('../models/Property');
 const Unit = require('../models/Unit');
 const UploadToken = require('../models/UploadToken');
-const Groq = require('groq-sdk');
-const crypto = require('crypto');
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const Image = require('../models/Image'); // if you use an Image model
+// ^ Make sure these require paths match your project structure
 
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const router = express.Router();
 
+// Replace with your own info
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const GLITCH_HOST = process.env.GLITCH_HOST;
@@ -19,8 +23,9 @@ const DEFAULT_IMAGE_URL = 'https://via.placeholder.com/150';
 const sessions = {};
 let userResponses = {};
 
-/**
- * Helper to chunk an array into subarrays of up to `size` items each.
+/** 
+ * Utility to chunk an array into subarrays of up to `size` items each 
+ * (for chunked interactive lists). 
  */
 function chunkArray(array, size) {
   const result = [];
@@ -30,41 +35,32 @@ function chunkArray(array, size) {
   return result;
 }
 
-// Helper: Check if a string is numeric
-function isNumeric(value) {
-  return /^-?\d+$/.test(value);
+/** 
+ * Generate unique IDs for each entity 
+ * E.g.: P####X for properties, U####X for units, T####X for tenants 
+ */
+function generatePropertyId() {
+  const digits = Math.floor(1000 + Math.random() * 9000);
+  const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+  return `P${digits}${letter}`;
 }
-
-// Helper: Generate a Unit ID in format U<4-digit><Caps Letter>
 function generateUnitId() {
   const digits = Math.floor(1000 + Math.random() * 9000);
   const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
-  return 'U' + digits + letter;
+  return `U${digits}${letter}`;
 }
-
-// Helper: Generate a Tenant ID in format T<4-digit><Caps Letter>
 function generateTenantId() {
   const digits = Math.floor(1000 + Math.random() * 9000);
   const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
-  return 'T' + digits + letter;
+  return `T${digits}${letter}`;
 }
 
-// URL shortener helper
-async function shortenUrl(longUrl) {
-  try {
-    const response = await axios.post(
-      'https://tinyurl.com/api-create.php?url=' + encodeURIComponent(longUrl)
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Error shortening URL:', error);
-    return longUrl;
-  }
-}
-
+/** 
+ * Create a short-lived token for image upload 
+ */
 async function generateUploadToken(phoneNumber, type, entityId) {
   const token = crypto.randomBytes(16).toString('hex');
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
   const uploadToken = new UploadToken({
     token,
     phoneNumber,
@@ -76,7 +72,9 @@ async function generateUploadToken(phoneNumber, type, entityId) {
   return token;
 }
 
-// Sends a text message via WhatsApp
+/** 
+ * Send a plain text WhatsApp message 
+ */
 async function sendMessage(phoneNumber, message) {
   try {
     await axios.post(
@@ -95,17 +93,16 @@ async function sendMessage(phoneNumber, message) {
       }
     );
   } catch (err) {
-    console.error(
-      'Error sending WhatsApp message:',
-      err.response ? err.response.data : err
-    );
+    console.error('Error sending WhatsApp message:', err.response?.data || err);
   }
 }
 
-// Sends an image message with caption via WhatsApp
+/** 
+ * Send an image message with caption 
+ */
 async function sendImageMessage(phoneNumber, imageUrl, caption) {
   try {
-    const response = await axios.post(
+    await axios.post(
       WHATSAPP_API_URL,
       {
         messaging_product: 'whatsapp',
@@ -123,42 +120,74 @@ async function sendImageMessage(phoneNumber, imageUrl, caption) {
         },
       }
     );
-    console.log('Image message sent:', response.data);
   } catch (err) {
-    console.error(
-      'Error sending WhatsApp image message:',
-      err.response ? err.response.data : err
-    );
-    // Fallback: Send a text message with the summary caption
+    console.error('Error sending WhatsApp image message:', err.response?.data || err);
+    // Fallback to text
     await sendMessage(phoneNumber, caption);
   }
 }
 
-// Sends a summary message as both an image message (with caption) and a separate text message
+/** 
+ * Send a final summary after adding a property/unit/tenant 
+ */
 async function sendSummary(phoneNumber, type, entityId, imageUrl) {
-  let caption;
+  let caption = '';
+
   if (type === 'property') {
     const property = await Property.findById(entityId);
-    caption = `✅ *Property Added*\n━━━━━━━━━━━━━━━\n🏠 *Name*: ${property.name}\n📍 *Address*: ${property.address}\n🚪 *Units*: ${property.units}\n💰 *Total Amount*: ${property.totalAmount}\n━━━━━━━━━━━━━━━`;
-  } else if (type === 'unit') {
-    const unit = await Unit.findById(entityId).populate('property');
-    caption = `✅ *Unit Added*\n━━━━━━━━━━━━━━━\n🏠 *Property*: ${unit.property.name}\n🚪 *Unit ID*: ${unit.unitNumber}\n💰 *Rent Amount*: ${unit.rentAmount}\n📏 *Floor*: ${unit.floor}\n📐 *Size*: ${unit.size}\n━━━━━━━━━━━━━━━`;
-  } else if (type === 'tenant') {
-    const tenant = await Tenant.findById(entityId);
-    const unit = await Unit.findById(tenant.unitAssigned);
-    caption = `✅ *Tenant Added*\n━━━━━━━━━━━━━━━\n👤 *Name*: ${tenant.name}\n🏠 *Property*: ${tenant.propertyName}\n🚪 *Unit*: ${
-      unit ? unit.unitNumber : 'N/A'
-    }\n📅 *Lease Start*: ${tenant.lease_start}\n💵 *Deposit*: ${
-      tenant.deposit
-    }\n💰 *Rent Amount*: ${tenant.rent_amount}\n━━━━━━━━━━━━━━━`;
+    caption = 
+      `✅ *Property Added*  \n━━━━━━━━━━━━━━━\n` +
+      `📌 *ID*: ${property.property_id}\n` +
+      `🏠 *Name*: ${property.name}\n` +
+      `📍 *Address*: ${property.address}, ${property.city}\n` +
+      `🗺️ *State/ZIP*: ${property.state} - ${property.zipcode}\n` +
+      `🌎 *Country*: ${property.country}\n` +
+      (property.owner_name ? `👤 *Owner*: ${property.owner_name}\n` : '') +
+      (property.owner_contact ? `☎️ *Owner Contact*: ${property.owner_contact}\n` : '') +
+      (property.totalAmount ? `💰 *Total Amount*: ${property.totalAmount}\n` : '') +
+      `━━━━━━━━━━━━━━━`;
   }
-  // First try to send the image message with caption
+  else if (type === 'unit') {
+    const unit = await Unit.findById(entityId).populate('property');
+    caption =
+      `✅ *Unit Added*\n━━━━━━━━━━━━━━━\n` +
+      `📌 *ID*: ${unit.unit_id}\n` +
+      `🏠 *Property*: ${unit.property.name}\n` +
+      `🚪 *UnitNumber*: ${unit.unitNumber}\n` +
+      `📏 *Floor*: ${unit.floor}\n` +
+      `📐 *Size*: ${unit.size}\n` +
+      `💰 *Rent*: ${unit.rentAmount}\n` +
+      (unit.deposit ? `💵 *Deposit*: ${unit.deposit}\n` : '') +
+      `👀 *Status*: ${unit.status}\n` +
+      `━━━━━━━━━━━━━━━`;
+  }
+  else if (type === 'tenant') {
+    const tenant = await Tenant.findById(entityId).populate('unitAssigned');
+    caption =
+      `✅ *Tenant Added*\n━━━━━━━━━━━━━━━\n` +
+      `📌 *ID*: ${tenant.tenant_id}\n` +
+      `👤 *Name*: ${tenant.name}\n` +
+      (tenant.email ? `✉️ *Email*: ${tenant.email}\n` : '') +
+      `📱 *Phone*: ${tenant.phoneNumber}\n` +
+      `🏠 *Property*: ${tenant.propertyName}\n` +
+      `🚪 *Unit*: ${tenant.unitAssigned ? tenant.unitAssigned.unitNumber : 'N/A'}\n` +
+      `📅 *Lease Start*: ${tenant.lease_start}\n` +
+      (tenant.lease_end ? `📅 *Lease End*: ${tenant.lease_end}\n` : '') +
+      `💵 *Deposit*: ${tenant.deposit}\n` +
+      `💰 *Rent*: ${tenant.rent_amount}\n` +
+      `👀 *Status*: ${tenant.status}\n` +
+      `━━━━━━━━━━━━━━━`;
+  }
+
+  // Try sending as an image first
   await sendImageMessage(phoneNumber, imageUrl, caption);
-  // Also send a text message so the summary is clearly visible
+  // Also send a plain text message for clarity
   await sendMessage(phoneNumber, caption);
 }
 
-// Sends an interactive image upload option
+/** 
+ * Send "Would you like to upload an image?" (Yes/No) 
+ */
 async function sendImageOption(phoneNumber, type, entityId) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -168,19 +197,13 @@ async function sendImageOption(phoneNumber, type, entityId) {
       type: 'button',
       header: {
         type: 'text',
-        text: `📸 Add Image to ${type.charAt(0).toUpperCase() + type.slice(1)}`,
+        text: `📸 Add Image to ${type}`,
       },
       body: { text: `Would you like to upload an image for this ${type}?` },
       action: {
         buttons: [
-          {
-            type: 'reply',
-            reply: { id: `upload_${type}_${entityId}`, title: 'Yes' },
-          },
-          {
-            type: 'reply',
-            reply: { id: `no_upload_${type}_${entityId}`, title: 'No' },
-          },
+          { type: 'reply', reply: { id: `upload_${type}_${entityId}`, title: 'Yes' } },
+          { type: 'reply', reply: { id: `no_upload_${type}_${entityId}`, title: 'No' } },
         ],
       },
     },
@@ -193,49 +216,44 @@ async function sendImageOption(phoneNumber, type, entityId) {
   });
 }
 
-// Basic validation functions
+/**
+ * Some basic validators (adjust as needed).
+ */
 function isValidName(name) {
-  const regex = /^[a-zA-Z0-9 ]+$/;
-  return (
-    typeof name === 'string' &&
-    name.trim().length > 0 &&
-    name.length <= 40 &&
-    regex.test(name)
-  );
+  return typeof name === 'string' && name.trim().length > 0 && name.length <= 50;
 }
-
-function isValidAddress(address) {
-  const regex = /^[a-zA-Z0-9 ]+$/;
-  return (
-    typeof address === 'string' &&
-    address.trim().length > 0 &&
-    address.length <= 40 &&
-    regex.test(address)
-  );
+function isValidAddress(addr) {
+  return typeof addr === 'string' && addr.trim().length > 0 && addr.length <= 80;
 }
-
-function isValidUnits(units) {
-  const num = parseInt(units);
-  return !isNaN(num) && num > 0 && Number.isInteger(num);
+function isValidCity(city) {
+  return typeof city === 'string' && city.trim().length > 0 && city.length <= 50;
 }
-
-function isValidTotalAmount(amount) {
-  const num = parseFloat(amount);
-  return !isNaN(num) && num > 0;
+function isValidState(st) {
+  return typeof st === 'string' && st.trim().length > 0 && st.length <= 50;
 }
-
+function isValidZipcode(z) {
+  // Simple check – you can refine as needed
+  return typeof z === 'string' && z.trim().length > 2 && z.length <= 10;
+}
+function isValidCountry(country) {
+  return typeof country === 'string' && country.trim().length > 0 && country.length <= 50;
+}
+function isValidNumber(numStr) {
+  const val = parseFloat(numStr);
+  return !isNaN(val) && val >= 0;
+}
 function isValidDate(dateStr) {
+  // e.g. "DD-MM-YYYY"
   const regex = /^(\d{2})-(\d{2})-(\d{4})$/;
   if (!regex.test(dateStr)) return false;
   const [day, month, year] = dateStr.split('-').map(Number);
   const date = new Date(year, month - 1, day);
-  return (
-    date.getDate() === day &&
-    date.getMonth() === month - 1 &&
-    date.getFullYear() === year
-  );
+  return (date.getDate() === day && date.getMonth() === month - 1 && date.getFullYear() === year);
 }
 
+/**
+ * GET - For WhatsApp webhook verification
+ */
 router.get('/', (req, res) => {
   const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
   const mode = req.query['hub.mode'];
@@ -249,7 +267,9 @@ router.get('/', (req, res) => {
   res.sendStatus(403);
 });
 
-// Main webhook POST handler
+/**
+ * POST - Main Webhook Handler
+ */
 router.post('/', async (req, res) => {
   const body = req.body;
 
@@ -258,225 +278,273 @@ router.post('/', async (req, res) => {
     const changes = entry.changes[0];
     const value = changes.value;
 
-    // Capture contact info
+    // 1) Save contact info
     if (value.contacts) {
       const contact = value.contacts[0];
       const contactPhoneNumber = `+${contact.wa_id}`;
       const profileName = contact.profile.name;
-      const user =
-        (await User.findOne({ phoneNumber: contactPhoneNumber })) ||
-        new User({ phoneNumber: contactPhoneNumber });
+      const user = (await User.findOne({ phoneNumber: contactPhoneNumber }))
+        || new User({ phoneNumber: contactPhoneNumber });
       user.profileName = profileName || user.profileName;
       await user.save();
     }
 
-    // Capture messages
+    // 2) Process incoming messages
     if (value.messages) {
       const message = value.messages[0];
-      const fromNumber = message.from;
-      const phoneNumber = `+${fromNumber}`;
+      const fromNumber = message.from;             // e.g. '918885305097'
+      const phoneNumber = `+${fromNumber}`;        // e.g. '+918885305097'
       const text = message.text ? message.text.body.trim() : null;
       const interactive = message.interactive || null;
 
       console.log(`Message from ${fromNumber}:`, { text, interactive });
 
-      // Capture interactive replies
+      // Capture any interactive replies (buttons/lists)
       if (interactive && interactive.type === 'list_reply') {
         userResponses[fromNumber] = interactive.list_reply.id;
-        console.log(`List reply received: ${userResponses[fromNumber]}`);
-      } else if (interactive && interactive.type === 'button_reply') {
+      } 
+      else if (interactive && interactive.type === 'button_reply') {
         userResponses[fromNumber] = interactive.button_reply.id;
-        console.log(`Button reply received: ${userResponses[fromNumber]}`);
       }
 
+      // Make sure we have a session object
       if (!sessions[fromNumber]) {
         sessions[fromNumber] = { action: null };
       }
 
-      // Handle numeric responses (if we revert to numeric selection flows)
-      if (
-        text &&
-        sessions[fromNumber].action &&
-        (sessions[fromNumber].action === 'add_unit_select_property' ||
-          sessions[fromNumber].action === 'add_tenant_select_property' ||
-          sessions[fromNumber].action === 'add_tenant_select_unit')
-      ) {
-        // If we used text-based numeric selection, we’d handle it here.
-        // Currently, we are using chunked interactive lists, so we might not rely on this.
-      }
-
-      // ======== Add-Property Flow ========
+      /*************************************************
+       *       ADD PROPERTY FLOW 
+       *************************************************/
       if (text) {
+        // Step 1: property name
         if (sessions[fromNumber].action === 'add_property_name') {
           if (isValidName(text)) {
+            // store property name
             sessions[fromNumber].propertyData = { name: text };
-            await sendMessage(
-              fromNumber,
-              '📍 *Property Address* \nPlease provide the address of the property.'
-            );
+            await sendMessage(fromNumber, '📍 *Property Address*\nPlease enter the street address (e.g., "123 Main St").');
             sessions[fromNumber].action = 'add_property_address';
           } else {
-            await sendMessage(
-              fromNumber,
-              '⚠️ *Invalid entry* \nPlease retry with a valid property name (e.g., "Sunset Apartments"). Max 40 characters, no special characters.'
-            );
+            await sendMessage(fromNumber, '⚠️ Invalid name. Please try again.');
           }
-        } else if (sessions[fromNumber].action === 'add_property_address') {
+        }
+        // Step 2: address
+        else if (sessions[fromNumber].action === 'add_property_address') {
           if (isValidAddress(text)) {
             sessions[fromNumber].propertyData.address = text;
-            await sendMessage(
-              fromNumber,
-              '🏠 *Number of Units* \nHow many units does this property have? (e.g., 5)'
-            );
-            sessions[fromNumber].action = 'add_property_units';
+            await sendMessage(fromNumber, '🌆 *City*\nEnter the city name.');
+            sessions[fromNumber].action = 'add_property_city';
           } else {
-            await sendMessage(
-              fromNumber,
-              '⚠️ *Invalid entry* \nPlease retry with a valid address (e.g., "123 Main St"). Max 40 characters, no special characters.'
-            );
+            await sendMessage(fromNumber, '⚠️ Invalid address. Please try again.');
           }
-        } else if (sessions[fromNumber].action === 'add_property_units') {
-          if (isValidUnits(text)) {
-            sessions[fromNumber].propertyData.units = parseInt(text);
-            await sendMessage(
-              fromNumber,
-              '💰 *Total Amount* \nWhat is the total amount for this property (e.g., 5000)?'
-            );
+        }
+        // Step 3: city
+        else if (sessions[fromNumber].action === 'add_property_city') {
+          if (isValidCity(text)) {
+            sessions[fromNumber].propertyData.city = text;
+            await sendMessage(fromNumber, '🏙️ *State*\nEnter the state/province name.');
+            sessions[fromNumber].action = 'add_property_state';
+          } else {
+            await sendMessage(fromNumber, '⚠️ Invalid city. Please try again.');
+          }
+        }
+        // Step 4: state
+        else if (sessions[fromNumber].action === 'add_property_state') {
+          if (isValidState(text)) {
+            sessions[fromNumber].propertyData.state = text;
+            await sendMessage(fromNumber, '📮 *ZIP/Postal Code*\nEnter the ZIP/Postal code.');
+            sessions[fromNumber].action = 'add_property_zipcode';
+          } else {
+            await sendMessage(fromNumber, '⚠️ Invalid state. Please try again.');
+          }
+        }
+        // Step 5: zip
+        else if (sessions[fromNumber].action === 'add_property_zipcode') {
+          if (isValidZipcode(text)) {
+            sessions[fromNumber].propertyData.zipcode = text;
+            await sendMessage(fromNumber, '🌎 *Country*\nEnter the country name.');
+            sessions[fromNumber].action = 'add_property_country';
+          } else {
+            await sendMessage(fromNumber, '⚠️ Invalid ZIP code. Please try again.');
+          }
+        }
+        // Step 6: country
+        else if (sessions[fromNumber].action === 'add_property_country') {
+          if (isValidCountry(text)) {
+            sessions[fromNumber].propertyData.country = text;
+            await sendMessage(fromNumber, '💰 *Total Amount*\nEnter the total amount for this property (e.g., 5000).');
             sessions[fromNumber].action = 'add_property_totalAmount';
           } else {
-            await sendMessage(
-              fromNumber,
-              '⚠️ *Invalid entry* \nPlease retry with a valid number of units (e.g., 5). Must be a positive whole number.'
-            );
-          }
-        } else if (sessions[fromNumber].action === 'add_property_totalAmount') {
-          if (isValidTotalAmount(text)) {
-            const user = await User.findOne({ phoneNumber });
-            const property = new Property({
-              name: sessions[fromNumber].propertyData.name,
-              address: sessions[fromNumber].propertyData.address,
-              units: sessions[fromNumber].propertyData.units,
-              totalAmount: parseFloat(text),
-              userId: user._id,
-            });
-            await property.save();
-
-            sessions[fromNumber].entityType = 'property';
-            sessions[fromNumber].entityId = property._id;
-            await sendImageOption(fromNumber, 'property', property._id);
-            sessions[fromNumber].action = 'awaiting_image_choice';
-          } else {
-            await sendMessage(
-              fromNumber,
-              '⚠️ *Invalid entry* \nPlease retry with a valid total amount (e.g., 5000). Must be a positive number.'
-            );
+            await sendMessage(fromNumber, '⚠️ Invalid country. Please try again.');
           }
         }
-        // ======== Add-Unit Flow ========
-        else if (sessions[fromNumber].action === 'add_unit_rent') {
-          const rent = parseFloat(text);
-          if (!isNaN(rent) && rent > 0) {
-            sessions[fromNumber].unitData.rentAmount = rent;
-            await sendMessage(
-              fromNumber,
-              '📏 *Floor* \nWhich floor is this unit on? (e.g., 1, Ground)'
-            );
-            sessions[fromNumber].action = 'add_unit_floor';
+        // Step 7: total amount (optional)
+        else if (sessions[fromNumber].action === 'add_property_totalAmount') {
+          if (isValidNumber(text)) {
+            sessions[fromNumber].propertyData.totalAmount = parseFloat(text);
           } else {
-            await sendMessage(
-              fromNumber,
-              '⚠️ *Invalid entry* \nPlease provide a valid rent amount.'
-            );
+            // not mandatory – if user typed something not numeric, just set 0 or skip
+            sessions[fromNumber].propertyData.totalAmount = 0;
           }
-        } else if (sessions[fromNumber].action === 'add_unit_floor') {
-          sessions[fromNumber].unitData.floor = text;
-          await sendMessage(
-            fromNumber,
-            '📐 *Size* \nWhat is the size of this unit (e.g., 500 sq ft)?'
-          );
-          sessions[fromNumber].action = 'add_unit_size';
-        } else if (sessions[fromNumber].action === 'add_unit_size') {
+          // Now create the property
           const user = await User.findOne({ phoneNumber });
-          const unit = new Unit({
-            property: sessions[fromNumber].unitData.property,
-            unitNumber: sessions[fromNumber].unitData.unitNumber, // auto-generated earlier
-            rentAmount: sessions[fromNumber].unitData.rentAmount,
-            floor: sessions[fromNumber].unitData.floor,
-            size: text,
+          const propertyDoc = new Property({
+            property_id: generatePropertyId(),
+            name: sessions[fromNumber].propertyData.name,
+            address: sessions[fromNumber].propertyData.address,
+            city: sessions[fromNumber].propertyData.city,
+            state: sessions[fromNumber].propertyData.state,
+            zipcode: sessions[fromNumber].propertyData.zipcode,
+            country: sessions[fromNumber].propertyData.country,
+            totalAmount: sessions[fromNumber].propertyData.totalAmount,
             userId: user._id,
           });
-          await unit.save();
-          sessions[fromNumber].entityType = 'unit';
-          sessions[fromNumber].entityId = unit._id;
-          await sendImageOption(fromNumber, 'unit', unit._id);
+          await propertyDoc.save();
+
+          // Move on to uploading an image or skipping
+          sessions[fromNumber].entityType = 'property';
+          sessions[fromNumber].entityId = propertyDoc._id;
+          await sendImageOption(fromNumber, 'property', propertyDoc._id);
           sessions[fromNumber].action = 'awaiting_image_choice';
         }
-        // ======== Add-Tenant Flow ========
-        else if (sessions[fromNumber].action === 'add_tenant_name') {
-          sessions[fromNumber].tenantData.name = text;
-          await sendMessage(
-            fromNumber,
-            '📅 *Lease Start Date* \nWhen does the lease start? (e.g., DD-MM-YYYY like 01-01-2025)'
-          );
-          sessions[fromNumber].action = 'add_tenant_lease_start';
-        } else if (sessions[fromNumber].action === 'add_tenant_lease_start') {
-          if (isValidDate(text)) {
-            sessions[fromNumber].tenantData.lease_start = text;
-            await sendMessage(
-              fromNumber,
-              '💵 *Deposit* \nWhat is the deposit amount?'
-            );
-            sessions[fromNumber].action = 'add_tenant_deposit';
+
+        /*************************************************
+         *       ADD UNIT FLOW 
+         *************************************************/
+        else if (sessions[fromNumber].action === 'add_unit_rent') {
+          if (isValidNumber(text)) {
+            sessions[fromNumber].unitData.rentAmount = parseFloat(text);
+            await sendMessage(fromNumber, '💵 *Deposit*\nEnter the deposit for this unit (e.g., 1000).');
+            sessions[fromNumber].action = 'add_unit_deposit';
           } else {
-            await sendMessage(
-              fromNumber,
-              '⚠️ *Invalid Date* \nPlease use DD-MM-YYYY format (e.g., 01-01-2025).'
-            );
-          }
-        } else if (sessions[fromNumber].action === 'add_tenant_deposit') {
-          const deposit = parseFloat(text);
-          if (!isNaN(deposit) && deposit > 0) {
-            sessions[fromNumber].tenantData.deposit = deposit;
-            await sendMessage(
-              fromNumber,
-              '💰 *Rent Amount* \nWhat is the monthly rent amount?'
-            );
-            sessions[fromNumber].action = 'add_tenant_rent';
-          } else {
-            await sendMessage(
-              fromNumber,
-              '⚠️ *Invalid entry* \nPlease provide a valid deposit amount.'
-            );
-          }
-        } else if (sessions[fromNumber].action === 'add_tenant_rent') {
-          const rent = parseFloat(text);
-          if (!isNaN(rent) && rent > 0) {
-            const user = await User.findOne({ phoneNumber });
-            const tenant = new Tenant({
-              name: sessions[fromNumber].tenantData.name,
-              phoneNumber: user.phoneNumber,
-              userId: user._id,
-              propertyName: sessions[fromNumber].tenantData.propertyName,
-              unitAssigned: sessions[fromNumber].tenantData.unitAssigned,
-              lease_start: sessions[fromNumber].tenantData.lease_start,
-              deposit: sessions[fromNumber].tenantData.deposit,
-              rent_amount: rent,
-              tenant_id: generateTenantId(),
-            });
-            await tenant.save();
-            sessions[fromNumber].entityType = 'tenant';
-            sessions[fromNumber].entityId = tenant._id;
-            await sendImageOption(fromNumber, 'tenant', tenant._id);
-            sessions[fromNumber].action = 'awaiting_image_choice';
-          } else {
-            await sendMessage(
-              fromNumber,
-              '⚠️ *Invalid entry* \nPlease provide a valid rent amount.'
-            );
+            await sendMessage(fromNumber, '⚠️ Invalid rent. Please enter a number.');
           }
         }
-        // ========== “Help” Flow ==========
+        else if (sessions[fromNumber].action === 'add_unit_deposit') {
+          // deposit not strictly required – parse or default to 0
+          if (isValidNumber(text)) {
+            sessions[fromNumber].unitData.deposit = parseFloat(text);
+          } else {
+            sessions[fromNumber].unitData.deposit = 0;
+          }
+          await sendMessage(fromNumber, '📏 *Floor*\nEnter the floor (e.g., "Ground", "1st", etc.).');
+          sessions[fromNumber].action = 'add_unit_floor';
+        }
+        else if (sessions[fromNumber].action === 'add_unit_floor') {
+          sessions[fromNumber].unitData.floor = text;
+          await sendMessage(fromNumber, '📐 *Size*\nEnter the size (e.g., "500 sq ft").');
+          sessions[fromNumber].action = 'add_unit_size';
+        }
+        else if (sessions[fromNumber].action === 'add_unit_size') {
+          sessions[fromNumber].unitData.size = text;
+          // Now create the unit
+          const user = await User.findOne({ phoneNumber });
+          const unitDoc = new Unit({
+            unit_id: generateUnitId(),
+            property: sessions[fromNumber].unitData.property,
+            unitNumber: sessions[fromNumber].unitData.unitNumber, // auto-generated label
+            rentAmount: sessions[fromNumber].unitData.rentAmount,
+            deposit: sessions[fromNumber].unitData.deposit || 0,
+            floor: sessions[fromNumber].unitData.floor,
+            size: sessions[fromNumber].unitData.size,
+            status: 'Vacant',
+            userId: user._id,
+          });
+          await unitDoc.save();
+
+          // Also link the unit to its property (Property.units[])
+          const propDoc = await Property.findById(unitDoc.property);
+          if (propDoc) {
+            propDoc.units.push(unitDoc._id);
+            await propDoc.save();
+          }
+
+          // Move on to image upload or skip
+          sessions[fromNumber].entityType = 'unit';
+          sessions[fromNumber].entityId = unitDoc._id;
+          await sendImageOption(fromNumber, 'unit', unitDoc._id);
+          sessions[fromNumber].action = 'awaiting_image_choice';
+        }
+
+        /*************************************************
+         *       ADD TENANT FLOW 
+         *************************************************/
+        else if (sessions[fromNumber].action === 'add_tenant_name') {
+          if (isValidName(text)) {
+            sessions[fromNumber].tenantData.name = text;
+            await sendMessage(fromNumber, '✉️ *Tenant Email (optional)* \nEnter the tenant’s email, or type "skip".');
+            sessions[fromNumber].action = 'add_tenant_email';
+          } else {
+            await sendMessage(fromNumber, '⚠️ Invalid tenant name. Please try again.');
+          }
+        }
+        else if (sessions[fromNumber].action === 'add_tenant_email') {
+          if (text.toLowerCase() === 'skip') {
+            sessions[fromNumber].tenantData.email = '';
+          } else {
+            // minimal email check – you can refine as needed
+            sessions[fromNumber].tenantData.email = text;
+          }
+          await sendMessage(fromNumber, '📅 *Lease Start Date*\nEnter in DD-MM-YYYY (e.g., 01-01-2025).');
+          sessions[fromNumber].action = 'add_tenant_lease_start';
+        }
+        else if (sessions[fromNumber].action === 'add_tenant_lease_start') {
+          if (isValidDate(text)) {
+            sessions[fromNumber].tenantData.lease_start = text;
+            await sendMessage(fromNumber, '💵 *Deposit*\nEnter the deposit (e.g., 1500).');
+            sessions[fromNumber].action = 'add_tenant_deposit';
+          } else {
+            await sendMessage(fromNumber, '⚠️ Invalid date. Please try again (DD-MM-YYYY).');
+          }
+        }
+        else if (sessions[fromNumber].action === 'add_tenant_deposit') {
+          if (isValidNumber(text)) {
+            sessions[fromNumber].tenantData.deposit = parseFloat(text);
+            await sendMessage(fromNumber, '💰 *Rent*\nEnter the monthly rent (e.g., 500).');
+            sessions[fromNumber].action = 'add_tenant_rent';
+          } else {
+            await sendMessage(fromNumber, '⚠️ Invalid number. Please enter something like "1500".');
+          }
+        }
+        else if (sessions[fromNumber].action === 'add_tenant_rent') {
+          if (isValidNumber(text)) {
+            sessions[fromNumber].tenantData.rent_amount = parseFloat(text);
+            // Now create the tenant
+            const user = await User.findOne({ phoneNumber });
+            const tenantDoc = new Tenant({
+              tenant_id: generateTenantId(),
+              name: sessions[fromNumber].tenantData.name,
+              phoneNumber: user.phoneNumber, // or prompt user if different
+              email: sessions[fromNumber].tenantData.email,
+              unitAssigned: sessions[fromNumber].tenantData.unitAssigned, // stored earlier
+              propertyName: sessions[fromNumber].tenantData.propertyName, 
+              lease_start: sessions[fromNumber].tenantData.lease_start,
+              deposit: sessions[fromNumber].tenantData.deposit,
+              rent_amount: sessions[fromNumber].tenantData.rent_amount,
+              status: 'Active',
+              userId: user._id,
+            });
+            await tenantDoc.save();
+
+            // Also link the tenant in the Unit (optional if you want to store the occupant)
+            const unitDoc = await Unit.findById(tenantDoc.unitAssigned);
+            if (unitDoc) {
+              unitDoc.tenant = tenantDoc._id;
+              unitDoc.status = 'Occupied'; 
+              await unitDoc.save();
+            }
+
+            // Move on to image upload or skip
+            sessions[fromNumber].entityType = 'tenant';
+            sessions[fromNumber].entityId = tenantDoc._id;
+            await sendImageOption(fromNumber, 'tenant', tenantDoc._id);
+            sessions[fromNumber].action = 'awaiting_image_choice';
+          } else {
+            await sendMessage(fromNumber, '⚠️ Invalid number. Please try again.');
+          }
+        }
+        // "help" triggers main menu, etc. 
         else if (text.toLowerCase() === 'help') {
+          // Show top-level menu
           const buttonMenu = {
             messaging_product: 'whatsapp',
             to: fromNumber,
@@ -484,14 +552,10 @@ router.post('/', async (req, res) => {
             interactive: {
               type: 'button',
               header: { type: 'text', text: '🏠 Rental Management' },
-              body: { text: '*Welcome!* Please select an option below:' },
-              footer: { text: 'Powered by Your Rental App' },
+              body: { text: 'Welcome! Please select an option below:' },
               action: {
                 buttons: [
-                  {
-                    type: 'reply',
-                    reply: { id: 'account_info', title: '👤 Account Info' },
-                  },
+                  { type: 'reply', reply: { id: 'account_info', title: '👤 Account Info' } },
                   { type: 'reply', reply: { id: 'manage', title: '🛠️ Manage' } },
                   { type: 'reply', reply: { id: 'tools', title: '🧰 Tools' } },
                 ],
@@ -507,195 +571,154 @@ router.post('/', async (req, res) => {
         }
       }
 
-      // Handle interactive replies (button or list)
+      // 3) Handle any interactive replies
       if (interactive && userResponses[fromNumber]) {
         const selectedOption = userResponses[fromNumber];
 
         if (selectedOption === 'account_info') {
           const user = await User.findOne({ phoneNumber });
-          const accountInfoMessage = user
-            ? `
-*👤 Account Information*
-━━━━━━━━━━━━━━━
-📞 *Phone*: ${user.phoneNumber}
-✅ *Verified*: ${user.verified ? 'Yes' : 'No'}
-🧑 *Profile Name*: ${user.profileName || 'N/A'}
-📅 *Registration Date*: ${
-                user.registrationDate
-                  ? user.registrationDate.toLocaleDateString()
-                  : 'N/A'
-              }
-💰 *Subscription*: ${user.subscription}
-━━━━━━━━━━━━━━━
-          `
-            : '⚠️ *No Account Found* \nNo account information is available for this number.';
-          await sendMessage(fromNumber, accountInfoMessage);
-        } else if (selectedOption === 'manage') {
+          if (user) {
+            const infoMsg = 
+              `👤 *Account Info*\n` +
+              `Phone: ${user.phoneNumber}\n` +
+              `Name: ${user.profileName || 'N/A'}\n` +
+              `Verified: ${user.verified ? 'Yes' : 'No'}\n` +
+              `Subscription: ${user.subscription}\n`;
+            await sendMessage(fromNumber, infoMsg);
+          } else {
+            await sendMessage(fromNumber, 'No account info found.');
+          }
+        }
+        else if (selectedOption === 'manage') {
           await sendManageSubmenu(fromNumber);
-        } else if (selectedOption === 'tools') {
+        }
+        else if (selectedOption === 'tools') {
           await sendToolsSubmenu(fromNumber);
-        } else if (selectedOption === 'manage_properties') {
+        }
+        else if (selectedOption === 'manage_properties') {
           await sendPropertyOptions(fromNumber);
-        } else if (selectedOption === 'manage_units') {
+        }
+        else if (selectedOption === 'manage_units') {
           await sendUnitOptions(fromNumber);
-        } else if (selectedOption === 'manage_tenants') {
+        }
+        else if (selectedOption === 'manage_tenants') {
           await sendTenantOptions(fromNumber);
-        } else if (selectedOption === 'add_property') {
-          await sendMessage(
-            fromNumber,
-            '🏠 *Add Property* \nLet’s start! Please provide the property name.'
-          );
+        }
+        // ===== Add Property (button)
+        else if (selectedOption === 'add_property') {
+          await sendMessage(fromNumber, '🏠 *Add Property*\nEnter the property name.');
           sessions[fromNumber].action = 'add_property_name';
-        } else if (selectedOption === 'add_unit') {
+        }
+        // ===== Add Unit (button)
+        else if (selectedOption === 'add_unit') {
+          // First, we list all properties for user to select
           const user = await User.findOne({ phoneNumber });
           const properties = await Property.find({ userId: user._id });
           if (!properties.length) {
-            await sendMessage(
-              fromNumber,
-              'ℹ️ *No Properties* \nPlease add a property first.'
-            );
+            await sendMessage(fromNumber, 'No properties found. Please add a property first.');
           } else {
             sessions[fromNumber].properties = properties;
-            sessions[fromNumber].userId = user._id;
-            // Now we send chunked interactive lists of properties:
             await sendPropertySelectionMenu(fromNumber, properties);
             sessions[fromNumber].action = 'add_unit_select_property';
           }
-        } else if (selectedOption === 'add_tenant') {
+        }
+        // ===== Add Tenant (button)
+        else if (selectedOption === 'add_tenant') {
           const user = await User.findOne({ phoneNumber });
           const properties = await Property.find({ userId: user._id });
           if (!properties.length) {
-            await sendMessage(
-              fromNumber,
-              'ℹ️ *No Properties* \nPlease add a property first.'
-            );
+            await sendMessage(fromNumber, 'No properties found. Please add a property first.');
           } else {
             sessions[fromNumber].properties = properties;
-            sessions[fromNumber].userId = user._id;
-            // Now we send chunked interactive lists of properties:
             await sendPropertySelectionMenu(fromNumber, properties);
             sessions[fromNumber].action = 'add_tenant_select_property';
           }
         }
-        // Handle property selection from chunked lists (for adding a Unit):
-        else if (sessions[fromNumber].action === 'add_unit_select_property') {
-          // The incoming selectedOption might look like: "chunk0_<propertyId>"
-          if (selectedOption.startsWith('chunk')) {
-            // Parse out the propertyId
-            const [chunkTag, propertyId] = selectedOption.split('_');
-            const foundProperty = await Property.findById(propertyId);
-            if (foundProperty) {
-              sessions[fromNumber].unitData = { property: foundProperty._id };
-              sessions[fromNumber].unitData.unitNumber = generateUnitId();
-              await sendMessage(
-                fromNumber,
-                `Unit ID generated: ${sessions[fromNumber].unitData.unitNumber}. Please provide the rent amount for this unit.`
-              );
-              sessions[fromNumber].action = 'add_unit_rent';
-            } else {
-              await sendMessage(
-                fromNumber,
-                '⚠️ *Invalid Selection* \nPlease select a valid property.'
-              );
-            }
+        // ===== If user selected a property from an interactive list to add a unit
+        else if (sessions[fromNumber].action === 'add_unit_select_property' && selectedOption.startsWith('chunk')) {
+          const [chunkTag, propertyId] = selectedOption.split('_');
+          const foundProperty = await Property.findById(propertyId);
+          if (foundProperty) {
+            sessions[fromNumber].unitData = {};
+            sessions[fromNumber].unitData.property = foundProperty._id;
+            // Our "unitNumber" is just a label, while "unit_id" is the unique ID
+            sessions[fromNumber].unitData.unitNumber = generateUnitId(); 
+            await sendMessage(fromNumber, `Unit label generated: ${sessions[fromNumber].unitData.unitNumber}.\n` +
+              '💰 *Rent Amount*\nEnter the monthly rent (e.g., 500).');
+            sessions[fromNumber].action = 'add_unit_rent';
+          } else {
+            await sendMessage(fromNumber, '⚠️ Invalid selection. Please try again.');
           }
         }
-        // Handle property selection from chunked lists (for adding a Tenant):
-        else if (sessions[fromNumber].action === 'add_tenant_select_property') {
-          if (selectedOption.startsWith('chunk')) {
-            const [chunkTag, propertyId] = selectedOption.split('_');
-            const foundProperty = await Property.findById(propertyId);
-            if (foundProperty) {
-              sessions[fromNumber].tenantData = {
-                propertyId: foundProperty._id,
-                propertyName: foundProperty.name,
-              };
-              const units = await Unit.find({ property: foundProperty._id });
-              if (!units.length) {
-                await sendMessage(
-                  fromNumber,
-                  'ℹ️ *No Units* \nPlease add a unit to this property first.'
-                );
-                sessions[fromNumber].action = null;
-                delete sessions[fromNumber].tenantData;
-              } else {
-                await sendUnitSelectionMenu(fromNumber, units);
-                sessions[fromNumber].action = 'add_tenant_select_unit';
-              }
-            } else {
-              await sendMessage(
-                fromNumber,
-                '⚠️ *Invalid Selection* \nPlease select a valid property.'
-              );
+        // ===== If user selected a property from an interactive list to add a tenant
+        else if (sessions[fromNumber].action === 'add_tenant_select_property' && selectedOption.startsWith('chunk')) {
+          const [chunkTag, propertyId] = selectedOption.split('_');
+          const foundProperty = await Property.findById(propertyId);
+          if (foundProperty) {
+            sessions[fromNumber].tenantData = {};
+            sessions[fromNumber].tenantData.propertyName = foundProperty.name;
+            // Next, let user select which unit
+            const units = await Unit.find({ property: foundProperty._id });
+            if (!units.length) {
+              await sendMessage(fromNumber, 'No units found in that property. Please add a unit first.');
+              sessions[fromNumber].action = null;
+              return;
             }
+            await sendUnitSelectionMenu(fromNumber, units);
+            sessions[fromNumber].action = 'add_tenant_select_unit';
+          } else {
+            await sendMessage(fromNumber, '⚠️ Invalid selection. Please try again.');
           }
         }
-        // Handle unit selection from chunked lists (for adding a Tenant):
-        else if (sessions[fromNumber].action === 'add_tenant_select_unit') {
-          if (selectedOption.startsWith('chunk')) {
-            const [chunkTag, unitId] = selectedOption.split('_');
-            const foundUnit = await Unit.findById(unitId).populate('property');
-            if (foundUnit) {
-              sessions[fromNumber].tenantData.unitAssigned = foundUnit._id;
-              sessions[fromNumber].tenantData.propertyName =
-                foundUnit.property.name;
-              await sendMessage(
-                fromNumber,
-                '👤 *Tenant Name* \nPlease provide the tenant’s full name.'
-              );
-              sessions[fromNumber].action = 'add_tenant_name';
-            } else {
-              await sendMessage(
-                fromNumber,
-                '⚠️ *Invalid Selection* \nPlease select a valid unit.'
-              );
-            }
+        // ===== If user selected a unit from an interactive list to assign a tenant
+        else if (sessions[fromNumber].action === 'add_tenant_select_unit' && selectedOption.startsWith('chunk')) {
+          const [chunkTag, unitId] = selectedOption.split('_');
+          const foundUnit = await Unit.findById(unitId).populate('property');
+          if (foundUnit) {
+            sessions[fromNumber].tenantData.unitAssigned = foundUnit._id;
+            sessions[fromNumber].tenantData.propertyName = foundUnit.property.name;
+            // Now continue the tenant flow
+            await sendMessage(fromNumber, '👤 *Tenant Name*\nEnter the tenant’s name.');
+            sessions[fromNumber].action = 'add_tenant_name';
+          } else {
+            await sendMessage(fromNumber, '⚠️ Invalid selection. Please try again.');
           }
         }
-        // Handle image upload choice
+        // ===== Image Upload choice
         else if (sessions[fromNumber].action === 'awaiting_image_choice') {
           if (selectedOption.startsWith('upload_')) {
             const [, type, entityId] = selectedOption.split('_');
             const token = await generateUploadToken(phoneNumber, type, entityId);
-            const imageUploadUrl = `${GLITCH_HOST}/upload-image/${phoneNumber}/${type}/${entityId}?token=${token}`;
-            const shortUrl = await shortenUrl(imageUploadUrl);
-            await sendMessage(
-              fromNumber,
-              `Please upload the image here (valid for 15 minutes): ${shortUrl}`
-            );
+            const uploadUrl = `${GLITCH_HOST}/upload-image/${phoneNumber}/${type}/${entityId}?token=${token}`;
+            // Possibly shorten the link
+            await sendMessage(fromNumber, `Please upload the image using this link (valid 15 mins):\n${uploadUrl}`);
             sessions[fromNumber].action = null;
-            delete sessions[fromNumber].entityType;
-            delete sessions[fromNumber].entityId;
-          } else if (selectedOption.startsWith('no_upload_')) {
+          } 
+          else if (selectedOption.startsWith('no_upload_')) {
             const [, type, entityId] = selectedOption.split('_');
+            // If skipping image, store a placeholder, then send summary
             if (type === 'property') {
-              const property = await Property.findById(entityId);
-              property.images.push(DEFAULT_IMAGE_URL);
-              await property.save();
-              await sendSummary(
-                fromNumber,
-                'property',
-                entityId,
-                DEFAULT_IMAGE_URL
-              );
+              const p = await Property.findById(entityId);
+              if (p) {
+                // Or push a placeholder Image doc if needed
+                await sendSummary(fromNumber, 'property', entityId, DEFAULT_IMAGE_URL);
+              }
             } else if (type === 'unit') {
-              const unit = await Unit.findById(entityId);
-              unit.images.push(DEFAULT_IMAGE_URL);
-              await unit.save();
-              await sendSummary(fromNumber, 'unit', entityId, DEFAULT_IMAGE_URL);
+              const u = await Unit.findById(entityId);
+              if (u) {
+                await sendSummary(fromNumber, 'unit', entityId, DEFAULT_IMAGE_URL);
+              }
             } else if (type === 'tenant') {
-              const tenant = await Tenant.findById(entityId);
-              tenant.photo = DEFAULT_IMAGE_URL;
-              await tenant.save();
-              await sendSummary(fromNumber, 'tenant', entityId, DEFAULT_IMAGE_URL);
+              const t = await Tenant.findById(entityId);
+              if (t) {
+                await sendSummary(fromNumber, 'tenant', entityId, DEFAULT_IMAGE_URL);
+              }
             }
             sessions[fromNumber].action = null;
-            delete sessions[fromNumber].entityType;
-            delete sessions[fromNumber].entityId;
           }
         }
-        // Clear the user response so it doesn't interfere later
-        delete userResponses[fromNumber];
+
+        delete userResponses[fromNumber]; // clear user response
       }
     }
   }
@@ -703,23 +726,17 @@ router.post('/', async (req, res) => {
 });
 
 /**
- * Sends one or more interactive lists of up to 10 properties each.
- * If `properties.length` > 10, we chunk into multiple messages.
+ * Send chunked interactive-list messages for properties (max 10 per chunk)
  */
 async function sendPropertySelectionMenu(phoneNumber, properties) {
   const chunks = chunkArray(properties, 10);
-
-  // For each chunk, send an interactive list message
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
     const sectionTitle = `Properties ${i + 1}/${chunks.length}`;
-
-    // Build the rows for this chunk
     const rows = chunk.map((prop) => ({
-      // Example row ID: "chunk0_<propertyId>"
-      id: `chunk${i}_${prop._id}`,
+      id: `chunk${i}_${prop._id}`, 
       title: prop.name.slice(0, 24),
-      description: prop.address.slice(0, 72),
+      description: (prop.address || '').slice(0, 72),
     }));
 
     const listMenu = {
@@ -730,7 +747,7 @@ async function sendPropertySelectionMenu(phoneNumber, properties) {
         type: 'list',
         header: { type: 'text', text: '🏠 Select a Property' },
         body: {
-          text:
+          text: 
             chunks.length > 1
               ? `Showing chunk ${i + 1}/${chunks.length} of your properties.`
               : 'Please choose a property:',
@@ -748,7 +765,6 @@ async function sendPropertySelectionMenu(phoneNumber, properties) {
       },
     };
 
-    // Send the interactive list
     try {
       await axios.post(WHATSAPP_API_URL, listMenu, {
         headers: {
@@ -758,30 +774,24 @@ async function sendPropertySelectionMenu(phoneNumber, properties) {
       });
     } catch (err) {
       console.error('Error sending property chunk list:', err.response?.data || err);
-      // Fallback: send them as text if needed
-      let fallbackMsg = `🏠 *Select a Property (Chunk ${i + 1}/${
-        chunks.length
-      })*\n`;
+      // Fallback to text
+      let fallbackMsg = `🏠 *Select a Property (Chunk ${i + 1}/${chunks.length})*\n`;
       chunk.forEach((p, index) => {
         fallbackMsg += `${index + 1}. ${p.name} - ${p.address}\n`;
       });
-      fallbackMsg += '\n[Please pick an item by name or ID]';
       await sendMessage(phoneNumber, fallbackMsg);
     }
   }
 }
 
 /**
- * Sends one or more interactive lists of up to 10 units each.
+ * Send chunked interactive-list messages for units (max 10 per chunk)
  */
 async function sendUnitSelectionMenu(phoneNumber, units) {
   const chunks = chunkArray(units, 10);
-
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
     const sectionTitle = `Units ${i + 1}/${chunks.length}`;
-
-    // Build the rows for this chunk
     const rows = chunk.map((u) => ({
       id: `chunk${i}_${u._id}`,
       title: u.unitNumber.slice(0, 24),
@@ -796,7 +806,7 @@ async function sendUnitSelectionMenu(phoneNumber, units) {
         type: 'list',
         header: { type: 'text', text: '🚪 Select a Unit' },
         body: {
-          text:
+          text: 
             chunks.length > 1
               ? `Showing chunk ${i + 1}/${chunks.length} of your units.`
               : 'Please choose a unit:',
@@ -814,7 +824,6 @@ async function sendUnitSelectionMenu(phoneNumber, units) {
       },
     };
 
-    // Send the interactive list
     try {
       await axios.post(WHATSAPP_API_URL, listMenu, {
         headers: {
@@ -824,20 +833,19 @@ async function sendUnitSelectionMenu(phoneNumber, units) {
       });
     } catch (err) {
       console.error('Error sending unit chunk list:', err.response?.data || err);
-      // Fallback: send them as text if needed
-      let fallbackMsg = `🚪 *Select a Unit (Chunk ${i + 1}/${
-        chunks.length
-      })*\n`;
+      // Fallback to text
+      let fallbackMsg = `🚪 *Select a Unit (Chunk ${i + 1}/${chunks.length})*\n`;
       chunk.forEach((u, index) => {
         fallbackMsg += `${index + 1}. ${u.unitNumber} - Floor: ${u.floor}\n`;
       });
-      fallbackMsg += '\n[Please pick an item by name or ID]';
       await sendMessage(phoneNumber, fallbackMsg);
     }
   }
 }
 
-// Submenu for Manage
+/** 
+ * Submenu for "Manage" 
+ */
 async function sendManageSubmenu(phoneNumber) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -849,10 +857,7 @@ async function sendManageSubmenu(phoneNumber) {
       body: { text: '*What would you like to manage?*' },
       action: {
         buttons: [
-          {
-            type: 'reply',
-            reply: { id: 'manage_properties', title: '🏠 Properties' },
-          },
+          { type: 'reply', reply: { id: 'manage_properties', title: '🏠 Properties' } },
           { type: 'reply', reply: { id: 'manage_units', title: '🚪 Units' } },
           { type: 'reply', reply: { id: 'manage_tenants', title: '👥 Tenants' } },
         ],
@@ -867,7 +872,9 @@ async function sendManageSubmenu(phoneNumber) {
   });
 }
 
-// Submenu for Tools
+/** 
+ * Submenu for "Tools" 
+ */
 async function sendToolsSubmenu(phoneNumber) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -894,7 +901,9 @@ async function sendToolsSubmenu(phoneNumber) {
   });
 }
 
-// Property management submenu
+/** 
+ * Submenu for "Manage Properties" 
+ */
 async function sendPropertyOptions(phoneNumber) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -907,7 +916,7 @@ async function sendPropertyOptions(phoneNumber) {
       action: {
         buttons: [
           { type: 'reply', reply: { id: 'add_property', title: '➕ Add Property' } },
-          // You can add more property-related buttons here as needed...
+          // ... you can add more property-related actions
         ],
       },
     },
@@ -920,7 +929,9 @@ async function sendPropertyOptions(phoneNumber) {
   });
 }
 
-// Unit management submenu
+/** 
+ * Submenu for "Manage Units" 
+ */
 async function sendUnitOptions(phoneNumber) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -933,7 +944,7 @@ async function sendUnitOptions(phoneNumber) {
       action: {
         buttons: [
           { type: 'reply', reply: { id: 'add_unit', title: '➕ Add Unit' } },
-          // You can add more unit-related buttons here as needed...
+          // ... more actions as needed
         ],
       },
     },
@@ -946,7 +957,9 @@ async function sendUnitOptions(phoneNumber) {
   });
 }
 
-// Tenant management submenu
+/** 
+ * Submenu for "Manage Tenants" 
+ */
 async function sendTenantOptions(phoneNumber) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -959,7 +972,7 @@ async function sendTenantOptions(phoneNumber) {
       action: {
         buttons: [
           { type: 'reply', reply: { id: 'add_tenant', title: '➕ Add Tenant' } },
-          // You can add more tenant-related buttons here as needed...
+          // ... more actions as needed
         ],
       },
     },
