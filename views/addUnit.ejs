@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="/styles.css">
+    <title>Add Unit</title>
+</head>
+<body>
+    <!-- Success Message -->
+    <div class="success-message">
+        Authorization successful!
+    </div>
+
+    <!-- Form Container -->
+    <div class="container">
+        <h2>Add Unit</h2>
+        <form action="/addunit/<%= id %>" method="POST" enctype="multipart/form-data" onsubmit="return validateForm()">
+            
+            <!-- Property -->
+            <label for="property">Property:</label>
+            <select id="property" name="property" required>
+                <option value="">-- Select Property --</option>
+                <% properties.forEach(property => { %>
+                    <option value="<%= property._id %>"><%= property.name %></option>
+                <% }) %>
+            </select>
+            <small id="propertyError" class="error-message"></small>
+
+            <!-- Unit Number -->
+            <label for="unit_number">Unit Number:</label>
+            <input type="text" id="unit_number" name="unit_number" maxlength="50" required>
+            <small id="unitNumberError" class="error-message"></small>
+
+            <!-- Rent Amount -->
+            <label for="rent_amount">Rent Amount:</label>
+            <input type="number" id="rent_amount" name="rent_amount" required min="0">
+            <small id="rentAmountError" class="error-message"></small>
+
+            <!-- Floor -->
+            <label for="floor">Floor:</label>
+            <input type="text" id="floor" name="floor" maxlength="20">
+            <small id="floorError" class="error-message"></small>
+
+            <!-- Size -->
+            <label for="size">Size (sq ft):</label>
+            <input type="number" id="size" name="size" min="0">
+            <small id="sizeError" class="error-message"></small>
+
+            <!-- Image -->
+            <label for="image">Image (Max 5MB):</label>
+            <input type="file" id="image" name="image" accept="image/*">
+            <small id="imageError" class="error-message"></small>
+
+            <!-- Submit Button -->
+            <button type="submit">Add Unit</button>
+        </form>
+    </div>
+
+    <!-- Script for Validation -->
+    <script>
+        function validateForm() {
+            // Get form fields
+            const property = document.getElementById('property').value;
+            const unitNumber = document.getElementById('unit_number').value;
+            const rentAmount = document.getElementById('rent_amount').value;
+            const floor = document.getElementById('floor').value;
+            const size = document.getElementById('size').value;
+            const image = document.getElementById('image').files[0];
+
+            let valid = true;
+
+            // Clear previous error messages
+            document.getElementById('propertyError').innerHTML = "";
+            document.getElementById('unitNumberError').innerHTML = "";
+            document.getElementById('rentAmountError').innerHTML = "";
+            document.getElementById('floorError').innerHTML = "";
+            document.getElementById('sizeError').innerHTML = "";
+            document.getElementById('imageError').innerHTML = "";
+
+            // Property validation
+            if (!property) {
+                document.getElementById('propertyError').innerHTML = "Please select a property.";
+                valid = false;
+            }
+
+            // Unit Number validation
+            if (!unitNumber) {
+                document.getElementById('unitNumberError').innerHTML = "Please enter a unit number.";
+                valid = false;
+            } else if (unitNumber.length > 50) {
+                document.getElementById('unitNumberError').innerHTML = "Unit number cannot exceed 50 characters.";
+                valid = false;
+            }
+
+            // Rent Amount validation
+            if (isNaN(rentAmount) || rentAmount <= 0) {
+                document.getElementById('rentAmountError').innerHTML = "Please enter a valid rent amount.";
+                valid = false;
+            }
+
+            // Floor validation
+            if (floor && floor.length > 20) {
+                document.getElementById('floorError').innerHTML = "Floor cannot exceed 20 characters.";
+                valid = false;
+            }
+
+            // Size validation
+            if (size && (isNaN(size) || size < 0)) {
+                document.getElementById('sizeError').innerHTML = "Please enter a valid size.";
+                valid = false;
+            }
+
+            // Image validation (Max size 5MB)
+            if (image && image.size > 5 * 1024 * 1024) {
+                document.getElementById('imageError').innerHTML = "Image size cannot exceed 5MB.";
+                valid = false;
+            }
+
+            return valid;
+        }
+    </script>
+</body>
+</html>

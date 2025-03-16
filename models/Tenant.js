@@ -1,22 +1,18 @@
 const mongoose = require('mongoose');
 
-const TenantSchema = new mongoose.Schema({
-  tenant_id: { type: String, required: true, unique: true },
+const tenantSchema = new mongoose.Schema({
   name: { type: String, required: true },
   phoneNumber: { type: String, required: true },
-  email: { type: String },
-  unitAssigned: { type: mongoose.Schema.Types.ObjectId, ref: 'Unit', required: true },
+  unitAssigned: { type: mongoose.Schema.Types.ObjectId, ref: 'Unit' },
   propertyName: { type: String, required: true },
-  lease_start: { type: String, required: true },
-  lease_end: { type: String },
+  lease_start: { type: Date },
   deposit: { type: Number, required: true },
   rent_amount: { type: Number, required: true },
-  photo: { type: String },
-  documents: [String],
-  paymentHistory: [{ amount: Number, date: String, mode: String }],
-  notes: { type: String },
-  status: { type: String, default: 'Active' },
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-}, { timestamps: true });
+  tenant_id: { type: String, required: true },
+  email: { type: String },
+  images: [{ type: String }], // Array of bucket paths for tenant photos
+  idProof: { type: String }, // Optional: Could also be a bucket path if needed
+  createdAt: { type: Date, default: Date.now },
+});
 
-module.exports = mongoose.model('Tenant', TenantSchema);
+module.exports = mongoose.model('Tenant', tenantSchema);
