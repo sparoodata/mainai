@@ -1,13 +1,13 @@
 const express = require('express');
 const axios = require('axios');
+const crypto = require('crypto');
+const Groq = require('groq-sdk');
+
 const User = require('../models/User');
-const Tenant = require('../models/Tenant');
 const Property = require('../models/Property');
 const Unit = require('../models/Unit');
+const Tenant = require('../models/Tenant');
 const UploadToken = require('../models/UploadToken');
-const Groq = require('groq-sdk');
-const crypto = require('crypto');
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const router = express.Router();
 
@@ -19,12 +19,15 @@ const DEFAULT_IMAGE_URL = 'https://via.placeholder.com/150';
 const sessions = {};
 let userResponses = {};
 
+// Helpers and validators
 const chunkArray = require('../helpers/chunkArray');
 const { isValidName, isValidAddress, isValidUnits, isValidTotalAmount, isValidDate } = require('../helpers/validators');
 const { generateUnitId, generateTenantId } = require('../helpers/idGenerators');
 const { shortenUrl, sendMessage, sendImageMessage, sendImageOption } = require('../helpers/whatsapp');
 const generateUploadToken = require('../helpers/uploadToken');
 const menuHelpers = require('../helpers/menuHelpers');
+
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // Helper: Check if a string is numeric
 function isNumeric(value) {
@@ -89,71 +92,100 @@ router.post('/', async (req, res) => {
         sessions[fromNumber] = { action: null };
       }
 
-      // Handle numeric responses (if we revert to numeric selection flows)
-      if (
-        text &&
-        sessions[fromNumber].action &&
-        (sessions[fromNumber].action === 'add_unit_select_property' ||
-          sessions[fromNumber].action === 'add_tenant_select_property' ||
-          sessions[fromNumber].action === 'add_tenant_select_unit')
-      ) {
-        // If we used text-based numeric selection, we’d handle it here.
-        // Currently, we are using chunked interactive lists, so we might not rely on this.
-      }
+      // (If using text-based numeric selection for chunked lists, handle it here.)
 
-      // ======== Add-Property Flow ========
+      // ======== Extended Add-Property Flow ========
       if (text) {
         if (sessions[fromNumber].action === 'add_property_name') {
           if (isValidName(text)) {
             sessions[fromNumber].propertyData = { name: text };
             await sendMessage(
               fromNumber,
-              '📍 *Property Address* \nPlease provide the address of the property.'
+              '📝 *Description* \nPlease provide a description for the property.'
             );
-            sessions[fromNumber].action = 'add_property_address';
+            sessions[fromNumber].action = 'add_property_description';
           } else {
             await sendMessage(
               fromNumber,
-              '⚠️ *Invalid entry* \nPlease retry with a valid property name (e.g., "Sunset Apartments"). Max 40 characters, no special characters.'
+              '⚠️ *Invalid entry* \nPlease retry with a valid property name (max 40 characters, no special characters).'
             );
           }
+        } else if (sessions[fromNumber].action === 'add_property_description') {
+          sessions[fromNumber].propertyData.description = text;
+          await sendMessage(
+            fromNumber,
+            '📍 *Street Address* \nPlease provide the street address of the property.'
+          );
+          sessions[fromNumber].action = 'add_property_address';
         } else if (sessions[fromNumber].action === 'add_property_address') {
           if (isValidAddress(text)) {
             sessions[fromNumber].propertyData.address = text;
-            await sendMessage(
-              fromNumber,
-              '🏠 *Number of Units* \nHow many units does this property have? (e.g., 5)'
-            );
-            sessions[fromNumber].action = 'add_property_units';
+            await sendMessage(fromNumber, '🏙️ *City* \nEnter the city.');
+            sessions[fromNumber].action = 'add_property_city';
           } else {
             await sendMessage(
               fromNumber,
-              '⚠️ *Invalid entry* \nPlease retry with a valid address (e.g., "123 Main St"). Max 40 characters, no special characters.'
+              '⚠️ *Invalid entry* \nPlease retry with a valid street address.'
             );
           }
-        } else if (sessions[fromNumber].action === 'add_property_units') {
+        } else if (sessions[fromNumber].action === 'add_property_city') {
+          sessions[fromNumber].propertyData.city = text;
+          await sendMessage(fromNumber, '🌆 *State* \nEnter the state.');
+          sessions[fromNumber].action = 'add_property_state';
+        } else if (sessions[fromNumber].action === 'add_property_state') {
+          sessions[fromNumber].propertyData.state = text;
+          await sendMessage(fromNumber, '📮 *ZIP Code* \nEnter the ZIP code.');
+          sessions[fromNumber].action = 'add_property_zip';
+        } else if (sessions[fromNumber].action === 'add_property_zip') {
+          sessions[fromNumber].propertyData.zipCode = text;
+          await sendMessage(fromNumber, '🌍 *Country* \nEnter the country.');
+          sessions[fromNumber].action = 'add_property_country';
+        } else if (sessions[fromNumber].action === 'add_property_country') {
+          sessions[fromNumber].propertyData.country = text;
+          await sendMessage(fromNumber, '🏢 *Property Type* \nEnter the property type (e.g., Apartment, Condo).');
+          sessions[fromNumber].action = 'add_property_type';
+        } else if (sessions[fromNumber].action === 'add_property_type') {
+          sessions[fromNumber].propertyData.propertyType = text;
+          await sendMessage(fromNumber, '🏗️ *Year Built* \nEnter the year the property was built.');
+          sessions[fromNumber].action = 'add_property_yearBuilt';
+        } else if (sessions[fromNumber].action === 'add_property_yearBuilt') {
+          const year = parseInt(text);
+          if (!isNaN(year)) {
+            sessions[fromNumber].propertyData.yearBuilt = year;
+            await sendMessage(fromNumber, '🏠 *Total Units* \nEnter the total number of units.');
+            sessions[fromNumber].action = 'add_property_totalUnits';
+          } else {
+            await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease enter a valid year.');
+          }
+        } else if (sessions[fromNumber].action === 'add_property_totalUnits') {
           if (isValidUnits(text)) {
-            sessions[fromNumber].propertyData.units = parseInt(text);
-            await sendMessage(
-              fromNumber,
-              '💰 *Total Amount* \nWhat is the total amount for this property (e.g., 5000)?'
-            );
-            sessions[fromNumber].action = 'add_property_totalAmount';
+            sessions[fromNumber].propertyData.totalUnits = parseInt(text);
+            await sendMessage(fromNumber, '💰 *Purchase Price* \nEnter the purchase price.');
+            sessions[fromNumber].action = 'add_property_purchasePrice';
           } else {
             await sendMessage(
               fromNumber,
-              '⚠️ *Invalid entry* \nPlease retry with a valid number of units (e.g., 5). Must be a positive whole number.'
+              '⚠️ *Invalid entry* \nPlease enter a valid number of units (a positive integer).'
             );
           }
-        } else if (sessions[fromNumber].action === 'add_property_totalAmount') {
-          if (isValidTotalAmount(text)) {
+        } else if (sessions[fromNumber].action === 'add_property_purchasePrice') {
+          if (!isNaN(parseFloat(text)) && parseFloat(text) > 0) {
+            sessions[fromNumber].propertyData.purchasePrice = parseFloat(text);
+            // Create the property using the extended data
             const user = await User.findOne({ phoneNumber });
             const property = new Property({
               name: sessions[fromNumber].propertyData.name,
+              description: sessions[fromNumber].propertyData.description,
               address: sessions[fromNumber].propertyData.address,
-              units: sessions[fromNumber].propertyData.units,
-              totalAmount: parseFloat(text),
-              userId: user._id,
+              city: sessions[fromNumber].propertyData.city,
+              state: sessions[fromNumber].propertyData.state,
+              zipCode: sessions[fromNumber].propertyData.zipCode,
+              country: sessions[fromNumber].propertyData.country,
+              propertyType: sessions[fromNumber].propertyData.propertyType,
+              yearBuilt: sessions[fromNumber].propertyData.yearBuilt,
+              totalUnits: sessions[fromNumber].propertyData.totalUnits,
+              purchasePrice: sessions[fromNumber].propertyData.purchasePrice,
+              ownerId: user._id,
             });
             await property.save();
 
@@ -162,13 +194,10 @@ router.post('/', async (req, res) => {
             await sendImageOption(fromNumber, 'property', property._id);
             sessions[fromNumber].action = 'awaiting_image_choice';
           } else {
-            await sendMessage(
-              fromNumber,
-              '⚠️ *Invalid entry* \nPlease retry with a valid total amount (e.g., 5000). Must be a positive number.'
-            );
+            await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease enter a valid purchase price.');
           }
         }
-        // ======== Add-Unit Flow ========
+        // ======== Add-Unit Flow (unchanged) ========
         else if (sessions[fromNumber].action === 'add_unit_rent') {
           const rent = parseFloat(text);
           if (!isNaN(rent) && rent > 0) {
@@ -179,10 +208,7 @@ router.post('/', async (req, res) => {
             );
             sessions[fromNumber].action = 'add_unit_floor';
           } else {
-            await sendMessage(
-              fromNumber,
-              '⚠️ *Invalid entry* \nPlease provide a valid rent amount.'
-            );
+            await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease provide a valid rent amount.');
           }
         } else if (sessions[fromNumber].action === 'add_unit_floor') {
           sessions[fromNumber].unitData.floor = text;
@@ -207,56 +233,56 @@ router.post('/', async (req, res) => {
           await sendImageOption(fromNumber, 'unit', unit._id);
           sessions[fromNumber].action = 'awaiting_image_choice';
         }
-        // ======== Add-Tenant Flow ========
-        else if (sessions[fromNumber].action === 'add_tenant_name') {
-          sessions[fromNumber].tenantData.name = text;
+        // ======== Extended Add-Tenant Flow ========
+        else if (sessions[fromNumber].action === 'add_tenant_fullName') {
+          sessions[fromNumber].tenantData = { fullName: text };
           await sendMessage(
             fromNumber,
-            '📅 *Lease Start Date* \nWhen does the lease start? (e.g., DD-MM-YYYY like 01-01-2025)'
+            '📅 *Lease Start Date* \nWhen does the lease start? (e.g., DD-MM-YYYY)'
           );
-          sessions[fromNumber].action = 'add_tenant_lease_start';
-        } else if (sessions[fromNumber].action === 'add_tenant_lease_start') {
+          sessions[fromNumber].action = 'add_tenant_leaseStartDate';
+        } else if (sessions[fromNumber].action === 'add_tenant_leaseStartDate') {
           if (isValidDate(text)) {
-            sessions[fromNumber].tenantData.lease_start = text;
+            sessions[fromNumber].tenantData.leaseStartDate = text;
             await sendMessage(
               fromNumber,
-              '💵 *Deposit* \nWhat is the deposit amount?'
+              '💵 *Deposit Amount* \nWhat is the deposit amount?'
             );
-            sessions[fromNumber].action = 'add_tenant_deposit';
+            sessions[fromNumber].action = 'add_tenant_depositAmount';
           } else {
             await sendMessage(
               fromNumber,
               '⚠️ *Invalid Date* \nPlease use DD-MM-YYYY format (e.g., 01-01-2025).'
             );
           }
-        } else if (sessions[fromNumber].action === 'add_tenant_deposit') {
+        } else if (sessions[fromNumber].action === 'add_tenant_depositAmount') {
           const deposit = parseFloat(text);
           if (!isNaN(deposit) && deposit > 0) {
-            sessions[fromNumber].tenantData.deposit = deposit;
+            sessions[fromNumber].tenantData.depositAmount = deposit;
             await sendMessage(
               fromNumber,
-              '💰 *Rent Amount* \nWhat is the monthly rent amount?'
+              '💰 *Monthly Rent* \nWhat is the monthly rent amount?'
             );
-            sessions[fromNumber].action = 'add_tenant_rent';
+            sessions[fromNumber].action = 'add_tenant_monthlyRent';
           } else {
             await sendMessage(
               fromNumber,
               '⚠️ *Invalid entry* \nPlease provide a valid deposit amount.'
             );
           }
-        } else if (sessions[fromNumber].action === 'add_tenant_rent') {
+        } else if (sessions[fromNumber].action === 'add_tenant_monthlyRent') {
           const rent = parseFloat(text);
           if (!isNaN(rent) && rent > 0) {
             const user = await User.findOne({ phoneNumber });
             const tenant = new Tenant({
-              name: sessions[fromNumber].tenantData.name,
+              fullName: sessions[fromNumber].tenantData.fullName,
               phoneNumber: user.phoneNumber,
               userId: user._id,
               propertyName: sessions[fromNumber].tenantData.propertyName,
               unitAssigned: sessions[fromNumber].tenantData.unitAssigned,
-              lease_start: sessions[fromNumber].tenantData.lease_start,
-              deposit: sessions[fromNumber].tenantData.deposit,
-              rent_amount: rent,
+              leaseStartDate: sessions[fromNumber].tenantData.leaseStartDate,
+              depositAmount: sessions[fromNumber].tenantData.depositAmount,
+              monthlyRent: rent,
               tenant_id: generateTenantId(),
             });
             await tenant.save();
@@ -267,7 +293,7 @@ router.post('/', async (req, res) => {
           } else {
             await sendMessage(
               fromNumber,
-              '⚠️ *Invalid entry* \nPlease provide a valid rent amount.'
+              '⚠️ *Invalid entry* \nPlease provide a valid monthly rent amount.'
             );
           }
         }
@@ -323,7 +349,7 @@ router.post('/', async (req, res) => {
               }
 💰 *Subscription*: ${user.subscription}
 ━━━━━━━━━━━━━━━
-          `
+            `
             : '⚠️ *No Account Found* \nNo account information is available for this number.';
           await sendMessage(fromNumber, accountInfoMessage);
         } else if (selectedOption === 'manage') {
@@ -344,7 +370,7 @@ router.post('/', async (req, res) => {
           sessions[fromNumber].action = 'add_property_name';
         } else if (selectedOption === 'add_unit') {
           const user = await User.findOne({ phoneNumber });
-          const properties = await Property.find({ userId: user._id });
+          const properties = await Property.find({ ownerId: user._id });
           if (!properties.length) {
             await sendMessage(
               fromNumber,
@@ -353,13 +379,12 @@ router.post('/', async (req, res) => {
           } else {
             sessions[fromNumber].properties = properties;
             sessions[fromNumber].userId = user._id;
-            // Now we send chunked interactive lists of properties:
             await menuHelpers.sendPropertySelectionMenu(fromNumber, properties);
             sessions[fromNumber].action = 'add_unit_select_property';
           }
         } else if (selectedOption === 'add_tenant') {
           const user = await User.findOne({ phoneNumber });
-          const properties = await Property.find({ userId: user._id });
+          const properties = await Property.find({ ownerId: user._id });
           if (!properties.length) {
             await sendMessage(
               fromNumber,
@@ -368,16 +393,13 @@ router.post('/', async (req, res) => {
           } else {
             sessions[fromNumber].properties = properties;
             sessions[fromNumber].userId = user._id;
-            // Now we send chunked interactive lists of properties:
             await menuHelpers.sendPropertySelectionMenu(fromNumber, properties);
             sessions[fromNumber].action = 'add_tenant_select_property';
           }
         }
-        // Handle property selection from chunked lists (for adding a Unit):
+        // Handle property selection from chunked lists (for adding a Unit)
         else if (sessions[fromNumber].action === 'add_unit_select_property') {
-          // The incoming selectedOption might look like: "chunk0_<propertyId>"
           if (selectedOption.startsWith('chunk')) {
-            // Parse out the propertyId
             const [chunkTag, propertyId] = selectedOption.split('_');
             const foundProperty = await Property.findById(propertyId);
             if (foundProperty) {
@@ -396,7 +418,7 @@ router.post('/', async (req, res) => {
             }
           }
         }
-        // Handle property selection from chunked lists (for adding a Tenant):
+        // Handle property selection from chunked lists (for adding a Tenant)
         else if (sessions[fromNumber].action === 'add_tenant_select_property') {
           if (selectedOption.startsWith('chunk')) {
             const [chunkTag, propertyId] = selectedOption.split('_');
@@ -426,20 +448,19 @@ router.post('/', async (req, res) => {
             }
           }
         }
-        // Handle unit selection from chunked lists (for adding a Tenant):
+        // Handle unit selection from chunked lists (for adding a Tenant)
         else if (sessions[fromNumber].action === 'add_tenant_select_unit') {
           if (selectedOption.startsWith('chunk')) {
             const [chunkTag, unitId] = selectedOption.split('_');
             const foundUnit = await Unit.findById(unitId).populate('property');
             if (foundUnit) {
               sessions[fromNumber].tenantData.unitAssigned = foundUnit._id;
-              sessions[fromNumber].tenantData.propertyName =
-                foundUnit.property.name;
+              sessions[fromNumber].tenantData.propertyName = foundUnit.property.name;
               await sendMessage(
                 fromNumber,
-                '👤 *Tenant Name* \nPlease provide the tenant’s full name.'
+                '👤 *Tenant Full Name* \nPlease provide the tenant’s full name.'
               );
-              sessions[fromNumber].action = 'add_tenant_name';
+              sessions[fromNumber].action = 'add_tenant_fullName';
             } else {
               await sendMessage(
                 fromNumber,
@@ -468,12 +489,7 @@ router.post('/', async (req, res) => {
               const property = await Property.findById(entityId);
               property.images.push(DEFAULT_IMAGE_URL);
               await property.save();
-              await sendSummary(
-                fromNumber,
-                'property',
-                entityId,
-                DEFAULT_IMAGE_URL
-              );
+              await sendSummary(fromNumber, 'property', entityId, DEFAULT_IMAGE_URL);
             } else if (type === 'unit') {
               const unit = await Unit.findById(entityId);
               unit.images.push(DEFAULT_IMAGE_URL);
@@ -498,27 +514,21 @@ router.post('/', async (req, res) => {
   res.sendStatus(200);
 });
 
-// Sends a summary message as both an image message (with caption) and a separate text message
+// Sends a summary message as both an image message (with caption) and a text message
 async function sendSummary(phoneNumber, type, entityId, imageUrl) {
   let caption;
   if (type === 'property') {
     const property = await Property.findById(entityId);
-    caption = `✅ *Property Added*\n━━━━━━━━━━━━━━━\n🏠 *Name*: ${property.name}\n📍 *Address*: ${property.address}\n🚪 *Units*: ${property.units}\n💰 *Total Amount*: ${property.totalAmount}\n━━━━━━━━━━━━━━━`;
+    caption = `✅ *Property Added*\n━━━━━━━━━━━━━━━\n🏠 *Name*: ${property.name}\n📝 *Description*: ${property.description}\n📍 *Address*: ${property.address}, ${property.city}, ${property.state} ${property.zipCode}, ${property.country}\n🏢 *Type*: ${property.propertyType}\n🏗️ *Year Built*: ${property.yearBuilt}\n🏠 *Total Units*: ${property.totalUnits}\n💰 *Purchase Price*: ${property.purchasePrice}\n━━━━━━━━━━━━━━━`;
   } else if (type === 'unit') {
     const unit = await Unit.findById(entityId).populate('property');
     caption = `✅ *Unit Added*\n━━━━━━━━━━━━━━━\n🏠 *Property*: ${unit.property.name}\n🚪 *Unit ID*: ${unit.unitNumber}\n💰 *Rent Amount*: ${unit.rentAmount}\n📏 *Floor*: ${unit.floor}\n📐 *Size*: ${unit.size}\n━━━━━━━━━━━━━━━`;
   } else if (type === 'tenant') {
     const tenant = await Tenant.findById(entityId);
     const unit = await Unit.findById(tenant.unitAssigned);
-    caption = `✅ *Tenant Added*\n━━━━━━━━━━━━━━━\n👤 *Name*: ${tenant.name}\n🏠 *Property*: ${tenant.propertyName}\n🚪 *Unit*: ${
-      unit ? unit.unitNumber : 'N/A'
-    }\n📅 *Lease Start*: ${tenant.lease_start}\n💵 *Deposit*: ${
-      tenant.deposit
-    }\n💰 *Rent Amount*: ${tenant.rent_amount}\n━━━━━━━━━━━━━━━`;
+    caption = `✅ *Tenant Added*\n━━━━━━━━━━━━━━━\n👤 *Name*: ${tenant.fullName}\n🏠 *Property*: ${tenant.propertyName}\n🚪 *Unit*: ${unit ? unit.unitNumber : 'N/A'}\n📅 *Lease Start*: ${new Date(tenant.leaseStartDate).toLocaleDateString()}\n💵 *Deposit*: ${tenant.depositAmount}\n💰 *Monthly Rent*: ${tenant.monthlyRent}\n━━━━━━━━━━━━━━━`;
   }
-  // First try to send the image message with caption
   await sendImageMessage(phoneNumber, imageUrl, caption);
-  // Also send a text message so the summary is clearly visible
   await sendMessage(phoneNumber, caption);
 }
 
