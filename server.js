@@ -8,21 +8,21 @@ const path = require('path');
 const axios = require("axios");
 const multer = require('multer');
 const crypto = require('crypto');
-
-const Tenant = require('./models/Tenant');
-const Image = require('./models/Image');
-const Property = require('./models/Property');
-const User = require('./models/User');
-const Unit = require('./models/Unit');
-const UploadToken = require('./models/UploadToken');
 const AWS = require('aws-sdk');
 
-// Import the webhook router and messaging functions
+// Updated models
+const Property = require('./models/Property');
+const Unit = require('./models/Unit');
+const Tenant = require('./models/Tenant');
+const User = require('./models/User');
+const UploadToken = require('./models/UploadToken');
+
 const { router, sendMessage, sendSummary } = require('./routes/webhook');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Configure AWS R2 (S3 compatible)
 const s3 = new AWS.S3({
   endpoint: process.env.R2_ENDPOINT,
   accessKeyId: process.env.R2_ACCESS_KEY_ID,
@@ -107,8 +107,7 @@ async function validateUploadToken(req, res, next) {
   }
 }
 
-// GET route to render the image upload page
-// (Ensure you have an "uploadImage.ejs" file in your views folder)
+// GET route to render the image upload page (make sure you have an "uploadImage.ejs" in your views folder)
 app.get('/upload-image/:phoneNumber/:type/:id', validateUploadToken, (req, res) => {
   const { phoneNumber, type, id } = req.params;
   const { token } = req.query;
@@ -134,35 +133,31 @@ app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validat
     // Upload the image to R2
     await s3.upload(uploadParams).promise();
 
-    // Generate a pre-signed URL for secure, temporary access (valid for 5 minutes)
+    // Generate a pre-signed URL (valid for 5 minutes)
     const signedUrl = s3.getSignedUrl('getObject', {
       Bucket: process.env.R2_BUCKET,
       Key: key,
-      Expires: 300, // URL valid for 300 seconds (5 minutes)
+      Expires: 300,
     });
     console.log(`Image uploaded to R2 and signed URL generated: ${signedUrl}`);
     
-    // Save the image record to the database
-    // (You can choose to store the object key rather than the signed URL because the URL expires)
-    const image = new Image({ [`${type}Id`]: id, imageUrl: key });
-    await image.save();
-
+    // Update the related entity using extended models
     let entity;
     if (type === 'property') {
       entity = await Property.findById(id);
-      entity.images.push(image._id);
+      entity.images.push(signedUrl);
       await entity.save();
     } else if (type === 'unit') {
       entity = await Unit.findById(id);
-      entity.images.push(image._id);
+      entity.images.push(signedUrl);
       await entity.save();
     } else if (type === 'tenant') {
       entity = await Tenant.findById(id);
+      // For tenant, we assume a single photo field
       entity.photo = signedUrl;
       await entity.save();
     }
 
-    // Send the summary using the pre-signed URL so that access is secure and temporary.
     console.log(`Sending summary for ${type} with signed URL: ${signedUrl}`);
     await sendSummary(phoneNumber, type, id, signedUrl);
 
