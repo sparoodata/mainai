@@ -19,223 +19,19 @@ const DEFAULT_IMAGE_URL = 'https://via.placeholder.com/150';
 const sessions = {};
 let userResponses = {};
 
-/**
- * Helper to chunk an array into subarrays of up to `size` items each.
- */
-function chunkArray(array, size) {
-  const result = [];
-  for (let i = 0; i < array.length; i += size) {
-    result.push(array.slice(i, i + size));
-  }
-  return result;
-}
+const chunkArray = require('../helpers/chunkArray');
+const { isValidName, isValidAddress, isValidUnits, isValidTotalAmount, isValidDate } = require('../helpers/validators');
+const { generateUnitId, generateTenantId } = require('../helpers/idGenerators');
+const { shortenUrl, sendMessage, sendImageMessage, sendImageOption } = require('../helpers/whatsapp');
+const generateUploadToken = require('../helpers/uploadToken');
+const menuHelpers = require('../helpers/menuHelpers');
 
 // Helper: Check if a string is numeric
 function isNumeric(value) {
   return /^-?\d+$/.test(value);
 }
 
-// Helper: Generate a Unit ID in format U<4-digit><Caps Letter>
-function generateUnitId() {
-  const digits = Math.floor(1000 + Math.random() * 9000);
-  const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
-  return 'U' + digits + letter;
-}
-
-// Helper: Generate a Tenant ID in format T<4-digit><Caps Letter>
-function generateTenantId() {
-  const digits = Math.floor(1000 + Math.random() * 9000);
-  const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
-  return 'T' + digits + letter;
-}
-
-// URL shortener helper
-async function shortenUrl(longUrl) {
-  try {
-    const response = await axios.post(
-      'https://tinyurl.com/api-create.php?url=' + encodeURIComponent(longUrl)
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Error shortening URL:', error);
-    return longUrl;
-  }
-}
-
-async function generateUploadToken(phoneNumber, type, entityId) {
-  const token = crypto.randomBytes(16).toString('hex');
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-  const uploadToken = new UploadToken({
-    token,
-    phoneNumber,
-    type,
-    entityId,
-    expiresAt,
-  });
-  await uploadToken.save();
-  return token;
-}
-
-// Sends a text message via WhatsApp
-async function sendMessage(phoneNumber, message) {
-  try {
-    await axios.post(
-      WHATSAPP_API_URL,
-      {
-        messaging_product: 'whatsapp',
-        to: phoneNumber,
-        type: 'text',
-        text: { body: message },
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-  } catch (err) {
-    console.error(
-      'Error sending WhatsApp message:',
-      err.response ? err.response.data : err
-    );
-  }
-}
-
-// Sends an image message with caption via WhatsApp
-async function sendImageMessage(phoneNumber, imageUrl, caption) {
-  try {
-    const response = await axios.post(
-      WHATSAPP_API_URL,
-      {
-        messaging_product: 'whatsapp',
-        to: phoneNumber,
-        type: 'image',
-        image: {
-          link: imageUrl,
-          caption: caption,
-        },
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-    console.log('Image message sent:', response.data);
-  } catch (err) {
-    console.error(
-      'Error sending WhatsApp image message:',
-      err.response ? err.response.data : err
-    );
-    // Fallback: Send a text message with the summary caption
-    await sendMessage(phoneNumber, caption);
-  }
-}
-
-// Sends a summary message as both an image message (with caption) and a separate text message
-async function sendSummary(phoneNumber, type, entityId, imageUrl) {
-  let caption;
-  if (type === 'property') {
-    const property = await Property.findById(entityId);
-    caption = `✅ *Property Added*\n━━━━━━━━━━━━━━━\n🏠 *Name*: ${property.name}\n📍 *Address*: ${property.address}\n🚪 *Units*: ${property.units}\n💰 *Total Amount*: ${property.totalAmount}\n━━━━━━━━━━━━━━━`;
-  } else if (type === 'unit') {
-    const unit = await Unit.findById(entityId).populate('property');
-    caption = `✅ *Unit Added*\n━━━━━━━━━━━━━━━\n🏠 *Property*: ${unit.property.name}\n🚪 *Unit ID*: ${unit.unitNumber}\n💰 *Rent Amount*: ${unit.rentAmount}\n📏 *Floor*: ${unit.floor}\n📐 *Size*: ${unit.size}\n━━━━━━━━━━━━━━━`;
-  } else if (type === 'tenant') {
-    const tenant = await Tenant.findById(entityId);
-    const unit = await Unit.findById(tenant.unitAssigned);
-    caption = `✅ *Tenant Added*\n━━━━━━━━━━━━━━━\n👤 *Name*: ${tenant.name}\n🏠 *Property*: ${tenant.propertyName}\n🚪 *Unit*: ${
-      unit ? unit.unitNumber : 'N/A'
-    }\n📅 *Lease Start*: ${tenant.lease_start}\n💵 *Deposit*: ${
-      tenant.deposit
-    }\n💰 *Rent Amount*: ${tenant.rent_amount}\n━━━━━━━━━━━━━━━`;
-  }
-  // First try to send the image message with caption
-  await sendImageMessage(phoneNumber, imageUrl, caption);
-  // Also send a text message so the summary is clearly visible
-  await sendMessage(phoneNumber, caption);
-}
-
-// Sends an interactive image upload option
-async function sendImageOption(phoneNumber, type, entityId) {
-  const buttonMenu = {
-    messaging_product: 'whatsapp',
-    to: phoneNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      header: {
-        type: 'text',
-        text: `📸 Add Image to ${type.charAt(0).toUpperCase() + type.slice(1)}`,
-      },
-      body: { text: `Would you like to upload an image for this ${type}?` },
-      action: {
-        buttons: [
-          {
-            type: 'reply',
-            reply: { id: `upload_${type}_${entityId}`, title: 'Yes' },
-          },
-          {
-            type: 'reply',
-            reply: { id: `no_upload_${type}_${entityId}`, title: 'No' },
-          },
-        ],
-      },
-    },
-  };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-  });
-}
-
-// Basic validation functions
-function isValidName(name) {
-  const regex = /^[a-zA-Z0-9 ]+$/;
-  return (
-    typeof name === 'string' &&
-    name.trim().length > 0 &&
-    name.length <= 40 &&
-    regex.test(name)
-  );
-}
-
-function isValidAddress(address) {
-  const regex = /^[a-zA-Z0-9 ]+$/;
-  return (
-    typeof address === 'string' &&
-    address.trim().length > 0 &&
-    address.length <= 40 &&
-    regex.test(address)
-  );
-}
-
-function isValidUnits(units) {
-  const num = parseInt(units);
-  return !isNaN(num) && num > 0 && Number.isInteger(num);
-}
-
-function isValidTotalAmount(amount) {
-  const num = parseFloat(amount);
-  return !isNaN(num) && num > 0;
-}
-
-function isValidDate(dateStr) {
-  const regex = /^(\d{2})-(\d{2})-(\d{4})$/;
-  if (!regex.test(dateStr)) return false;
-  const [day, month, year] = dateStr.split('-').map(Number);
-  const date = new Date(year, month - 1, day);
-  return (
-    date.getDate() === day &&
-    date.getMonth() === month - 1 &&
-    date.getFullYear() === year
-  );
-}
-
+// GET for webhook verification
 router.get('/', (req, res) => {
   const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
   const mode = req.query['hub.mode'];
@@ -531,15 +327,15 @@ router.post('/', async (req, res) => {
             : '⚠️ *No Account Found* \nNo account information is available for this number.';
           await sendMessage(fromNumber, accountInfoMessage);
         } else if (selectedOption === 'manage') {
-          await sendManageSubmenu(fromNumber);
+          await menuHelpers.sendManageSubmenu(fromNumber);
         } else if (selectedOption === 'tools') {
-          await sendToolsSubmenu(fromNumber);
+          await menuHelpers.sendToolsSubmenu(fromNumber);
         } else if (selectedOption === 'manage_properties') {
-          await sendPropertyOptions(fromNumber);
+          await menuHelpers.sendPropertyOptions(fromNumber);
         } else if (selectedOption === 'manage_units') {
-          await sendUnitOptions(fromNumber);
+          await menuHelpers.sendUnitOptions(fromNumber);
         } else if (selectedOption === 'manage_tenants') {
-          await sendTenantOptions(fromNumber);
+          await menuHelpers.sendTenantOptions(fromNumber);
         } else if (selectedOption === 'add_property') {
           await sendMessage(
             fromNumber,
@@ -558,7 +354,7 @@ router.post('/', async (req, res) => {
             sessions[fromNumber].properties = properties;
             sessions[fromNumber].userId = user._id;
             // Now we send chunked interactive lists of properties:
-            await sendPropertySelectionMenu(fromNumber, properties);
+            await menuHelpers.sendPropertySelectionMenu(fromNumber, properties);
             sessions[fromNumber].action = 'add_unit_select_property';
           }
         } else if (selectedOption === 'add_tenant') {
@@ -573,7 +369,7 @@ router.post('/', async (req, res) => {
             sessions[fromNumber].properties = properties;
             sessions[fromNumber].userId = user._id;
             // Now we send chunked interactive lists of properties:
-            await sendPropertySelectionMenu(fromNumber, properties);
+            await menuHelpers.sendPropertySelectionMenu(fromNumber, properties);
             sessions[fromNumber].action = 'add_tenant_select_property';
           }
         }
@@ -619,7 +415,7 @@ router.post('/', async (req, res) => {
                 sessions[fromNumber].action = null;
                 delete sessions[fromNumber].tenantData;
               } else {
-                await sendUnitSelectionMenu(fromNumber, units);
+                await menuHelpers.sendUnitSelectionMenu(fromNumber, units);
                 sessions[fromNumber].action = 'add_tenant_select_unit';
               }
             } else {
@@ -702,274 +498,28 @@ router.post('/', async (req, res) => {
   res.sendStatus(200);
 });
 
-/**
- * Sends one or more interactive lists of up to 10 properties each.
- * If `properties.length` > 10, we chunk into multiple messages.
- */
-async function sendPropertySelectionMenu(phoneNumber, properties) {
-  const chunks = chunkArray(properties, 10);
-
-  // For each chunk, send an interactive list message
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    const sectionTitle = `Properties ${i + 1}/${chunks.length}`;
-
-    // Build the rows for this chunk
-    const rows = chunk.map((prop) => ({
-      // Example row ID: "chunk0_<propertyId>"
-      id: `chunk${i}_${prop._id}`,
-      title: prop.name.slice(0, 24),
-      description: prop.address.slice(0, 72),
-    }));
-
-    const listMenu = {
-      messaging_product: 'whatsapp',
-      to: phoneNumber,
-      type: 'interactive',
-      interactive: {
-        type: 'list',
-        header: { type: 'text', text: '🏠 Select a Property' },
-        body: {
-          text:
-            chunks.length > 1
-              ? `Showing chunk ${i + 1}/${chunks.length} of your properties.`
-              : 'Please choose a property:',
-        },
-        footer: { text: `Chunk ${i + 1}/${chunks.length}` },
-        action: {
-          button: 'Select',
-          sections: [
-            {
-              title: sectionTitle,
-              rows: rows,
-            },
-          ],
-        },
-      },
-    };
-
-    // Send the interactive list
-    try {
-      await axios.post(WHATSAPP_API_URL, listMenu, {
-        headers: {
-          Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-      });
-    } catch (err) {
-      console.error('Error sending property chunk list:', err.response?.data || err);
-      // Fallback: send them as text if needed
-      let fallbackMsg = `🏠 *Select a Property (Chunk ${i + 1}/${
-        chunks.length
-      })*\n`;
-      chunk.forEach((p, index) => {
-        fallbackMsg += `${index + 1}. ${p.name} - ${p.address}\n`;
-      });
-      fallbackMsg += '\n[Please pick an item by name or ID]';
-      await sendMessage(phoneNumber, fallbackMsg);
-    }
+// Sends a summary message as both an image message (with caption) and a separate text message
+async function sendSummary(phoneNumber, type, entityId, imageUrl) {
+  let caption;
+  if (type === 'property') {
+    const property = await Property.findById(entityId);
+    caption = `✅ *Property Added*\n━━━━━━━━━━━━━━━\n🏠 *Name*: ${property.name}\n📍 *Address*: ${property.address}\n🚪 *Units*: ${property.units}\n💰 *Total Amount*: ${property.totalAmount}\n━━━━━━━━━━━━━━━`;
+  } else if (type === 'unit') {
+    const unit = await Unit.findById(entityId).populate('property');
+    caption = `✅ *Unit Added*\n━━━━━━━━━━━━━━━\n🏠 *Property*: ${unit.property.name}\n🚪 *Unit ID*: ${unit.unitNumber}\n💰 *Rent Amount*: ${unit.rentAmount}\n📏 *Floor*: ${unit.floor}\n📐 *Size*: ${unit.size}\n━━━━━━━━━━━━━━━`;
+  } else if (type === 'tenant') {
+    const tenant = await Tenant.findById(entityId);
+    const unit = await Unit.findById(tenant.unitAssigned);
+    caption = `✅ *Tenant Added*\n━━━━━━━━━━━━━━━\n👤 *Name*: ${tenant.name}\n🏠 *Property*: ${tenant.propertyName}\n🚪 *Unit*: ${
+      unit ? unit.unitNumber : 'N/A'
+    }\n📅 *Lease Start*: ${tenant.lease_start}\n💵 *Deposit*: ${
+      tenant.deposit
+    }\n💰 *Rent Amount*: ${tenant.rent_amount}\n━━━━━━━━━━━━━━━`;
   }
-}
-
-/**
- * Sends one or more interactive lists of up to 10 units each.
- */
-async function sendUnitSelectionMenu(phoneNumber, units) {
-  const chunks = chunkArray(units, 10);
-
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    const sectionTitle = `Units ${i + 1}/${chunks.length}`;
-
-    // Build the rows for this chunk
-    const rows = chunk.map((u) => ({
-      id: `chunk${i}_${u._id}`,
-      title: u.unitNumber.slice(0, 24),
-      description: `Floor: ${u.floor}`.slice(0, 72),
-    }));
-
-    const listMenu = {
-      messaging_product: 'whatsapp',
-      to: phoneNumber,
-      type: 'interactive',
-      interactive: {
-        type: 'list',
-        header: { type: 'text', text: '🚪 Select a Unit' },
-        body: {
-          text:
-            chunks.length > 1
-              ? `Showing chunk ${i + 1}/${chunks.length} of your units.`
-              : 'Please choose a unit:',
-        },
-        footer: { text: `Chunk ${i + 1}/${chunks.length}` },
-        action: {
-          button: 'Select',
-          sections: [
-            {
-              title: sectionTitle,
-              rows: rows,
-            },
-          ],
-        },
-      },
-    };
-
-    // Send the interactive list
-    try {
-      await axios.post(WHATSAPP_API_URL, listMenu, {
-        headers: {
-          Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-      });
-    } catch (err) {
-      console.error('Error sending unit chunk list:', err.response?.data || err);
-      // Fallback: send them as text if needed
-      let fallbackMsg = `🚪 *Select a Unit (Chunk ${i + 1}/${
-        chunks.length
-      })*\n`;
-      chunk.forEach((u, index) => {
-        fallbackMsg += `${index + 1}. ${u.unitNumber} - Floor: ${u.floor}\n`;
-      });
-      fallbackMsg += '\n[Please pick an item by name or ID]';
-      await sendMessage(phoneNumber, fallbackMsg);
-    }
-  }
-}
-
-// Submenu for Manage
-async function sendManageSubmenu(phoneNumber) {
-  const buttonMenu = {
-    messaging_product: 'whatsapp',
-    to: phoneNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      header: { type: 'text', text: '🛠️ Manage Options' },
-      body: { text: '*What would you like to manage?*' },
-      action: {
-        buttons: [
-          {
-            type: 'reply',
-            reply: { id: 'manage_properties', title: '🏠 Properties' },
-          },
-          { type: 'reply', reply: { id: 'manage_units', title: '🚪 Units' } },
-          { type: 'reply', reply: { id: 'manage_tenants', title: '👥 Tenants' } },
-        ],
-      },
-    },
-  };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-  });
-}
-
-// Submenu for Tools
-async function sendToolsSubmenu(phoneNumber) {
-  const buttonMenu = {
-    messaging_product: 'whatsapp',
-    to: phoneNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      header: { type: 'text', text: '🧰 Tools' },
-      body: { text: '*Select a tool:*' },
-      action: {
-        buttons: [
-          { type: 'reply', reply: { id: 'reports', title: '📊 Reports' } },
-          { type: 'reply', reply: { id: 'manage', title: '🔧 Maintenance' } },
-          { type: 'reply', reply: { id: 'info', title: 'ℹ️ Info' } },
-        ],
-      },
-    },
-  };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-  });
-}
-
-// Property management submenu
-async function sendPropertyOptions(phoneNumber) {
-  const buttonMenu = {
-    messaging_product: 'whatsapp',
-    to: phoneNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      header: { type: 'text', text: '🏠 Property Management' },
-      body: { text: '*Manage your properties:*' },
-      action: {
-        buttons: [
-          { type: 'reply', reply: { id: 'add_property', title: '➕ Add Property' } },
-          // You can add more property-related buttons here as needed...
-        ],
-      },
-    },
-  };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-  });
-}
-
-// Unit management submenu
-async function sendUnitOptions(phoneNumber) {
-  const buttonMenu = {
-    messaging_product: 'whatsapp',
-    to: phoneNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      header: { type: 'text', text: '🚪 Unit Management' },
-      body: { text: '*Manage your units:*' },
-      action: {
-        buttons: [
-          { type: 'reply', reply: { id: 'add_unit', title: '➕ Add Unit' } },
-          // You can add more unit-related buttons here as needed...
-        ],
-      },
-    },
-  };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-  });
-}
-
-// Tenant management submenu
-async function sendTenantOptions(phoneNumber) {
-  const buttonMenu = {
-    messaging_product: 'whatsapp',
-    to: phoneNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      header: { type: 'text', text: '👥 Tenant Management' },
-      body: { text: '*Manage your tenants:*' },
-      action: {
-        buttons: [
-          { type: 'reply', reply: { id: 'add_tenant', title: '➕ Add Tenant' } },
-          // You can add more tenant-related buttons here as needed...
-        ],
-      },
-    },
-  };
-  await axios.post(WHATSAPP_API_URL, buttonMenu, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-  });
+  // First try to send the image message with caption
+  await sendImageMessage(phoneNumber, imageUrl, caption);
+  // Also send a text message so the summary is clearly visible
+  await sendMessage(phoneNumber, caption);
 }
 
 module.exports = {
