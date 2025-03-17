@@ -45,7 +45,7 @@ function normalizePhoneNumber(number) {
   number = number.trim();
   // If number does not start with '+' assume it is an Indian number and prepend +91
   if (number[0] !== '+') {
-    return '+91' + number;
+    return '+' + number;
   }
   return number;
 }
@@ -208,6 +208,7 @@ async function processChatMessage(phoneNumber, message) {
   const normalizedPhone = normalizePhoneNumber(phoneNumber);
   try {
     const user = await User.findOne({ phoneNumber: normalizedPhone });
+    console.log(normalizedPhone);
     if (!user) {
       return "No user found with that phone number.";
     }
