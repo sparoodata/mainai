@@ -235,7 +235,11 @@ router.post('/', async (req, res) => {
         }
         // ======== Extended Add-Tenant Flow ========
         else if (sessions[fromNumber].action === 'add_tenant_fullName') {
-          sessions[fromNumber].tenantData = { fullName: text };
+          // Instead of overwriting tenantData, add the fullName property.
+          if (!sessions[fromNumber].tenantData) {
+            sessions[fromNumber].tenantData = {};
+          }
+          sessions[fromNumber].tenantData.fullName = text;
           await sendMessage(
             fromNumber,
             '📅 *Lease Start Date* \nWhen does the lease start? (e.g., DD-MM-YYYY)'
@@ -273,6 +277,16 @@ router.post('/', async (req, res) => {
         } else if (sessions[fromNumber].action === 'add_tenant_monthlyRent') {
           const rent = parseFloat(text);
           if (!isNaN(rent) && rent > 0) {
+            // Before creating the tenant, ensure that a unit has been selected.
+            if (!sessions[fromNumber].tenantData.unitAssigned) {
+              await sendMessage(
+                fromNumber,
+                '⚠️ *Error:* Unit not selected. Please select a valid unit for the tenant.'
+              );
+              // Optionally, set action back to unit selection if needed.
+              sessions[fromNumber].action = 'add_tenant_select_unit';
+              return res.sendStatus(200);
+            }
             const user = await User.findOne({ phoneNumber });
             const tenant = new Tenant({
               fullName: sessions[fromNumber].tenantData.fullName,
