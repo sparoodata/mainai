@@ -23,7 +23,7 @@ let userResponses = {};
 const chunkArray = require('../helpers/chunkArray');
 const { isValidName, isValidAddress, isValidUnits, isValidTotalAmount, isValidDate } = require('../helpers/validators');
 const { generateUnitId, generateTenantId } = require('../helpers/idGenerators');
-const { shortenUrl, sendMessage, sendImageMessage, sendImageOption } = require('../helpers/whatsapp');
+const { shortenUrl, sendMessage, sendImageMessage } = require('../helpers/whatsapp');
 const generateUploadToken = require('../helpers/uploadToken');
 const menuHelpers = require('../helpers/menuHelpers');
 
@@ -32,6 +32,107 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 // Helper: Check if a string is numeric
 function isNumeric(value) {
   return /^-?\d+$/.test(value);
+}
+
+/* 
+  NEW HELPER: Send a single interactive message with buttons for property selection.
+  (For simplicity, only the first three properties are shown.)
+*/
+async function sendPropertySelectionButtons(fromNumber, properties) {
+  const buttons = properties.slice(0, 3).map(prop => ({
+    type: 'reply',
+    reply: {
+      id: `prop_${prop._id}`,
+      title: prop.name
+    }
+  }));
+  const messageData = {
+    messaging_product: 'whatsapp',
+    to: fromNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '🏠 Select a Property' },
+      body: { text: 'Please select a property:' },
+      action: { buttons }
+    }
+  };
+  await axios.post(WHATSAPP_API_URL, messageData, {
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
+}
+
+/* 
+  NEW HELPER: Send a single interactive message with buttons for unit selection.
+  (For simplicity, only the first three units are shown.)
+*/
+async function sendUnitSelectionButtons(fromNumber, units) {
+  const buttons = units.slice(0, 3).map(unit => ({
+    type: 'reply',
+    reply: {
+      id: `unit_${unit._id}`,
+      title: unit.unitNumber
+    }
+  }));
+  const messageData = {
+    messaging_product: 'whatsapp',
+    to: fromNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '🚪 Select a Unit' },
+      body: { text: 'Please select a unit:' },
+      action: { buttons }
+    }
+  };
+  await axios.post(WHATSAPP_API_URL, messageData, {
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
+}
+
+/*
+  NEW HELPER: Send image upload option as an interactive message with a URL button.
+  The URL button uses a shortened (tinyURL) link.
+*/
+async function sendImageOptionButton(fromNumber, type, entityId) {
+  const token = await generateUploadToken(fromNumber, type, entityId);
+  const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/${type}/${entityId}?token=${token}`;
+  const shortUrl = await shortenUrl(imageUploadUrl);
+  
+  const messageData = {
+    messaging_product: 'whatsapp',
+    to: fromNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '📸 Upload Image' },
+      body: { text: 'Click the button below to upload an image (valid for 15 minutes):' },
+      action: {
+        buttons: [
+          {
+            type: 'url',
+            url: { title: 'Upload Image', url: shortUrl }
+          },
+          {
+            type: 'reply',
+            reply: { id: `no_upload_${type}_${entityId}`, title: 'No, Skip' }
+          }
+        ]
+      }
+    }
+  };
+  await axios.post(WHATSAPP_API_URL, messageData, {
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
 }
 
 // GET for webhook verification
@@ -94,15 +195,11 @@ router.post('/', async (req, res) => {
 
       // ======== Extended Add-Property Flow ========
       if (text) {
-        // If a "help" command is received, check the current action.
+        // Process "help" command only if not in a sensitive state.
         if (text.toLowerCase() === 'help') {
-          // If in a multi-step process (e.g., awaiting an image choice), ignore help.
           if (sessions[fromNumber].action === 'awaiting_image_choice') {
-            // Optionally, you can send a reminder message:
-            // await sendMessage(fromNumber, "You're in the middle of a process. Please complete it before using help.");
             return res.sendStatus(200);
           }
-          // Otherwise, process help normally.
           const buttonMenu = {
             messaging_product: 'whatsapp',
             to: fromNumber,
@@ -133,7 +230,7 @@ router.post('/', async (req, res) => {
           return res.sendStatus(200);
         }
 
-        // Continue with other flows
+        // Property creation steps
         if (sessions[fromNumber].action === 'add_property_name') {
           if (isValidName(text)) {
             sessions[fromNumber].propertyData = { name: text };
@@ -209,7 +306,6 @@ router.post('/', async (req, res) => {
         } else if (sessions[fromNumber].action === 'add_property_purchasePrice') {
           if (!isNaN(parseFloat(text)) && parseFloat(text) > 0) {
             sessions[fromNumber].propertyData.purchasePrice = parseFloat(text);
-            // Create the property using the extended data
             const user = await User.findOne({ phoneNumber });
             const property = new Property({
               name: sessions[fromNumber].propertyData.name,
@@ -229,13 +325,13 @@ router.post('/', async (req, res) => {
 
             sessions[fromNumber].entityType = 'property';
             sessions[fromNumber].entityId = property._id;
-            await sendImageOption(fromNumber, 'property', property._id);
+            await sendImageOptionButton(fromNumber, 'property', property._id);
             sessions[fromNumber].action = 'awaiting_image_choice';
           } else {
             await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease enter a valid purchase price.');
           }
         }
-        // ======== Add-Unit Flow (unchanged) ========
+        // ======== Add-Unit Flow ========
         else if (sessions[fromNumber].action === 'add_unit_rent') {
           const rent = parseFloat(text);
           if (!isNaN(rent) && rent > 0) {
@@ -259,7 +355,7 @@ router.post('/', async (req, res) => {
           const user = await User.findOne({ phoneNumber });
           const unit = new Unit({
             property: sessions[fromNumber].unitData.property,
-            unitNumber: sessions[fromNumber].unitData.unitNumber, // auto-generated earlier
+            unitNumber: sessions[fromNumber].unitData.unitNumber,
             rentAmount: sessions[fromNumber].unitData.rentAmount,
             floor: sessions[fromNumber].unitData.floor,
             size: text,
@@ -268,12 +364,11 @@ router.post('/', async (req, res) => {
           await unit.save();
           sessions[fromNumber].entityType = 'unit';
           sessions[fromNumber].entityId = unit._id;
-          await sendImageOption(fromNumber, 'unit', unit._id);
+          await sendImageOptionButton(fromNumber, 'unit', unit._id);
           sessions[fromNumber].action = 'awaiting_image_choice';
         }
         // ======== Extended Add-Tenant Flow ========
         else if (sessions[fromNumber].action === 'add_tenant_fullName') {
-          // Preserve existing tenantData instead of overwriting
           if (!sessions[fromNumber].tenantData) {
             sessions[fromNumber].tenantData = {};
           }
@@ -315,7 +410,6 @@ router.post('/', async (req, res) => {
         } else if (sessions[fromNumber].action === 'add_tenant_monthlyRent') {
           const rent = parseFloat(text);
           if (!isNaN(rent) && rent > 0) {
-            // Before creating the tenant, ensure that a unit has been selected.
             if (!sessions[fromNumber].tenantData.unitAssigned) {
               await sendMessage(
                 fromNumber,
@@ -334,12 +428,13 @@ router.post('/', async (req, res) => {
               leaseStartDate: sessions[fromNumber].tenantData.leaseStartDate,
               depositAmount: sessions[fromNumber].tenantData.depositAmount,
               monthlyRent: rent,
-              tenant_id: generateTenantId(),
+              tenantId: generateTenantId(),
             });
             await tenant.save();
             sessions[fromNumber].entityType = 'tenant';
             sessions[fromNumber].entityId = tenant._id;
-            await sendImageOption(fromNumber, 'tenant', tenant._id);
+            sessions[fromNumber].summarySent = false;
+            await sendImageOptionButton(fromNumber, 'tenant', tenant._id);
             sessions[fromNumber].action = 'awaiting_image_choice';
           } else {
             await sendMessage(
@@ -364,10 +459,10 @@ router.post('/', async (req, res) => {
 ✅ *Verified*: ${user.verified ? 'Yes' : 'No'}
 🧑 *Profile Name*: ${user.profileName || 'N/A'}
 📅 *Registration Date*: ${
-                user.registrationDate
-                  ? user.registrationDate.toLocaleDateString()
-                  : 'N/A'
-              }
+              user.registrationDate
+                ? user.registrationDate.toLocaleDateString()
+                : 'N/A'
+            }
 💰 *Subscription*: ${user.subscription}
 ━━━━━━━━━━━━━━━
             `
@@ -400,7 +495,7 @@ router.post('/', async (req, res) => {
           } else {
             sessions[fromNumber].properties = properties;
             sessions[fromNumber].userId = user._id;
-            await menuHelpers.sendPropertySelectionMenu(fromNumber, properties);
+            await sendPropertySelectionButtons(fromNumber, properties);
             sessions[fromNumber].action = 'add_unit_select_property';
           }
         } else if (selectedOption === 'add_tenant') {
@@ -414,14 +509,14 @@ router.post('/', async (req, res) => {
           } else {
             sessions[fromNumber].properties = properties;
             sessions[fromNumber].userId = user._id;
-            await menuHelpers.sendPropertySelectionMenu(fromNumber, properties);
+            await sendPropertySelectionButtons(fromNumber, properties);
             sessions[fromNumber].action = 'add_tenant_select_property';
           }
         }
-        // Handle property selection from chunked lists (for adding a Unit)
+        // Handle property selection for Unit creation
         else if (sessions[fromNumber].action === 'add_unit_select_property') {
-          if (selectedOption.startsWith('chunk')) {
-            const [chunkTag, propertyId] = selectedOption.split('_');
+          if (selectedOption.startsWith('prop_')) {
+            const propertyId = selectedOption.split('_')[1];
             const foundProperty = await Property.findById(propertyId);
             if (foundProperty) {
               sessions[fromNumber].unitData = { property: foundProperty._id };
@@ -439,10 +534,10 @@ router.post('/', async (req, res) => {
             }
           }
         }
-        // Handle property selection from chunked lists (for adding a Tenant)
+        // Handle property selection for Tenant creation
         else if (sessions[fromNumber].action === 'add_tenant_select_property') {
-          if (selectedOption.startsWith('chunk')) {
-            const [chunkTag, propertyId] = selectedOption.split('_');
+          if (selectedOption.startsWith('prop_')) {
+            const propertyId = selectedOption.split('_')[1];
             const foundProperty = await Property.findById(propertyId);
             if (foundProperty) {
               sessions[fromNumber].tenantData = {
@@ -458,7 +553,7 @@ router.post('/', async (req, res) => {
                 sessions[fromNumber].action = null;
                 delete sessions[fromNumber].tenantData;
               } else {
-                await menuHelpers.sendUnitSelectionMenu(fromNumber, units);
+                await sendUnitSelectionButtons(fromNumber, units);
                 sessions[fromNumber].action = 'add_tenant_select_unit';
               }
             } else {
@@ -469,10 +564,10 @@ router.post('/', async (req, res) => {
             }
           }
         }
-        // Handle unit selection from chunked lists (for adding a Tenant)
+        // Handle unit selection for Tenant creation
         else if (sessions[fromNumber].action === 'add_tenant_select_unit') {
-          if (selectedOption.startsWith('chunk')) {
-            const [chunkTag, unitId] = selectedOption.split('_');
+          if (selectedOption.startsWith('unit_')) {
+            const unitId = selectedOption.split('_')[1];
             const foundUnit = await Unit.findById(unitId).populate('property');
             if (foundUnit) {
               sessions[fromNumber].tenantData.unitAssigned = foundUnit._id;
@@ -497,10 +592,34 @@ router.post('/', async (req, res) => {
             const token = await generateUploadToken(phoneNumber, type, entityId);
             const imageUploadUrl = `${GLITCH_HOST}/upload-image/${phoneNumber}/${type}/${entityId}?token=${token}`;
             const shortUrl = await shortenUrl(imageUploadUrl);
-            await sendMessage(
-              fromNumber,
-              `Please upload the image here (valid for 15 minutes): ${shortUrl}`
-            );
+            const messageData = {
+              messaging_product: 'whatsapp',
+              to: fromNumber,
+              type: 'interactive',
+              interactive: {
+                type: 'button',
+                header: { type: 'text', text: '📸 Upload Image' },
+                body: { text: 'Click the button below to upload an image (valid for 15 minutes):' },
+                action: {
+                  buttons: [
+                    {
+                      type: 'url',
+                      url: { title: 'Upload Image', url: shortUrl }
+                    },
+                    {
+                      type: 'reply',
+                      reply: { id: `no_upload_tenant_${sessions[fromNumber].entityId}`, title: 'No, Skip' }
+                    }
+                  ]
+                }
+              }
+            };
+            await axios.post(WHATSAPP_API_URL, messageData, {
+              headers: {
+                Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json'
+              }
+            });
             sessions[fromNumber].action = null;
             delete sessions[fromNumber].entityType;
             delete sessions[fromNumber].entityId;
@@ -510,24 +629,33 @@ router.post('/', async (req, res) => {
               const property = await Property.findById(entityId);
               property.images.push(DEFAULT_IMAGE_URL);
               await property.save();
-              await sendSummary(fromNumber, 'property', entityId, DEFAULT_IMAGE_URL);
+              if (!sessions[fromNumber].summarySent) {
+                sessions[fromNumber].summarySent = true;
+                await sendSummary(fromNumber, 'property', entityId, DEFAULT_IMAGE_URL);
+              }
             } else if (type === 'unit') {
               const unit = await Unit.findById(entityId);
               unit.images.push(DEFAULT_IMAGE_URL);
               await unit.save();
-              await sendSummary(fromNumber, 'unit', entityId, DEFAULT_IMAGE_URL);
+              if (!sessions[fromNumber].summarySent) {
+                sessions[fromNumber].summarySent = true;
+                await sendSummary(fromNumber, 'unit', entityId, DEFAULT_IMAGE_URL);
+              }
             } else if (type === 'tenant') {
               const tenant = await Tenant.findById(entityId);
               tenant.photo = DEFAULT_IMAGE_URL;
               await tenant.save();
-              await sendSummary(fromNumber, 'tenant', entityId, DEFAULT_IMAGE_URL);
+              if (!sessions[fromNumber].summarySent) {
+                sessions[fromNumber].summarySent = true;
+                await sendSummary(fromNumber, 'tenant', entityId, DEFAULT_IMAGE_URL);
+              }
             }
             sessions[fromNumber].action = null;
             delete sessions[fromNumber].entityType;
             delete sessions[fromNumber].entityId;
           }
         }
-        // Clear the user response so it doesn't interfere later
+        // Clear user response after processing
         delete userResponses[fromNumber];
       }
     }
@@ -535,7 +663,7 @@ router.post('/', async (req, res) => {
   res.sendStatus(200);
 });
 
-// Sends a summary message as both an image message (with caption) and a text message
+// Sends a summary message as both an image message and a text message
 async function sendSummary(phoneNumber, type, entityId, imageUrl) {
   let caption;
   if (type === 'property') {
