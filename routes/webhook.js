@@ -34,58 +34,35 @@ function isNumeric(value) {
   return /^-?\d+$/.test(value);
 }
 
-/* 
-  NEW HELPER: Send a single interactive message with buttons for property selection.
-  (For simplicity, only the first three properties are shown.)
+/*
+  NEW HELPER: Send an interactive list for property selection.
+  This sends one interactive list message with one section containing rows for each property.
 */
-async function sendPropertySelectionButtons(fromNumber, properties) {
-  const buttons = properties.slice(0, 3).map(prop => ({
-    type: 'reply',
-    reply: {
-      id: `prop_${prop._id}`,
-      title: prop.name
-    }
+async function sendPropertySelectionList(fromNumber, properties) {
+  // Create a row for each property.
+  const rows = properties.map(prop => ({
+    id: `prop_${prop._id}`,
+    title: prop.name,
+    description: prop.address ? prop.address : ''
   }));
   const messageData = {
     messaging_product: 'whatsapp',
     to: fromNumber,
     type: 'interactive',
     interactive: {
-      type: 'button',
+      type: 'list',
       header: { type: 'text', text: '🏠 Select a Property' },
-      body: { text: 'Please select a property:' },
-      action: { buttons }
-    }
-  };
-  await axios.post(WHATSAPP_API_URL, messageData, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json'
-    }
-  });
-}
-
-/* 
-  NEW HELPER: Send a single interactive message with buttons for unit selection.
-  (For simplicity, only the first three units are shown.)
-*/
-async function sendUnitSelectionButtons(fromNumber, units) {
-  const buttons = units.slice(0, 3).map(unit => ({
-    type: 'reply',
-    reply: {
-      id: `unit_${unit._id}`,
-      title: unit.unitNumber
-    }
-  }));
-  const messageData = {
-    messaging_product: 'whatsapp',
-    to: fromNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      header: { type: 'text', text: '🚪 Select a Unit' },
-      body: { text: 'Please select a unit:' },
-      action: { buttons }
+      body: { text: 'Please select a property from the list below:' },
+      footer: { text: 'Powered by Your Rental App' },
+      action: {
+        button: 'View Properties',
+        sections: [
+          {
+            title: 'Properties',
+            rows: rows
+          }
+        ]
+      }
     }
   };
   await axios.post(WHATSAPP_API_URL, messageData, {
@@ -97,28 +74,66 @@ async function sendUnitSelectionButtons(fromNumber, units) {
 }
 
 /*
-  NEW HELPER: Send image upload option as an interactive message with a URL button.
-  The URL button uses a shortened (tinyURL) link.
+  NEW HELPER: Send an interactive list for unit selection.
+  This sends one interactive list message with one section containing rows for each unit.
+*/
+async function sendUnitSelectionList(fromNumber, units) {
+  const rows = units.map(unit => ({
+    id: `unit_${unit._id}`,
+    title: unit.unitNumber,
+    description: `Floor: ${unit.floor}`
+  }));
+  const messageData = {
+    messaging_product: 'whatsapp',
+    to: fromNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'list',
+      header: { type: 'text', text: '🚪 Select a Unit' },
+      body: { text: 'Please select a unit from the list below:' },
+      footer: { text: 'Powered by Your Rental App' },
+      action: {
+        button: 'View Units',
+        sections: [
+          {
+            title: 'Units',
+            rows: rows
+          }
+        ]
+      }
+    }
+  };
+  await axios.post(WHATSAPP_API_URL, messageData, {
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
+}
+
+/*
+  NEW HELPER: Send image upload option.
+  First, sends the tinyURL link as a text message, then sends an interactive message with a reply button to skip.
 */
 async function sendImageOptionButton(fromNumber, type, entityId) {
   const token = await generateUploadToken(fromNumber, type, entityId);
   const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/${type}/${entityId}?token=${token}`;
   const shortUrl = await shortenUrl(imageUploadUrl);
   
+  // Send the link as a text message
+  await sendMessage(fromNumber, `Please upload the image here (valid for 15 minutes): ${shortUrl}`);
+  
+  // Then send an interactive message with a skip button.
   const messageData = {
     messaging_product: 'whatsapp',
     to: fromNumber,
     type: 'interactive',
     interactive: {
       type: 'button',
-      header: { type: 'text', text: '📸 Upload Image' },
-      body: { text: 'Click the button below to upload an image (valid for 15 minutes):' },
+      header: { type: 'text', text: 'Image Upload Option' },
+      body: { text: 'If you wish to skip uploading an image, tap the button below:' },
       action: {
         buttons: [
-          {
-            type: 'url',
-            url: { title: 'Upload Image', url: shortUrl }
-          },
           {
             type: 'reply',
             reply: { id: `no_upload_${type}_${entityId}`, title: 'No, Skip' }
@@ -213,7 +228,7 @@ router.post('/', async (req, res) => {
                 buttons: [
                   { type: 'reply', reply: { id: 'account_info', title: '👤 Account Info' } },
                   { type: 'reply', reply: { id: 'manage', title: '🛠️ Manage' } },
-                  { type: 'reply', reply: { id: 'tools', title: '🧰 Tools' } },
+                  { type: 'reply', reply: { id: 'tools', title: '🧰 Tools' } }
                 ]
               }
             }
@@ -221,13 +236,13 @@ router.post('/', async (req, res) => {
           await axios.post(WHATSAPP_API_URL, buttonMenu, {
             headers: {
               Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-              'Content-Type': 'application/json',
+              'Content-Type': 'application/json'
             }
           });
           return res.sendStatus(200);
         }
 
-        // Property creation steps
+        // Property creation steps (unchanged)
         if (sessions[fromNumber].action === 'add_property_name') {
           if (isValidName(text)) {
             sessions[fromNumber].propertyData = { name: text };
@@ -442,7 +457,7 @@ router.post('/', async (req, res) => {
           } else {
             sessions[fromNumber].properties = properties;
             sessions[fromNumber].userId = user._id;
-            await sendPropertySelectionButtons(fromNumber, properties);
+            await sendPropertySelectionList(fromNumber, properties);
             sessions[fromNumber].action = 'add_unit_select_property';
           }
         } else if (selectedOption === 'add_tenant') {
@@ -453,11 +468,11 @@ router.post('/', async (req, res) => {
           } else {
             sessions[fromNumber].properties = properties;
             sessions[fromNumber].userId = user._id;
-            await sendPropertySelectionButtons(fromNumber, properties);
+            await sendPropertySelectionList(fromNumber, properties);
             sessions[fromNumber].action = 'add_tenant_select_property';
           }
         }
-        // Handle property selection for Unit creation
+        // Handle property selection for Unit creation (interactive list reply)
         else if (sessions[fromNumber].action === 'add_unit_select_property') {
           if (selectedOption.startsWith('prop_')) {
             const propertyId = selectedOption.split('_')[1];
@@ -473,7 +488,7 @@ router.post('/', async (req, res) => {
             }
           }
         }
-        // Handle property selection for Tenant creation
+        // Handle property selection for Tenant creation (interactive list reply)
         else if (sessions[fromNumber].action === 'add_tenant_select_property') {
           if (selectedOption.startsWith('prop_')) {
             const propertyId = selectedOption.split('_')[1];
@@ -489,7 +504,7 @@ router.post('/', async (req, res) => {
                 sessions[fromNumber].action = null;
                 delete sessions[fromNumber].tenantData;
               } else {
-                await sendUnitSelectionButtons(fromNumber, units);
+                await sendUnitSelectionList(fromNumber, units);
                 sessions[fromNumber].action = 'add_tenant_select_unit';
               }
             } else {
@@ -497,7 +512,7 @@ router.post('/', async (req, res) => {
             }
           }
         }
-        // Handle unit selection for Tenant creation
+        // Handle unit selection for Tenant creation (interactive list reply)
         else if (sessions[fromNumber].action === 'add_tenant_select_unit') {
           if (selectedOption.startsWith('unit_')) {
             const unitId = selectedOption.split('_')[1];
@@ -519,28 +534,7 @@ router.post('/', async (req, res) => {
             const token = await generateUploadToken(phoneNumber, type, entityId);
             const imageUploadUrl = `${GLITCH_HOST}/upload-image/${phoneNumber}/${type}/${entityId}?token=${token}`;
             const shortUrl = await shortenUrl(imageUploadUrl);
-            const messageData = {
-              messaging_product: 'whatsapp',
-              to: fromNumber,
-              type: 'interactive',
-              interactive: {
-                type: 'button',
-                header: { type: 'text', text: '📸 Upload Image' },
-                body: { text: 'Click the button below to upload an image (valid for 15 minutes):' },
-                action: {
-                  buttons: [
-                    { type: 'url', url: { title: 'Upload Image', url: shortUrl } },
-                    { type: 'reply', reply: { id: `no_upload_tenant_${sessions[fromNumber].entityId}`, title: 'No, Skip' } }
-                  ]
-                }
-              }
-            };
-            await axios.post(WHATSAPP_API_URL, messageData, {
-              headers: {
-                Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                'Content-Type': 'application/json'
-              }
-            });
+            await sendMessage(fromNumber, `Please upload the image here (valid for 15 minutes): ${shortUrl}`);
             sessions[fromNumber].action = null;
             delete sessions[fromNumber].entityType;
             delete sessions[fromNumber].entityId;
