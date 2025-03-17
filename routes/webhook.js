@@ -35,95 +35,109 @@ function isNumeric(value) {
 }
 
 /*
-  NEW HELPER: Send an interactive list for property selection.
-  This sends one interactive list message with one section containing rows for each property.
+  Helper: Send an interactive list for property selection.
+  The properties array is split into chunks of up to 10.
+  The first list includes full header, body, and footer text;
+  subsequent lists are labeled "Property list #2", etc.
 */
-async function sendPropertySelectionList(fromNumber, properties) {
-  // Create a row for each property.
-  const rows = properties.map(prop => ({
-    id: `prop_${prop._id}`,
-    title: prop.name,
-    description: prop.address ? prop.address : ''
-  }));
-  const messageData = {
-    messaging_product: 'whatsapp',
-    to: fromNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'list',
-      header: { type: 'text', text: '🏠 Select a Property' },
-      body: { text: 'Please select a property from the list below:' },
-      footer: { text: 'Powered by Your Rental App' },
-      action: {
-        button: 'View Properties',
-        sections: [
-          {
-            title: 'Properties',
-            rows: rows
-          }
-        ]
+async function sendPropertySelectionLists(fromNumber, properties) {
+  const chunks = chunkArray(properties, 10);
+  for (let i = 0; i < chunks.length; i++) {
+    const rows = chunks[i].map(prop => ({
+      id: `prop_${prop._id}`,
+      title: prop.name,
+      description: prop.address ? prop.address : ''
+    }));
+    // Always supply a body text (WhatsApp requires it)
+    const headerText = i === 0 ? '🏠 Select a Property' : `Property list #${i + 1}`;
+    const bodyText = i === 0 ? 'Please select a property from the list below:' : 'Select a property:';
+    const footerText = i === 0 ? 'Powered by Your Rental App' : '';
+    const actionButton = i === 0 ? 'View Properties' : 'View More';
+    const messageData = {
+      messaging_product: 'whatsapp',
+      to: fromNumber,
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        header: { type: 'text', text: headerText },
+        body: { text: bodyText },
+        footer: { text: footerText },
+        action: {
+          button: actionButton,
+          sections: [
+            {
+              title: 'Properties',
+              rows: rows
+            }
+          ]
+        }
       }
-    }
-  };
-  await axios.post(WHATSAPP_API_URL, messageData, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json'
-    }
-  });
+    };
+    await axios.post(WHATSAPP_API_URL, messageData, {
+      headers: {
+        Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+  }
 }
 
 /*
-  NEW HELPER: Send an interactive list for unit selection.
-  This sends one interactive list message with one section containing rows for each unit.
+  Helper: Send an interactive list for unit selection.
+  Splits the units array into chunks of up to 10.
 */
-async function sendUnitSelectionList(fromNumber, units) {
-  const rows = units.map(unit => ({
-    id: `unit_${unit._id}`,
-    title: unit.unitNumber,
-    description: `Floor: ${unit.floor}`
-  }));
-  const messageData = {
-    messaging_product: 'whatsapp',
-    to: fromNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'list',
-      header: { type: 'text', text: '🚪 Select a Unit' },
-      body: { text: 'Please select a unit from the list below:' },
-      footer: { text: 'Powered by Your Rental App' },
-      action: {
-        button: 'View Units',
-        sections: [
-          {
-            title: 'Units',
-            rows: rows
-          }
-        ]
+async function sendUnitSelectionLists(fromNumber, units) {
+  const chunks = chunkArray(units, 10);
+  for (let i = 0; i < chunks.length; i++) {
+    const rows = chunks[i].map(unit => ({
+      id: `unit_${unit._id}`,
+      title: unit.unitNumber,
+      description: `Floor: ${unit.floor}`
+    }));
+    const headerText = i === 0 ? '🚪 Select a Unit' : `Unit list #${i + 1}`;
+    const bodyText = i === 0 ? 'Please select a unit from the list below:' : 'Select a unit:';
+    const footerText = i === 0 ? 'Powered by Your Rental App' : '';
+    const actionButton = i === 0 ? 'View Units' : 'View More';
+    const messageData = {
+      messaging_product: 'whatsapp',
+      to: fromNumber,
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        header: { type: 'text', text: headerText },
+        body: { text: bodyText },
+        footer: { text: footerText },
+        action: {
+          button: actionButton,
+          sections: [
+            {
+              title: 'Units',
+              rows: rows
+            }
+          ]
+        }
       }
-    }
-  };
-  await axios.post(WHATSAPP_API_URL, messageData, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json'
-    }
-  });
+    };
+    await axios.post(WHATSAPP_API_URL, messageData, {
+      headers: {
+        Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+  }
 }
 
 /*
-  NEW HELPER: Send image upload option.
-  First, sends the tinyURL link as a text message, then sends an interactive message with a reply button to skip.
+  Helper: Send image upload option.
+  First, sends the tinyURL link as a text message; then sends an interactive message with a skip button.
 */
 async function sendImageOptionButton(fromNumber, type, entityId) {
   const token = await generateUploadToken(fromNumber, type, entityId);
   const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/${type}/${entityId}?token=${token}`;
   const shortUrl = await shortenUrl(imageUploadUrl);
-  
-  // Send the link as a text message
+  // Send clickable link as text
   await sendMessage(fromNumber, `Please upload the image here (valid for 15 minutes): ${shortUrl}`);
-  
-  // Then send an interactive message with a skip button.
+  // Send an interactive message with a skip button
   const messageData = {
     messaging_product: 'whatsapp',
     to: fromNumber,
@@ -156,7 +170,6 @@ router.get('/', (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
-
   if (mode && token && mode === 'subscribe' && token === VERIFY_TOKEN) {
     console.log('Webhook verified successfully');
     return res.status(200).send(challenge);
@@ -167,7 +180,6 @@ router.get('/', (req, res) => {
 // Main webhook POST handler
 router.post('/', async (req, res) => {
   const body = req.body;
-
   if (body.object === 'whatsapp_business_account') {
     const entry = body.entry[0];
     const changes = entry.changes[0];
@@ -178,9 +190,8 @@ router.post('/', async (req, res) => {
       const contact = value.contacts[0];
       const contactPhoneNumber = `+${contact.wa_id}`;
       const profileName = contact.profile.name;
-      const user =
-        (await User.findOne({ phoneNumber: contactPhoneNumber })) ||
-        new User({ phoneNumber: contactPhoneNumber });
+      const user = (await User.findOne({ phoneNumber: contactPhoneNumber })) ||
+                   new User({ phoneNumber: contactPhoneNumber });
       user.profileName = profileName || user.profileName;
       await user.save();
     }
@@ -208,9 +219,9 @@ router.post('/', async (req, res) => {
         sessions[fromNumber] = { action: null };
       }
 
-      // ======== Extended Add-Property Flow ========
+      // ----- Process Text Commands -----
       if (text) {
-        // Process "help" command only if not in a sensitive state.
+        // "help" command
         if (text.toLowerCase() === 'help') {
           if (sessions[fromNumber].action === 'awaiting_image_choice') {
             return res.sendStatus(200);
@@ -241,8 +252,8 @@ router.post('/', async (req, res) => {
           });
           return res.sendStatus(200);
         }
-
-        // Property creation steps (unchanged)
+        
+        // Property creation flow (unchanged)...
         if (sessions[fromNumber].action === 'add_property_name') {
           if (isValidName(text)) {
             sessions[fromNumber].propertyData = { name: text };
@@ -328,7 +339,7 @@ router.post('/', async (req, res) => {
             await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease enter a valid purchase price.');
           }
         }
-        // ======== Add-Unit Flow ========
+        // ----- Add-Unit Flow -----
         else if (sessions[fromNumber].action === 'add_unit_rent') {
           const rent = parseFloat(text);
           if (!isNaN(rent) && rent > 0) {
@@ -344,8 +355,7 @@ router.post('/', async (req, res) => {
           sessions[fromNumber].action = 'add_unit_size';
         } else if (sessions[fromNumber].action === 'add_unit_size') {
           const user = await User.findOne({ phoneNumber });
-          // Use the previously generated unitNumber for both unitId and unitNumber
-          const generatedUnitId = sessions[fromNumber].unitData.unitNumber;
+          const generatedUnitId = sessions[fromNumber].unitData.unitNumber; // already generated
           const unit = new Unit({
             unitId: generatedUnitId,
             property: sessions[fromNumber].unitData.property,
@@ -361,7 +371,7 @@ router.post('/', async (req, res) => {
           await sendImageOptionButton(fromNumber, 'unit', unit._id);
           sessions[fromNumber].action = 'awaiting_image_choice';
         }
-        // ======== Extended Add-Tenant Flow ========
+        // ----- Extended Add-Tenant Flow -----
         else if (sessions[fromNumber].action === 'add_tenant_fullName') {
           if (!sessions[fromNumber].tenantData) {
             sessions[fromNumber].tenantData = {};
@@ -418,10 +428,9 @@ router.post('/', async (req, res) => {
         }
       }
 
-      // Handle interactive replies (button or list)
+      // ----- Handle Interactive Replies -----
       if (interactive && userResponses[fromNumber]) {
         const selectedOption = userResponses[fromNumber];
-
         if (selectedOption === 'account_info') {
           const user = await User.findOne({ phoneNumber });
           const accountInfoMessage = user
@@ -457,7 +466,7 @@ router.post('/', async (req, res) => {
           } else {
             sessions[fromNumber].properties = properties;
             sessions[fromNumber].userId = user._id;
-            await sendPropertySelectionList(fromNumber, properties);
+            await sendPropertySelectionLists(fromNumber, properties);
             sessions[fromNumber].action = 'add_unit_select_property';
           }
         } else if (selectedOption === 'add_tenant') {
@@ -468,18 +477,17 @@ router.post('/', async (req, res) => {
           } else {
             sessions[fromNumber].properties = properties;
             sessions[fromNumber].userId = user._id;
-            await sendPropertySelectionList(fromNumber, properties);
+            await sendPropertySelectionLists(fromNumber, properties);
             sessions[fromNumber].action = 'add_tenant_select_property';
           }
         }
-        // Handle property selection for Unit creation (interactive list reply)
+        // Property selection for Unit creation (list reply)
         else if (sessions[fromNumber].action === 'add_unit_select_property') {
           if (selectedOption.startsWith('prop_')) {
             const propertyId = selectedOption.split('_')[1];
             const foundProperty = await Property.findById(propertyId);
             if (foundProperty) {
               sessions[fromNumber].unitData = { property: foundProperty._id };
-              // Generate unit ID and store it for both unitId and unitNumber
               sessions[fromNumber].unitData.unitNumber = generateUnitId();
               await sendMessage(fromNumber, `Unit ID generated: ${sessions[fromNumber].unitData.unitNumber}. Please provide the rent amount for this unit.`);
               sessions[fromNumber].action = 'add_unit_rent';
@@ -488,12 +496,18 @@ router.post('/', async (req, res) => {
             }
           }
         }
-        // Handle property selection for Tenant creation (interactive list reply)
+        // Property selection for Tenant creation (list reply)
         else if (sessions[fromNumber].action === 'add_tenant_select_property') {
           if (selectedOption.startsWith('prop_')) {
             const propertyId = selectedOption.split('_')[1];
             const foundProperty = await Property.findById(propertyId);
             if (foundProperty) {
+              // Check if the property is fully occupied.
+              const unitCount = await Unit.countDocuments({ property: foundProperty._id });
+              if (foundProperty.totalUnits && unitCount >= foundProperty.totalUnits) {
+                await sendMessage(fromNumber, '⚠️ *Property Full* \nThis property is fully occupied. Please select a different property.');
+                return res.sendStatus(200);
+              }
               sessions[fromNumber].tenantData = {
                 propertyId: foundProperty._id,
                 propertyName: foundProperty.name,
@@ -504,7 +518,7 @@ router.post('/', async (req, res) => {
                 sessions[fromNumber].action = null;
                 delete sessions[fromNumber].tenantData;
               } else {
-                await sendUnitSelectionList(fromNumber, units);
+                await sendUnitSelectionLists(fromNumber, units);
                 sessions[fromNumber].action = 'add_tenant_select_unit';
               }
             } else {
@@ -512,7 +526,7 @@ router.post('/', async (req, res) => {
             }
           }
         }
-        // Handle unit selection for Tenant creation (interactive list reply)
+        // Unit selection for Tenant creation (list reply)
         else if (sessions[fromNumber].action === 'add_tenant_select_unit') {
           if (selectedOption.startsWith('unit_')) {
             const unitId = selectedOption.split('_')[1];
@@ -527,7 +541,7 @@ router.post('/', async (req, res) => {
             }
           }
         }
-        // Handle image upload choice
+        // Image upload choice
         else if (sessions[fromNumber].action === 'awaiting_image_choice') {
           if (selectedOption.startsWith('upload_')) {
             const [, type, entityId] = selectedOption.split('_');
@@ -570,7 +584,7 @@ router.post('/', async (req, res) => {
             delete sessions[fromNumber].entityId;
           }
         }
-        // Clear user response after processing
+        // Clear user response
         delete userResponses[fromNumber];
       }
     }
@@ -578,7 +592,7 @@ router.post('/', async (req, res) => {
   res.sendStatus(200);
 });
 
-// Sends a summary message as both an image message and a text message
+// Sends a summary message as both an image and text message
 async function sendSummary(phoneNumber, type, entityId, imageUrl) {
   let caption;
   if (type === 'property') {
