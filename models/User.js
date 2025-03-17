@@ -25,11 +25,11 @@ const userSchema = new mongoose.Schema({
     type: Boolean, 
     default: false 
   },
-  // The subscription plan (e.g., "free", "premium", "enterprise")
+  // The subscription plan (e.g., "Free", "Premium", "Enterprise")
   subscription: { 
     type: String, 
-    default: 'free',
-    enum: ['free', 'premium', 'enterprise']
+    default: 'Free',
+    enum: ['Free', 'Premium', 'Enterprise']
   },
   // The date when the user registered
   registrationDate: { 
@@ -39,8 +39,8 @@ const userSchema = new mongoose.Schema({
   // Role for access control (e.g., landlord, tenant, admin)
   role: { 
     type: String, 
-    enum: ['landlord', 'tenant', 'admin'], 
-    default: 'landlord'
+    enum: ['Landlord', 'Tenant', 'Admin'], 
+    default: 'Landlord'
   },
   // Additional fields such as address
   address: {
@@ -49,7 +49,8 @@ const userSchema = new mongoose.Schema({
     state: { type: String },
     zipCode: { type: String },
     country: { type: String }
-  }
+  },
+  // You can add more fields (e.g., password hash, settings, etc.) as needed
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);
