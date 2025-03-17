@@ -92,10 +92,48 @@ router.post('/', async (req, res) => {
         sessions[fromNumber] = { action: null };
       }
 
-      // (If using text-based numeric selection for chunked lists, handle it here.)
-
       // ======== Extended Add-Property Flow ========
       if (text) {
+        // If a "help" command is received, check the current action.
+        if (text.toLowerCase() === 'help') {
+          // If in a multi-step process (e.g., awaiting an image choice), ignore help.
+          if (sessions[fromNumber].action === 'awaiting_image_choice') {
+            // Optionally, you can send a reminder message:
+            // await sendMessage(fromNumber, "You're in the middle of a process. Please complete it before using help.");
+            return res.sendStatus(200);
+          }
+          // Otherwise, process help normally.
+          const buttonMenu = {
+            messaging_product: 'whatsapp',
+            to: fromNumber,
+            type: 'interactive',
+            interactive: {
+              type: 'button',
+              header: { type: 'text', text: '🏠 Rental Management' },
+              body: { text: '*Welcome!* Please select an option below:' },
+              footer: { text: 'Powered by Your Rental App' },
+              action: {
+                buttons: [
+                  {
+                    type: 'reply',
+                    reply: { id: 'account_info', title: '👤 Account Info' },
+                  },
+                  { type: 'reply', reply: { id: 'manage', title: '🛠️ Manage' } },
+                  { type: 'reply', reply: { id: 'tools', title: '🧰 Tools' } },
+                ],
+              },
+            },
+          };
+          await axios.post(WHATSAPP_API_URL, buttonMenu, {
+            headers: {
+              Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+          });
+          return res.sendStatus(200);
+        }
+
+        // Continue with other flows
         if (sessions[fromNumber].action === 'add_property_name') {
           if (isValidName(text)) {
             sessions[fromNumber].propertyData = { name: text };
@@ -235,7 +273,7 @@ router.post('/', async (req, res) => {
         }
         // ======== Extended Add-Tenant Flow ========
         else if (sessions[fromNumber].action === 'add_tenant_fullName') {
-          // Instead of overwriting tenantData, add the fullName property.
+          // Preserve existing tenantData instead of overwriting
           if (!sessions[fromNumber].tenantData) {
             sessions[fromNumber].tenantData = {};
           }
@@ -283,7 +321,6 @@ router.post('/', async (req, res) => {
                 fromNumber,
                 '⚠️ *Error:* Unit not selected. Please select a valid unit for the tenant.'
               );
-              // Optionally, set action back to unit selection if needed.
               sessions[fromNumber].action = 'add_tenant_select_unit';
               return res.sendStatus(200);
             }
@@ -310,36 +347,6 @@ router.post('/', async (req, res) => {
               '⚠️ *Invalid entry* \nPlease provide a valid monthly rent amount.'
             );
           }
-        }
-        // ========== “Help” Flow ==========
-        else if (text.toLowerCase() === 'help') {
-          const buttonMenu = {
-            messaging_product: 'whatsapp',
-            to: fromNumber,
-            type: 'interactive',
-            interactive: {
-              type: 'button',
-              header: { type: 'text', text: '🏠 Rental Management' },
-              body: { text: '*Welcome!* Please select an option below:' },
-              footer: { text: 'Powered by Your Rental App' },
-              action: {
-                buttons: [
-                  {
-                    type: 'reply',
-                    reply: { id: 'account_info', title: '👤 Account Info' },
-                  },
-                  { type: 'reply', reply: { id: 'manage', title: '🛠️ Manage' } },
-                  { type: 'reply', reply: { id: 'tools', title: '🧰 Tools' } },
-                ],
-              },
-            },
-          };
-          await axios.post(WHATSAPP_API_URL, buttonMenu, {
-            headers: {
-              Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-              'Content-Type': 'application/json',
-            },
-          });
         }
       }
 
