@@ -43,7 +43,7 @@ function getRandomGroqApiKey() {
 function normalizePhoneNumber(number) {
   if (!number) return number;
   number = number.trim();
-  // If number does not start with '+' assume it is an Indian number and prepend +91
+  // If number does not start with '+' assume it needs a '+' (adjust if needed)
   if (number[0] !== '+') {
     return '+' + number;
   }
@@ -59,7 +59,7 @@ async function connectToMongo() {
     });
     console.log('Connected to MongoDB');
   } catch (error) {
-    console.error('MongoDB connection error:', error);
+    console.error('MongoDB  connection error:', error);
     process.exit(1);
   }
 }
@@ -208,7 +208,7 @@ async function processChatMessage(phoneNumber, message) {
   const normalizedPhone = normalizePhoneNumber(phoneNumber);
   try {
     const user = await User.findOne({ phoneNumber: normalizedPhone });
-    console.log(normalizedPhone);
+    console.log("Looking up user for:", normalizedPhone);
     if (!user) {
       return "No user found with that phone number.";
     }
@@ -368,49 +368,47 @@ app.get('/webhook', (req, res) => {
 });
 
 // Webhook endpoint to receive incoming WhatsApp messages
-app.post('/webhook', async (req, res) => {
-  const body = req.body;
-  if (body.object) {
-    // Process each entry (can be batched)
-    body.entry.forEach(async (entry) => {
-      const changes = entry.changes;
-      if (changes && changes.length > 0) {
-        const value = changes[0].value;
-        const messages = value.messages;
-        if (messages && messages.length > 0) {
-          for (const message of messages) {
-            const senderId = message.from; // Sender's WhatsApp number
-            let messageText = "";
-            // Check for text or interactive button reply.
-            if (message.text && message.text.body) {
-              messageText = message.text.body;
-            } else if (message.interactive && message.interactive.button_reply) {
-              messageText = message.interactive.button_reply.id; // Use button ID
-            }
-            const normalizedSender = normalizePhoneNumber(senderId);
-            // If the sender is in a wizard conversation, process wizard input.
-            if (conversationStates[normalizedSender] && conversationStates[normalizedSender].mode === "insertProperty") {
-              await processWizardInput(senderId, messageText);
-            } else {
-              // Process interactive button to start wizard.
-              if (messageText === "insert_new_property") {
-                conversationStates[normalizedSender] = { mode: "insertProperty", stepIndex: 0, data: {} };
-                await sendWhatsAppMessage(normalizedSender, wizardSteps[0].question);
-              } else if (messageText === "other_query") {
-                // For other queries, use the unified chat logic.
-                const reply = await processChatMessage(senderId, messageText);
-                await sendWhatsAppMessage(normalizedSender, reply);
+app.post('/webhook', (req, res) => {
+  // Log the full payload for debugging
+  console.log("Incoming webhook:", JSON.stringify(req.body));
+  if (req.body.object) {
+    // Immediately respond 200 to avoid delays
+    res.sendStatus(200);
+    // Process each entry asynchronously
+    req.body.entry.forEach((entry) => {
+      if (entry.changes && entry.changes.length > 0) {
+        entry.changes.forEach(async (change) => {
+          const value = change.value;
+          if (value.messages && value.messages.length > 0) {
+            for (const message of value.messages) {
+              const senderId = message.from; // Sender's WhatsApp number
+              let messageText = "";
+              if (message.text && message.text.body) {
+                messageText = message.text.body;
+              } else if (message.interactive && message.interactive.button_reply) {
+                messageText = message.interactive.button_reply.id;
+              }
+              const normalizedSender = normalizePhoneNumber(senderId);
+              // Check if sender is in wizard mode
+              if (conversationStates[normalizedSender] && conversationStates[normalizedSender].mode === "insertProperty") {
+                await processWizardInput(senderId, messageText);
               } else {
-                // Process any other text normally.
-                const reply = await processChatMessage(senderId, messageText);
-                await sendWhatsAppMessage(normalizedSender, reply);
+                if (messageText === "insert_new_property") {
+                  conversationStates[normalizedSender] = { mode: "insertProperty", stepIndex: 0, data: {} };
+                  await sendWhatsAppMessage(normalizedSender, wizardSteps[0].question);
+                } else if (messageText === "other_query") {
+                  const reply = await processChatMessage(senderId, messageText);
+                  await sendWhatsAppMessage(normalizedSender, reply);
+                } else {
+                  const reply = await processChatMessage(senderId, messageText);
+                  await sendWhatsAppMessage(normalizedSender, reply);
+                }
               }
             }
           }
-        }
+        });
       }
     });
-    res.sendStatus(200);
   } else {
     res.sendStatus(404);
   }
