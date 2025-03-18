@@ -31,7 +31,7 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // Helper: Check if a string is numeric
 function isNumeric(value) {
-  return /^-?\d+$/.test(value);
+  return /^\d+$/.test(value);
 }
 
 // NEW HELPER: Generate a unique property ID.
@@ -59,9 +59,7 @@ async function sendCountrySelectionList(fromNumber) {
       footer: { text: 'Powered by Your Rental App' },
       action: {
         button: 'View Country',
-        sections: [
-          { title: 'Country', rows: rows }
-        ]
+        sections: [{ title: 'Country', rows }]
       }
     }
   };
@@ -171,10 +169,7 @@ async function sendPropertySelectionLists(fromNumber, properties) {
         header: { type: 'text', text: headerText },
         body: { text: bodyText },
         footer: { text: footerText },
-        action: {
-          button: actionButton,
-          sections: [{ title: 'Properties', rows }]
-        }
+        action: { button: actionButton, sections: [{ title: 'Properties', rows }] }
       }
     };
     await axios.post(WHATSAPP_API_URL, messageData, {
@@ -208,10 +203,7 @@ async function sendUnitSelectionLists(fromNumber, units) {
         header: { type: 'text', text: headerText },
         body: { text: bodyText },
         footer: { text: footerText },
-        action: {
-          button: actionButton,
-          sections: [{ title: 'Units', rows }]
-        }
+        action: { button: actionButton, sections: [{ title: 'Units', rows }] }
       }
     };
     await axios.post(WHATSAPP_API_URL, messageData, {
@@ -222,7 +214,7 @@ async function sendUnitSelectionLists(fromNumber, units) {
 
 /*
   Helper: Send image upload option.
-  First sends a clickable tinyURL link as text, then sends an interactive message with a skip button.
+  Sends a clickable tinyURL link as text, then an interactive message with a skip button.
 */
 async function sendImageOptionButton(fromNumber, type, entityId) {
   const token = await generateUploadToken(fromNumber, type, entityId);
@@ -331,7 +323,6 @@ router.post('/', async (req, res) => {
             await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease retry with a valid property name.');
           }
         } else if (sessions[fromNumber].action === 'add_property_description') {
-          // Validate description length
           if (text.length > 100) {
             await sendMessage(fromNumber, '⚠️ *Invalid entry* \nProperty description must not exceed 100 characters. Please re-enter:');
             return res.sendStatus(200);
@@ -353,9 +344,13 @@ router.post('/', async (req, res) => {
           sessions[fromNumber].action = 'add_property_state';
         } else if (sessions[fromNumber].action === 'add_property_state') {
           sessions[fromNumber].propertyData.state = text;
-          await sendMessage(fromNumber, '📮 *ZIP Code* \nEnter the ZIP code.');
+          await sendMessage(fromNumber, '📮 *ZIP Code* \nEnter the ZIP code (numbers only):');
           sessions[fromNumber].action = 'add_property_zip';
         } else if (sessions[fromNumber].action === 'add_property_zip') {
+          if (!isNumeric(text)) {
+            await sendMessage(fromNumber, '⚠️ *Invalid entry* \nZIP code must contain only numbers. Please re-enter:');
+            return res.sendStatus(200);
+          }
           sessions[fromNumber].propertyData.zipCode = text;
           await sendCountrySelectionList(fromNumber);
           sessions[fromNumber].action = 'awaiting_property_country';
@@ -606,7 +601,7 @@ router.post('/', async (req, res) => {
             }
           }
         }
-        // New interactive reply handlers for property creation options:
+        // Interactive reply for property creation options
         else if (sessions[fromNumber].action === 'awaiting_property_country') {
           if (selectedOption.startsWith('country_')) {
             sessions[fromNumber].propertyData.country = 'India';
@@ -658,7 +653,7 @@ router.post('/', async (req, res) => {
             sessions[fromNumber].action = 'awaiting_image_choice';
           }
         }
-        // ----- Image Upload Choice -----
+        // --- Image Upload Choice ---
         else if (sessions[fromNumber].action === 'awaiting_image_choice') {
           if (selectedOption.startsWith('upload_')) {
             const [, type, entityId] = selectedOption.split('_');
@@ -666,7 +661,7 @@ router.post('/', async (req, res) => {
             const imageUploadUrl = `${GLITCH_HOST}/upload-image/${phoneNumber}/${type}/${entityId}?token=${token}`;
             const shortUrl = await shortenUrl(imageUploadUrl);
             await sendMessage(fromNumber, `Please upload the image here (valid for 15 minutes): ${shortUrl}`);
-            sessions[fromNumber] = {}; // Clear session completely to avoid duplicate summaries.
+            sessions[fromNumber] = {}; // Clear session to avoid duplicate summary.
           } else if (selectedOption.startsWith('no_upload_')) {
             const [, type, entityId] = selectedOption.split('_');
             if (type === 'property') {
@@ -704,7 +699,7 @@ router.post('/', async (req, res) => {
   res.sendStatus(200);
 });
 
-// Summary function: Sends a single message (image with caption) only.
+// Summary function: Sends a single message (image with caption only).
 async function sendSummary(phoneNumber, type, entityId, imageUrl) {
   let caption;
   if (type === 'property') {
