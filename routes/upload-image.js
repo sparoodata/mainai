@@ -15,24 +15,20 @@ const s3 = new AWS.S3({
   s3ForcePathStyle: true,
 });
 
-// Updated fileFilter: Reject .webp files explicitly.
+// File filter: only allow files with .jpg, .jpeg, or .png extensions and corresponding mimetype.
 function fileFilter(req, file, cb) {
-  // Explicitly reject .webp files
-  if (file.mimetype === 'image/webp') {
+  const ext = path.extname(file.originalname).toLowerCase();
+  console.log(ext);
+  if (ext !== '.jpg' && ext !== '.jpeg' && ext !== '.png') {
     return cb(new Error('Only JPG and PNG images are allowed'), false);
   }
-  // Allowed types: jpg, jpeg, png
-  const allowedTypes = /jpeg|jpg|png/;
-  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = allowedTypes.test(file.mimetype);
-  if (mimetype && extname) {
-    return cb(null, true);
-  } else {
+  if (file.mimetype !== 'image/jpeg' && file.mimetype !== 'image/png') {
     return cb(new Error('Only JPG and PNG images are allowed'), false);
   }
+  cb(null, true);
 }
 
-// Configure multer to use multerS3 with a file size limit of 5MB, allowing up to 5 images.
+// Configure Multer using multerS3: limit file size to 5MB, allow up to 5 images.
 const upload = multer({
   storage: multerS3({
     s3: s3,
@@ -43,26 +39,34 @@ const upload = multer({
       cb(null, filename);
     }
   }),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max per file
   fileFilter: fileFilter
 });
 
-// Endpoint to handle multiple image uploads for a property (or other entity)
+/*
+  POST /upload-image/:phone/:type/:entityId
+  This endpoint accepts multiple image uploads (up to 5 images).
+  - Only JPG/JPEG and PNG files are allowed.
+  - Each file must be no more than 5MB.
+  - If the file type or size is invalid, an error message is returned.
+  
+  Note: The client should show a loading indicator while waiting for the upload to complete.
+*/
 router.post('/upload-image/:phone/:type/:entityId', (req, res) => {
-  // The client should display a loading spinner while this endpoint is processing.
   upload.array('images', 5)(req, res, (err) => {
     if (err) {
-      // If file type or size validation fails, return the error message.
+      // If file validation fails, return an error message.
       return res.status(400).json({ success: false, error: err.message });
     }
-    // On success, get the uploaded file locations.
+    // On success, retrieve the URLs of the uploaded files.
     const imageUrls = req.files.map(file => file.location);
-    // For example, if type is "property", update the property document.
+    
+    // Example: If type is "property", update the Property document with the new images.
     if (req.params.type === 'property') {
       const Property = require('../models/Property');
       Property.findById(req.params.entityId)
         .then(property => {
-          // Append new image URLs to the existing images array.
+          // Append the new image URLs to the existing images array.
           property.images = property.images.concat(imageUrls);
           return property.save();
         })

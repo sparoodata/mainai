@@ -16,6 +16,7 @@ const Unit = require('./models/Unit');
 const Tenant = require('./models/Tenant');
 const User = require('./models/User');
 const UploadToken = require('./models/UploadToken');
+const uploadImageRouter = require('./routes/upload-image');
 
 const { router, sendMessage, sendSummary } = require('./routes/webhook');
 
@@ -38,6 +39,7 @@ app.set('views', path.join(__dirname, 'views'));
 // Parse JSON and URL-encoded data
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use('/upload-image', uploadImageRouter);
 
 mongoose.set('strictQuery', false);
 mongoose.connect(process.env.MONGODB_URI, {
