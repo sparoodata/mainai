@@ -39,8 +39,8 @@ function generatePropertyId() {
   return 'P' + crypto.randomBytes(4).toString('hex').toUpperCase();
 }
 
-/* 
-  Helper: Send an interactive list for country selection (only "India")
+/*
+  Helper: Send an interactive list for country selection (only "India").
 */
 async function sendCountrySelectionList(fromNumber) {
   const rows = [{
@@ -66,15 +66,12 @@ async function sendCountrySelectionList(fromNumber) {
     }
   };
   await axios.post(WHATSAPP_API_URL, messageData, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json'
-    }
+    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
   });
 }
 
-/* 
-  Helper: Send interactive buttons for property type.
+/*
+  Helper: Send interactive buttons for property type selection.
 */
 async function sendPropertyTypeButtons(fromNumber) {
   const messageData = {
@@ -95,14 +92,11 @@ async function sendPropertyTypeButtons(fromNumber) {
     }
   };
   await axios.post(WHATSAPP_API_URL, messageData, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json'
-    }
+    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
   });
 }
 
-/* 
+/*
   Helper: Send interactive buttons for Year Built option.
 */
 async function sendYearBuiltOptionButtons(fromNumber) {
@@ -123,14 +117,11 @@ async function sendYearBuiltOptionButtons(fromNumber) {
     }
   };
   await axios.post(WHATSAPP_API_URL, messageData, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json'
-    }
+    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
   });
 }
 
-/* 
+/*
   Helper: Send interactive buttons for Purchase Price option.
 */
 async function sendPurchasePriceOptionButtons(fromNumber) {
@@ -151,15 +142,13 @@ async function sendPurchasePriceOptionButtons(fromNumber) {
     }
   };
   await axios.post(WHATSAPP_API_URL, messageData, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json'
-    }
+    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
   });
 }
 
 /*
-  Helper: Send an interactive list for property selection (as before).
+  Helper: Send an interactive list for property selection.
+  Splits properties into chunks of up to 10.
 */
 async function sendPropertySelectionLists(fromNumber, properties) {
   const chunks = chunkArray(properties, 10);
@@ -167,7 +156,7 @@ async function sendPropertySelectionLists(fromNumber, properties) {
     const rows = chunks[i].map(prop => ({
       id: `prop_${prop._id}`,
       title: prop.name,
-      description: prop.address ? prop.address : ''
+      description: prop.address || ''
     }));
     const headerText = i === 0 ? '🏠 Select a Property' : `Property list #${i + 1}`;
     const bodyText = i === 0 ? 'Please select a property from the list below:' : 'Select a property:';
@@ -184,9 +173,7 @@ async function sendPropertySelectionLists(fromNumber, properties) {
         footer: { text: footerText },
         action: {
           button: actionButton,
-          sections: [
-            { title: 'Properties', rows: rows }
-          ]
+          sections: [{ title: 'Properties', rows }]
         }
       }
     };
@@ -197,7 +184,8 @@ async function sendPropertySelectionLists(fromNumber, properties) {
 }
 
 /*
-  Helper: Send an interactive list for unit selection (as before).
+  Helper: Send an interactive list for unit selection.
+  Splits units into chunks of up to 10.
 */
 async function sendUnitSelectionLists(fromNumber, units) {
   const chunks = chunkArray(units, 10);
@@ -222,9 +210,7 @@ async function sendUnitSelectionLists(fromNumber, units) {
         footer: { text: footerText },
         action: {
           button: actionButton,
-          sections: [
-            { title: 'Units', rows: rows }
-          ]
+          sections: [{ title: 'Units', rows }]
         }
       }
     };
@@ -236,6 +222,7 @@ async function sendUnitSelectionLists(fromNumber, units) {
 
 /*
   Helper: Send image upload option.
+  First sends a clickable tinyURL link as text, then sends an interactive message with a skip button.
 */
 async function sendImageOptionButton(fromNumber, type, entityId) {
   const token = await generateUploadToken(fromNumber, type, entityId);
@@ -308,7 +295,6 @@ router.post('/', async (req, res) => {
       if (!sessions[fromNumber]) {
         sessions[fromNumber] = { action: null };
       }
-      // Process text commands and property creation flow
       if (text) {
         if (text.toLowerCase() === 'help') {
           if (sessions[fromNumber].action === 'awaiting_image_choice') return res.sendStatus(200);
@@ -335,16 +321,21 @@ router.post('/', async (req, res) => {
           });
           return res.sendStatus(200);
         }
-        // Property creation steps:
+        // --- Property Creation Flow ---
         if (sessions[fromNumber].action === 'add_property_name') {
           if (isValidName(text)) {
             sessions[fromNumber].propertyData = { name: text };
-            await sendMessage(fromNumber, '📝 *Description* \nPlease provide a description for the property.');
+            await sendMessage(fromNumber, '📝 *Description* \nPlease provide a description for the property (max 100 characters).');
             sessions[fromNumber].action = 'add_property_description';
           } else {
             await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease retry with a valid property name.');
           }
         } else if (sessions[fromNumber].action === 'add_property_description') {
+          // Validate description length
+          if (text.length > 100) {
+            await sendMessage(fromNumber, '⚠️ *Invalid entry* \nProperty description must not exceed 100 characters. Please re-enter:');
+            return res.sendStatus(200);
+          }
           sessions[fromNumber].propertyData.description = text;
           await sendMessage(fromNumber, '📍 *Street Address* \nPlease provide the street address of the property.');
           sessions[fromNumber].action = 'add_property_address';
@@ -366,11 +357,12 @@ router.post('/', async (req, res) => {
           sessions[fromNumber].action = 'add_property_zip';
         } else if (sessions[fromNumber].action === 'add_property_zip') {
           sessions[fromNumber].propertyData.zipCode = text;
-          // Instead of asking for country as text, send an interactive list with "India"
           await sendCountrySelectionList(fromNumber);
           sessions[fromNumber].action = 'awaiting_property_country';
-        } else if (sessions[fromNumber].action === 'add_property_type') {
-          // (This branch will be handled via interactive reply.)
+        } else if (sessions[fromNumber].action === 'awaiting_property_country') {
+          // Handled via interactive reply below.
+        } else if (sessions[fromNumber].action === 'awaiting_property_type') {
+          // Handled via interactive reply below.
         } else if (sessions[fromNumber].action === 'add_property_yearBuilt') {
           const year = parseInt(text);
           if (!isNaN(year)) {
@@ -383,7 +375,6 @@ router.post('/', async (req, res) => {
         } else if (sessions[fromNumber].action === 'add_property_totalUnits') {
           if (isValidUnits(text)) {
             sessions[fromNumber].propertyData.totalUnits = parseInt(text);
-            // Now prompt for purchase price option
             await sendPurchasePriceOptionButtons(fromNumber);
             sessions[fromNumber].action = 'add_property_purchasePrice_option';
           } else {
@@ -392,7 +383,6 @@ router.post('/', async (req, res) => {
         } else if (sessions[fromNumber].action === 'add_property_purchasePrice') {
           if (!isNaN(parseFloat(text)) && parseFloat(text) > 0) {
             sessions[fromNumber].propertyData.purchasePrice = parseFloat(text);
-            // Proceed to create property
             const user = await User.findOne({ phoneNumber });
             const property = new Property({
               propertyId: generatePropertyId(),
@@ -415,13 +405,10 @@ router.post('/', async (req, res) => {
             await sendImageOptionButton(fromNumber, 'property', property._id);
             sessions[fromNumber].action = 'awaiting_image_choice';
           } else {
-            await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease provide a valid purchase price.');
+            await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease enter a valid purchase price.');
           }
-        } else if (sessions[fromNumber].action === 'add_property_purchasePrice_option') {
-          // This branch handles interactive reply for purchase price option.
-          // (Handled in interactive reply below.)
         }
-        // ----- Add-Unit Flow (unchanged) -----
+        // --- Add-Unit Flow ---
         else if (sessions[fromNumber].action === 'add_unit_rent') {
           const rent = parseFloat(text);
           if (!isNaN(rent) && rent > 0) {
@@ -453,7 +440,7 @@ router.post('/', async (req, res) => {
           await sendImageOptionButton(fromNumber, 'unit', unit._id);
           sessions[fromNumber].action = 'awaiting_image_choice';
         }
-        // ----- Extended Add-Tenant Flow (unchanged) -----
+        // --- Extended Add-Tenant Flow ---
         else if (sessions[fromNumber].action === 'add_tenant_fullName') {
           if (!sessions[fromNumber].tenantData) sessions[fromNumber].tenantData = {};
           sessions[fromNumber].tenantData.fullName = text;
@@ -560,7 +547,7 @@ router.post('/', async (req, res) => {
             sessions[fromNumber].action = 'add_tenant_select_property';
           }
         }
-        // Property selection for Unit creation
+        // Property selection for Unit creation (list reply)
         else if (sessions[fromNumber].action === 'add_unit_select_property') {
           if (selectedOption.startsWith('prop_')) {
             const propertyId = selectedOption.split('_')[1];
@@ -575,7 +562,7 @@ router.post('/', async (req, res) => {
             }
           }
         }
-        // Property selection for Tenant creation
+        // Property selection for Tenant creation (list reply)
         else if (sessions[fromNumber].action === 'add_tenant_select_property') {
           if (selectedOption.startsWith('prop_')) {
             const propertyId = selectedOption.split('_')[1];
@@ -604,7 +591,7 @@ router.post('/', async (req, res) => {
             }
           }
         }
-        // Unit selection for Tenant creation
+        // Unit selection for Tenant creation (list reply)
         else if (sessions[fromNumber].action === 'add_tenant_select_unit') {
           if (selectedOption.startsWith('unit_')) {
             const unitId = selectedOption.split('_')[1];
@@ -623,16 +610,13 @@ router.post('/', async (req, res) => {
         else if (sessions[fromNumber].action === 'awaiting_property_country') {
           if (selectedOption.startsWith('country_')) {
             sessions[fromNumber].propertyData.country = 'India';
-            // Now send property type buttons.
             await sendPropertyTypeButtons(fromNumber);
             sessions[fromNumber].action = 'awaiting_property_type';
           }
         } else if (sessions[fromNumber].action === 'awaiting_property_type') {
           if (selectedOption.startsWith('ptype_')) {
-            const typeVal = selectedOption.split('_')[1]; // e.g., 'Apartment' or 'Independant' or 'Others'
-            // Map 'Independant' to 'Independant house'
+            const typeVal = selectedOption.split('_')[1];
             sessions[fromNumber].propertyData.propertyType = (typeVal === 'Independant') ? 'Independant house' : typeVal;
-            // Now prompt for Year Built option.
             await sendYearBuiltOptionButtons(fromNumber);
             sessions[fromNumber].action = 'add_property_yearBuilt_option';
           }
@@ -651,7 +635,6 @@ router.post('/', async (req, res) => {
             sessions[fromNumber].action = 'add_property_purchasePrice';
           } else if (selectedOption === 'price_skip') {
             sessions[fromNumber].propertyData.purchasePrice = null;
-            // Proceed to create property
             const user = await User.findOne({ phoneNumber });
             const property = new Property({
               propertyId: generatePropertyId(),
@@ -683,7 +666,7 @@ router.post('/', async (req, res) => {
             const imageUploadUrl = `${GLITCH_HOST}/upload-image/${phoneNumber}/${type}/${entityId}?token=${token}`;
             const shortUrl = await shortenUrl(imageUploadUrl);
             await sendMessage(fromNumber, `Please upload the image here (valid for 15 minutes): ${shortUrl}`);
-            sessions[fromNumber] = {}; // Clear session completely.
+            sessions[fromNumber] = {}; // Clear session completely to avoid duplicate summaries.
           } else if (selectedOption.startsWith('no_upload_')) {
             const [, type, entityId] = selectedOption.split('_');
             if (type === 'property') {
@@ -721,22 +704,24 @@ router.post('/', async (req, res) => {
   res.sendStatus(200);
 });
 
-// Sends a summary message as both an image and text message.
+// Summary function: Sends a single message (image with caption) only.
 async function sendSummary(phoneNumber, type, entityId, imageUrl) {
   let caption;
   if (type === 'property') {
     const property = await Property.findById(entityId);
-    caption = `✅ *Property Added*\n━━━━━━━━━━━━━━━\n🏠 *Name*: ${property.name}\n📝 *Description*: ${property.description}\n📍 *Address*: ${property.address}, ${property.city}, ${property.state} ${property.zipCode}, ${property.country}\n🏢 *Type*: ${property.propertyType}\n🏗️ *Year Built*: ${property.yearBuilt}\n🏠 *Total Units*: ${property.totalUnits}\n💰 *Purchase Price*: ${property.purchasePrice}\n━━━━━━━━━━━━━━━`;
+    const summaryImage = (property.images && property.images.length > 0) ? property.images[0] : DEFAULT_IMAGE_URL;
+    caption = `✅ *Property Added*\n━━━━━━━━━━━━━━━\n🏠 *Name*: ${property.name}\n📝 *Description*: ${property.description}\n📍 *Address*: ${property.address}, ${property.city}, ${property.state} ${property.zipCode}, ${property.country}\n🏢 *Type*: ${property.propertyType}\n🏗️ *Year Built*: ${property.yearBuilt || 'N/A'}\n🏠 *Total Units*: ${property.totalUnits}\n💰 *Purchase Price*: ${property.purchasePrice || 'N/A'}\n━━━━━━━━━━━━━━━`;
+    await sendImageMessage(phoneNumber, summaryImage, caption);
   } else if (type === 'unit') {
     const unit = await Unit.findById(entityId).populate('property');
     caption = `✅ *Unit Added*\n━━━━━━━━━━━━━━━\n🏠 *Property*: ${unit.property.name}\n🚪 *Unit ID*: ${unit.unitNumber}\n💰 *Rent Amount*: ${unit.rentAmount}\n📏 *Floor*: ${unit.floor}\n📐 *Size*: ${unit.size}\n━━━━━━━━━━━━━━━`;
+    await sendImageMessage(phoneNumber, imageUrl, caption);
   } else if (type === 'tenant') {
     const tenant = await Tenant.findById(entityId);
     const unit = await Unit.findById(tenant.unitAssigned);
     caption = `✅ *Tenant Added*\n━━━━━━━━━━━━━━━\n👤 *Name*: ${tenant.fullName}\n🏠 *Property*: ${tenant.propertyName}\n🚪 *Unit*: ${unit ? unit.unitNumber : 'N/A'}\n📅 *Lease Start*: ${new Date(tenant.leaseStartDate).toLocaleDateString()}\n💵 *Deposit*: ${tenant.depositAmount}\n💰 *Monthly Rent*: ${tenant.monthlyRent}\n━━━━━━━━━━━━━━━`;
+    await sendImageMessage(phoneNumber, imageUrl, caption);
   }
-  await sendImageMessage(phoneNumber, imageUrl, caption);
-  await sendMessage(phoneNumber, caption);
 }
 
 module.exports = {
