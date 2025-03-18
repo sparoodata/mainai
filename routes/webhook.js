@@ -34,6 +34,12 @@ function isNumeric(value) {
   return /^-?\d+$/.test(value);
 }
 
+// NEW HELPER: Generate a unique property ID.
+function generatePropertyId() {
+  // Generates an ID like "P1A2B3C4" (8 hex characters prefixed with "P")
+  return 'P' + crypto.randomBytes(4).toString('hex').toUpperCase();
+}
+
 /*
   Helper: Send an interactive list for property selection.
   The properties array is split into chunks of up to 10.
@@ -48,7 +54,6 @@ async function sendPropertySelectionLists(fromNumber, properties) {
       title: prop.name,
       description: prop.address ? prop.address : ''
     }));
-    // Always supply a body text (WhatsApp requires it)
     const headerText = i === 0 ? '🏠 Select a Property' : `Property list #${i + 1}`;
     const bodyText = i === 0 ? 'Please select a property from the list below:' : 'Select a property:';
     const footerText = i === 0 ? 'Powered by Your Rental App' : '';
@@ -135,9 +140,7 @@ async function sendImageOptionButton(fromNumber, type, entityId) {
   const token = await generateUploadToken(fromNumber, type, entityId);
   const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/${type}/${entityId}?token=${token}`;
   const shortUrl = await shortenUrl(imageUploadUrl);
-  // Send clickable link as text
   await sendMessage(fromNumber, `Please upload the image here (valid for 15 minutes): ${shortUrl}`);
-  // Send an interactive message with a skip button
   const messageData = {
     messaging_product: 'whatsapp',
     to: fromNumber,
@@ -184,8 +187,6 @@ router.post('/', async (req, res) => {
     const entry = body.entry[0];
     const changes = entry.changes[0];
     const value = changes.value;
-
-    // Capture contact info
     if (value.contacts) {
       const contact = value.contacts[0];
       const contactPhoneNumber = `+${contact.wa_id}`;
@@ -195,18 +196,13 @@ router.post('/', async (req, res) => {
       user.profileName = profileName || user.profileName;
       await user.save();
     }
-
-    // Capture messages
     if (value.messages) {
       const message = value.messages[0];
       const fromNumber = message.from;
       const phoneNumber = `+${fromNumber}`;
       const text = message.text ? message.text.body.trim() : null;
       const interactive = message.interactive || null;
-
       console.log(`Message from ${fromNumber}:`, { text, interactive });
-
-      // Capture interactive replies
       if (interactive && interactive.type === 'list_reply') {
         userResponses[fromNumber] = interactive.list_reply.id;
         console.log(`List reply received: ${userResponses[fromNumber]}`);
@@ -214,14 +210,10 @@ router.post('/', async (req, res) => {
         userResponses[fromNumber] = interactive.button_reply.id;
         console.log(`Button reply received: ${userResponses[fromNumber]}`);
       }
-
       if (!sessions[fromNumber]) {
         sessions[fromNumber] = { action: null };
       }
-
-      // ----- Process Text Commands -----
       if (text) {
-        // "help" command
         if (text.toLowerCase() === 'help') {
           if (sessions[fromNumber].action === 'awaiting_image_choice') {
             return res.sendStatus(200);
@@ -252,8 +244,7 @@ router.post('/', async (req, res) => {
           });
           return res.sendStatus(200);
         }
-        
-        // Property creation flow (unchanged)...
+        // Property creation flow
         if (sessions[fromNumber].action === 'add_property_name') {
           if (isValidName(text)) {
             sessions[fromNumber].propertyData = { name: text };
@@ -316,6 +307,7 @@ router.post('/', async (req, res) => {
             sessions[fromNumber].propertyData.purchasePrice = parseFloat(text);
             const user = await User.findOne({ phoneNumber });
             const property = new Property({
+              propertyId: generatePropertyId(), // NEW: generate a unique property ID
               name: sessions[fromNumber].propertyData.name,
               description: sessions[fromNumber].propertyData.description,
               address: sessions[fromNumber].propertyData.address,
@@ -330,7 +322,6 @@ router.post('/', async (req, res) => {
               ownerId: user._id,
             });
             await property.save();
-
             sessions[fromNumber].entityType = 'property';
             sessions[fromNumber].entityId = property._id;
             await sendImageOptionButton(fromNumber, 'property', property._id);
@@ -339,7 +330,7 @@ router.post('/', async (req, res) => {
             await sendMessage(fromNumber, '⚠️ *Invalid entry* \nPlease enter a valid purchase price.');
           }
         }
-        // ----- Add-Unit Flow -----
+        // Add-Unit Flow
         else if (sessions[fromNumber].action === 'add_unit_rent') {
           const rent = parseFloat(text);
           if (!isNaN(rent) && rent > 0) {
@@ -355,7 +346,7 @@ router.post('/', async (req, res) => {
           sessions[fromNumber].action = 'add_unit_size';
         } else if (sessions[fromNumber].action === 'add_unit_size') {
           const user = await User.findOne({ phoneNumber });
-          const generatedUnitId = sessions[fromNumber].unitData.unitNumber; // already generated
+          const generatedUnitId = sessions[fromNumber].unitData.unitNumber;
           const unit = new Unit({
             unitId: generatedUnitId,
             property: sessions[fromNumber].unitData.property,
@@ -371,7 +362,7 @@ router.post('/', async (req, res) => {
           await sendImageOptionButton(fromNumber, 'unit', unit._id);
           sessions[fromNumber].action = 'awaiting_image_choice';
         }
-        // ----- Extended Add-Tenant Flow -----
+        // Extended Add-Tenant Flow
         else if (sessions[fromNumber].action === 'add_tenant_fullName') {
           if (!sessions[fromNumber].tenantData) {
             sessions[fromNumber].tenantData = {};
@@ -427,8 +418,7 @@ router.post('/', async (req, res) => {
           }
         }
       }
-
-      // ----- Handle Interactive Replies -----
+      // Handle Interactive Replies
       if (interactive && userResponses[fromNumber]) {
         const selectedOption = userResponses[fromNumber];
         if (selectedOption === 'account_info') {
@@ -502,7 +492,7 @@ router.post('/', async (req, res) => {
             const propertyId = selectedOption.split('_')[1];
             const foundProperty = await Property.findById(propertyId);
             if (foundProperty) {
-              // Check if the property is fully occupied.
+              // Check if property is fully occupied
               const unitCount = await Unit.countDocuments({ property: foundProperty._id });
               if (foundProperty.totalUnits && unitCount >= foundProperty.totalUnits) {
                 await sendMessage(fromNumber, '⚠️ *Property Full* \nThis property is fully occupied. Please select a different property.');
@@ -579,12 +569,10 @@ router.post('/', async (req, res) => {
                 await sendSummary(fromNumber, 'tenant', entityId, DEFAULT_IMAGE_URL);
               }
             }
-            sessions[fromNumber].action = null;
-            delete sessions[fromNumber].entityType;
-            delete sessions[fromNumber].entityId;
+            // Clear session completely so no extra lists are sent
+            sessions[fromNumber] = {};
           }
         }
-        // Clear user response
         delete userResponses[fromNumber];
       }
     }
