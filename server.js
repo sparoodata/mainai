@@ -7,7 +7,7 @@ const mongoose = require('mongoose');
 const path = require('path');
 const axios = require("axios");
 const multer = require('multer');
-const multerS3 = require('multer-s3'); // Added import for multer-s3
+const multerS3 = require('multer-s3'); // Make sure this package is installed
 const crypto = require('crypto');
 const AWS = require('aws-sdk');
 
@@ -76,19 +76,21 @@ mongoose.connect(process.env.MONGODB_URI, {
 
 /* ----------------- Upload Image Routes (Integrated into server.js) ----------------- */
 
-// File filter: allow only .jpg, .jpeg, and .png.
+// File filter: only allow .jpg, .jpeg, and .png.
 const fileFilter = (req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
+  // Reject file if extension is not allowed
   if (ext !== '.jpg' && ext !== '.jpeg' && ext !== '.png') {
     return cb(new Error('Only JPG and PNG images are allowed'), false);
   }
+  // Also check mimetype explicitly
   if (file.mimetype !== 'image/jpeg' && file.mimetype !== 'image/png') {
     return cb(new Error('Only JPG and PNG images are allowed'), false);
   }
   cb(null, true);
 };
 
-// Configure Multer using multerS3 (5MB per file, up to 5 files)
+// Configure Multer using multerS3 (5MB limit per file, up to 5 files)
 const upload = multer({
   storage: multerS3({
     s3: s3,
@@ -123,7 +125,8 @@ async function validateUploadToken(req, res, next) {
   }
 }
 
-// GET route to render the image upload page (make sure you have uploadImage.ejs in your views folder)
+// GET route to render the image upload page (uploadImage.ejs must exist in views folder)
+// On the upload page, ensure the file input uses: accept="image/jpeg, image/png"
 app.get('/upload-image/:phoneNumber/:type/:id', validateUploadToken, (req, res) => {
   const { phoneNumber, type, id } = req.params;
   const { token } = req.query;
@@ -131,13 +134,12 @@ app.get('/upload-image/:phoneNumber/:type/:id', validateUploadToken, (req, res) 
   res.render('uploadImage', { phoneNumber, type, id, token });
 });
 
-// POST route to handle image uploads
+// POST route for handling image uploads
 app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validateUploadToken, async (req, res) => {
   const { phoneNumber, type, id } = req.params;
   const { token } = req.body;
   console.log(`POST request received - Token: ${token}, File: ${req.file ? req.file.originalname : 'No file'}`);
   try {
-    // Create a unique object key in R2
     const key = `images/${Date.now()}-${req.file.originalname}`;
     const uploadParams = {
       Bucket: process.env.R2_BUCKET,
@@ -154,9 +156,9 @@ app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validat
       Key: key,
       Expires: 300,
     });
-    console.log(`Image uploaded and signed URL: ${signedUrl}`);
+    console.log(`Image uploaded and signed URL generated: ${signedUrl}`);
 
-    // Update the corresponding entity
+    // Update the corresponding entity (e.g., property, unit, tenant)
     let entity;
     if (type === 'property') {
       entity = await Property.findById(id);
@@ -181,6 +183,7 @@ app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validat
     res.send('Image uploaded successfully!');
   } catch (error) {
     console.error(`Error uploading image for ${type}:`, error);
+    // In case of error, you can generate a retry link (using tinyurl if desired)
     const retryUrl = `${process.env.GLITCH_HOST}/upload-image/${phoneNumber}/${type}/${id}?token=${token}`;
     const shortUrl = await axios
       .post('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(retryUrl))
