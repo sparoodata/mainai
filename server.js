@@ -7,48 +7,49 @@ const mongoose = require('mongoose');
 const path = require('path');
 const axios = require("axios");
 const multer = require('multer');
-const multerS3 = require('multer-s3'); // Make sure this package is installed
 const crypto = require('crypto');
 const AWS = require('aws-sdk');
 
-// Models
+// Updated models
 const Property = require('./models/Property');
 const Unit = require('./models/Unit');
 const Tenant = require('./models/Tenant');
 const User = require('./models/User');
 const UploadToken = require('./models/UploadToken');
+const uploadImageRouter = require('./routes/upload-image');
 
-// Import your webhook route from routes/webhook.js
-const { router: webhookRouter, sendMessage, sendSummary } = require('./routes/webhook');
+const { router, sendMessage, sendSummary } = require('./routes/webhook');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-/* ----------------- AWS R2 (S3-compatible) Configuration ----------------- */
+// Configure AWS R2 (S3 compatible)
 const s3 = new AWS.S3({
   endpoint: process.env.R2_ENDPOINT,
   accessKeyId: process.env.R2_ACCESS_KEY_ID,
   secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
   region: 'auto',
   signatureVersion: 'v4',
-  s3ForcePathStyle: true,
 });
 
-/* ----------------- App Settings ----------------- */
 app.set('trust proxy', 1);
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-/* ----------------- Middleware ----------------- */
+// Parse JSON and URL-encoded data
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use('/upload-image', uploadImageRouter);
 
-/* ----------------- Routes ----------------- */
-// Mount webhook route
-app.use('/webhook', webhookRouter);
+mongoose.set('strictQuery', false);
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+  .then(() => console.log('MongoDB connected'))
+  .catch(error => console.error('MongoDB connection error:', error));
 
-/* ----------------- Session Setup ----------------- */
+// Use sessions stored in MongoDB
 app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
@@ -65,58 +66,41 @@ app.use(session({
   },
 }));
 
-/* ----------------- Mongoose Connection ----------------- */
-mongoose.set('strictQuery', false);
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-  .then(() => console.log('MongoDB connected'))
-  .catch(error => console.error('MongoDB connection error:', error));
+app.use(express.static(path.join(__dirname, 'public')));
 
-/* ----------------- Upload Image Routes (Integrated into server.js) ----------------- */
-
-// File filter: only allow .jpg, .jpeg, and .png.
-const fileFilter = (req, file, cb) => {
-  const ext = path.extname(file.originalname).toLowerCase();
-  // Reject file if extension is not allowed
-  if (ext !== '.jpg' && ext !== '.jpeg' && ext !== '.png') {
-    return cb(new Error('Only JPG and PNG images are allowed'), false);
-  }
-  // Also check mimetype explicitly
-  if (file.mimetype !== 'image/jpeg' && file.mimetype !== 'image/png') {
-    return cb(new Error('Only JPG and PNG images are allowed'), false);
-  }
-  cb(null, true);
-};
-
-// Configure Multer using multerS3 (5MB limit per file, up to 5 files)
+// Multer setup for file uploads (memory storage)
+const storage = multer.memoryStorage();
 const upload = multer({
-  storage: multerS3({
-    s3: s3,
-    bucket: process.env.R2_BUCKET,
-    acl: 'public-read',
-    key: (req, file, cb) => {
-      const filename = Date.now() + '-' + file.originalname;
-      cb(null, filename);
-    }
-  }),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: fileFilter
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
 });
 
-// Middleware to validate the upload token
+// Use the webhook router for WhatsApp interactions
+app.use('/webhook', router);
+
+// Middleware to validate the upload token for image uploads
 async function validateUploadToken(req, res, next) {
+  // For GET requests, token is in query; for POST requests, it's in the body
   const token = req.method === 'GET' ? req.query.token : req.body.token;
-  console.log(`Validating token: ${token}, Method: ${req.method}`);
+  console.log(Validating token: ${token}, Method: ${req.method});
   if (!token) {
+    console.log('No token provided in request');
     return res.status(403).send('No token provided.');
   }
   try {
     const uploadToken = await UploadToken.findOne({ token });
-    if (!uploadToken) return res.status(403).send('Invalid or expired token.');
-    if (uploadToken.used) return res.status(403).send('This upload link has already been used.');
-    if (new Date() > uploadToken.expiresAt) return res.status(403).send('This upload link has expired.');
+    if (!uploadToken) {
+      console.log('Token not found in database');
+      return res.status(403).send('Invalid or expired token.');
+    }
+    if (uploadToken.used) {
+      console.log('Token already used');
+      return res.status(403).send('This upload link has already been used.');
+    }
+    if (new Date() > uploadToken.expiresAt) {
+      console.log('Token expired');
+      return res.status(403).send('This upload link has expired.');
+    }
     req.uploadToken = uploadToken;
     next();
   } catch (error) {
@@ -125,12 +109,11 @@ async function validateUploadToken(req, res, next) {
   }
 }
 
-// GET route to render the image upload page (uploadImage.ejs must exist in views folder)
-// On the upload page, ensure the file input uses: accept="image/jpeg, image/png"
+// GET route to render the image upload page (make sure you have an "uploadImage.ejs" in your views folder)
 app.get('/upload-image/:phoneNumber/:type/:id', validateUploadToken, (req, res) => {
   const { phoneNumber, type, id } = req.params;
   const { token } = req.query;
-  console.log(`Rendering upload page with token: ${token}`);
+  console.log(Rendering upload page with token: ${token});
   res.render('uploadImage', { phoneNumber, type, id, token });
 });
 
@@ -138,9 +121,10 @@ app.get('/upload-image/:phoneNumber/:type/:id', validateUploadToken, (req, res) 
 app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validateUploadToken, async (req, res) => {
   const { phoneNumber, type, id } = req.params;
   const { token } = req.body;
-  console.log(`POST request received - Token: ${token}, File: ${req.file ? req.file.originalname : 'No file'}`);
+  console.log(POST request received - Token: ${token}, File: ${req.file ? req.file.originalname : 'No file'});
   try {
-    const key = `images/${Date.now()}-${req.file.originalname}`;
+    // Create an object key for the image in R2
+    const key = images/${Date.now()}-${req.file.originalname};
     const uploadParams = {
       Bucket: process.env.R2_BUCKET,
       Key: key,
@@ -148,33 +132,35 @@ app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validat
       ContentType: req.file.mimetype,
     };
 
+    // Upload the image to R2
     await s3.upload(uploadParams).promise();
 
-    // Generate a pre-signed URL valid for 5 minutes
+    // Generate a pre-signed URL (valid for 5 minutes)
     const signedUrl = s3.getSignedUrl('getObject', {
       Bucket: process.env.R2_BUCKET,
       Key: key,
       Expires: 300,
     });
-    console.log(`Image uploaded and signed URL generated: ${signedUrl}`);
-
-    // Update the corresponding entity (e.g., property, unit, tenant)
+    console.log(Image uploaded to R2 and signed URL generated: ${signedUrl});
+    
+    // Update the related entity using extended models
     let entity;
     if (type === 'property') {
       entity = await Property.findById(id);
-      entity.images = entity.images.concat(signedUrl);
+      entity.images.push(signedUrl);
       await entity.save();
     } else if (type === 'unit') {
       entity = await Unit.findById(id);
-      entity.images = entity.images.concat(signedUrl);
+      entity.images.push(signedUrl);
       await entity.save();
     } else if (type === 'tenant') {
       entity = await Tenant.findById(id);
+      // For tenant, we assume a single photo field
       entity.photo = signedUrl;
       await entity.save();
     }
 
-    console.log(`Sending summary for ${type} with signed URL: ${signedUrl}`);
+    console.log(Sending summary for ${type} with signed URL: ${signedUrl});
     await sendSummary(phoneNumber, type, id, signedUrl);
 
     req.uploadToken.used = true;
@@ -182,20 +168,15 @@ app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validat
 
     res.send('Image uploaded successfully!');
   } catch (error) {
-    console.error(`Error uploading image for ${type}:`, error);
-    // In case of error, you can generate a retry link (using tinyurl if desired)
-    const retryUrl = `${process.env.GLITCH_HOST}/upload-image/${phoneNumber}/${type}/${id}?token=${token}`;
-    const shortUrl = await axios
-      .post('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(retryUrl))
+    console.error(Error uploading image for ${type}:, error);
+    const retryUrl = ${process.env.GLITCH_HOST}/upload-image/${phoneNumber}/${type}/${id}?token=${token};
+    const shortUrl = await axios.post('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(retryUrl))
       .then(response => response.data);
-    await sendMessage(phoneNumber, `❌ *Error* \nFailed to upload image. Please try again using this link: ${shortUrl}`);
+    await sendMessage(phoneNumber, ❌ *Error* \nFailed to upload image. Please try again using this link: ${shortUrl});
     res.status(500).send('Error uploading image.');
   }
 });
 
-/* ----------------- End of Upload Image Routes ----------------- */
-
-// Start the server
 app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+  console.log(Server running on http://localhost:${port});
 });
