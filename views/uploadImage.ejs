@@ -28,7 +28,7 @@
   <div class="container">
     <h1>Upload Image for <%= type.charAt(0).toUpperCase() + type.slice(1) %></h1>
     <form action="/upload-image/<%= phoneNumber %>/<%= type %>/<%= id %>" method="POST" enctype="multipart/form-data">
-      <input type="file" name="image" accept="image/jpeg, image/jpg, image/png" required>
+      <input type="file" name="image" accept="image/*" required>
       <input type="hidden" name="token" value="<%= token %>">
       <button type="submit">Upload</button>
     </form>
