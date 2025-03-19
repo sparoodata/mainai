@@ -16,8 +16,6 @@
     button { background-color: #007bff; color: #fff; border: none; border-radius: 5px; padding: 12px 20px; font-size: 16px; font-weight: 500; cursor: pointer; transition: background-color 0.3s ease; }
     button:hover { background-color: #0056b3; }
     button:active { background-color: #004085; }
-    .error { color: red; font-size: 14px; margin-top: 10px; }
-    .spinner { display: none; margin-top: 10px; font-size: 14px; color: #007bff; }
     @media (max-width: 480px) {
       .container { padding: 20px; max-width: 100%; }
       h1 { font-size: 20px; }
@@ -29,25 +27,11 @@
 <body>
   <div class="container">
     <h1>Upload Image for <%= type.charAt(0).toUpperCase() + type.slice(1) %></h1>
-    <form id="uploadForm" action="/upload-image/<%= phoneNumber %>/<%= type %>/<%= id %>" method="POST" enctype="multipart/form-data">
-      <input type="file" name="image" accept="image/jpeg, image/png" required>
+    <form action="/upload-image/<%= phoneNumber %>/<%= type %>/<%= id %>" method="POST" enctype="multipart/form-data">
+      <input type="file" name="image" accept="image/jpeg, image/jpg, image/png" required>
       <input type="hidden" name="token" value="<%= token %>">
       <button type="submit">Upload</button>
     </form>
-    <% if (errorMessage) { %>
-      <div class="error"><%= errorMessage %></div>
-    <% } %>
-    <div id="loading" class="spinner">
-      <p>Uploading... Please wait.</p>
-    </div>
   </div>
-  <script>
-    const form = document.getElementById('uploadForm');
-    form.addEventListener('submit', function(e) {
-      document.getElementById('loading').style.display = 'block';
-    });
-  </script>
 </body>
 </html>
-
-      
