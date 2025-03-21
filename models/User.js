@@ -1,55 +1,62 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
-const userSchema = new mongoose.Schema({
-  // Unique phone number used as primary identifier (required)
-  phoneNumber: { 
-    type: String, 
-    required: true, 
+const UserSchema = new mongoose.Schema({
+  username: {
+    type: String,
+    required: true,
     unique: true,
     trim: true
   },
-  // The user's display or profile name
-  profileName: { 
-    type: String, 
-    default: '',
-    trim: true
-  },
-  // Optional email address (could be used for notifications)
-  email: { 
+  email: {
     type: String,
+    required: true,
+    unique: true,
     trim: true,
     lowercase: true
   },
-  // A flag indicating if the user has been verified
-  verified: { 
-    type: Boolean, 
-    default: false 
+  password: {
+    type: String,
+    required: true
   },
-  // The subscription plan (e.g., "free", "premium", "enterprise")
-  subscription: { 
-    type: String, 
-    default: 'free',
-    enum: ['free', 'premium', 'enterprise']
-  },
-  // The date when the user registered
-  registrationDate: { 
-    type: Date, 
-    default: Date.now 
-  },
-  // Role for access control (e.g., landlord, tenant, admin)
-  role: { 
-    type: String, 
-    enum: ['landlord', 'tenant', 'admin'], 
+  role: {
+    type: String,
+    enum: ['admin', 'landlord', 'manager'],
     default: 'landlord'
   },
-  // Additional fields such as address
-  address: {
-    street: { type: String },
-    city: { type: String },
-    state: { type: String },
-    zipCode: { type: String },
-    country: { type: String }
+  phoneNumber: {
+    type: String,
+    trim: true
+  },
+  whatsappId: {
+    type: String,
+    trim: true
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  lastLogin: {
+    type: Date
   }
-}, { timestamps: true });
+});
 
-module.exports = mongoose.model('User', userSchema);
+// Hash password before saving
+UserSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
+  
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Method to compare passwords
+UserSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
+module.exports = mongoose.model('User', UserSchema);

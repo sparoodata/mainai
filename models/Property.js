@@ -1,38 +1,47 @@
 const mongoose = require('mongoose');
 
-const propertySchema = new mongoose.Schema({
-  // A unique identifier (if needed, you can also use the default _id)
-  propertyId: { type: String, unique: true },
-  // Basic Info
-  name: { type: String, required: true },
-  description: { type: String },
-  // Address details
-  address: { type: String, required: true },
-  city: { type: String },
-  state: { type: String },
-  zipCode: { type: String },
-  country: { type: String },
-  geoCoordinates: { type: [Number], index: '2dsphere' },
-  // Additional details
-  propertyType: { type: String },
-  yearBuilt: { type: Number },
-  totalUnits: { type: Number, required: true },
-  availableUnits: { type: Number },
-  amenities: [String],
-  status: { type: String, default: 'active' },
-  // Financial & contact info
-  purchasePrice: { type: Number },
-  marketValue: { type: Number },
-  rentalIncome: { type: Number },
-  managementContact: {
-    name: String,
-    phone: String,
-    email: String,
+const PropertySchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+    trim: true
   },
-  ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  // Media and other metadata
-  images: [String],
-  notes: { type: String },
-}, { timestamps: true });
+  address: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  type: {
+    type: String,
+    required: true,
+    enum: ['Apartment', 'House', 'Condo', 'Commercial', 'Other'],
+    default: 'Apartment'
+  },
+  size: {
+    type: Number,
+    required: true
+  },
+  owner: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  images: [{
+    url: String,
+    filename: String,
+    uploadDate: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
+  }
+});
 
-module.exports = mongoose.model('Property', propertySchema);
+module.exports = mongoose.model('Property', PropertySchema);
