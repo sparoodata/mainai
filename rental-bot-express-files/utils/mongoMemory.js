@@ -90,6 +90,7 @@ async function getMemory(userId, limit = 20) {
       .lean();
     
     // Return in reverse order (oldest first) for conversation flow
+    // Using standard array methods compatible with Node.js 16
     return memories.reverse().map(memory => ({
       role: memory.role,
       content: memory.content
@@ -110,6 +111,7 @@ async function getMemory(userId, limit = 20) {
 async function searchMemory(userId, query, limit = 5) {
   try {
     // Search memories in MongoDB using text search
+    // Using regex search which is compatible with Node.js 16
     const memories = await Memory.find({
       userId,
       content: { $regex: query, $options: 'i' } // Case-insensitive search
