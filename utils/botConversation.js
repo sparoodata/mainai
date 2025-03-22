@@ -3,7 +3,6 @@ const Property = require('../models/Property');
 const Unit = require('../models/Unit');
 const Tenant = require('../models/Tenant');
 const helpers = require('./helpers');
-const zepMemory = require('./zepMemory');
 
 /**
  * Bot conversation state manager for multi-step interactions
