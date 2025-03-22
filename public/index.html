@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rental Property Management Chatbot</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="/css/styles.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <div class="chat-container">
+            <div class="chat-header">
+                <div class="chat-header-title">
+                    <i class="bi bi-building"></i> Rental Property Management Assistant
+                </div>
+                <div class="chat-header-actions">
+                    <button id="clearChat" title="Clear chat"><i class="bi bi-trash"></i></button>
+                    <button id="helpButton" title="Help"><i class="bi bi-question-circle"></i></button>
+                </div>
+            </div>
+            <div class="chat-messages" id="chatMessages">
+                <div class="message bot-message">
+                    Hello! I'm your rental property management assistant. I can help you manage your properties, units, and tenants. How can I assist you today?
+                    <span class="message-time">Just now</span>
+                </div>
+                <div class="clear-both"></div>
+                <div class="quick-actions">
+                    <div class="quick-action-btn" data-action="add-property">Add Property</div>
+                    <div class="quick-action-btn" data-action="add-unit">Add Unit</div>
+                    <div class="quick-action-btn" data-action="add-tenant">Add Tenant</div>
+                    <div class="quick-action-btn" data-action="list-properties">List Properties</div>
+                </div>
+                <div class="clear-both"></div>
+            </div>
+            <div class="chat-input">
+                <div class="file-upload-container">
+                    <input type="file" id="fileUpload" class="form-control">
+                    <div class="file-preview" id="filePreview">
+                        <img id="previewImage" src="#" alt="Preview">
+                        <button class="btn btn-sm btn-danger mt-1" id="removeFile">Remove</button>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <input type="text" id="messageInput" class="form-control" placeholder="Type your message here...">
+                    <button class="btn btn-primary" id="sendButton">
+                        <i class="bi bi-send"></i> Send
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageInput = document.getElementById('messageInput');
+            const sendButton = document.getElementById('sendButton');
+            const fileUpload = document.getElementById('fileUpload');
+            const filePreview = document.getElementById('filePreview');
+            const previewImage = document.getElementById('previewImage');
+            const removeFile = document.getElementById('removeFile');
+            const clearChat = document.getElementById('clearChat');
+            const helpButton = document.getElementById('helpButton');
+            const quickActionButtons = document.querySelectorAll('.quick-action-btn');
+            
+            // Generate a random user ID for this session
+            const userId = 'user_' + Math.random().toString(36).substring(2, 15);
+            
+            // Add event listeners
+            sendButton.addEventListener('click', sendMessage);
+            messageInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+            
+            fileUpload.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    // Preview image if it's an image file
+                    if (file.type.startsWith('image/')) {
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            previewImage.src = e.target.result;
+                            filePreview.style.display = 'block';
+                        };
+                        reader.readAsDataURL(file);
+                    } else {
+                        // For non-image files, just show the filename
+                        previewImage.src = 'https://via.placeholder.com/100x100?text=File';
+                        filePreview.style.display = 'block';
+                    }
+                }
+            });
+            
+            removeFile.addEventListener('click', function() {
+                fileUpload.value = '';
+                filePreview.style.display = 'none';
+            });
+            
+            clearChat.addEventListener('click', function() {
+                if (confirm('Are you sure you want to clear the chat history?')) {
+                    // Keep only the first welcome message
+                    const welcomeMessage = chatMessages.firstElementChild.cloneNode(true);
+                    chatMessages.innerHTML = '';
+                    chatMessages.appendChild(welcomeMessage);
+                    
+                    // Add quick actions
+                    const clearDiv = document.createElement('div');
+                    clearDiv.className = 'clear-both';
+                    chatMessages.appendChild(clearDiv);
+                    
+                    const quickActions = document.createElement('div');
+                    quickActions.className = 'quick-actions';
+                    quickActions.innerHTML = `
+                        <div class="quick-action-btn" data-action="add-property">Add Property</div>
+                        <div class="quick-action-btn" data-action="add-unit">Add Unit</div>
+                        <div class="quick-action-btn" data-action="add-tenant">Add Tenant</div>
+                        <div class="quick-action-btn" data-action="list-properties">List Properties</div>
+                    `;
+                    chatMessages.appendChild(quickActions);
+                    
+                    // Add another clear div
+                    const clearDiv2 = document.createElement('div');
+                    clearDiv2.className = 'clear-both';
+                    chatMessages.appendChild(clearDiv2);
+                    
+                    // Re-attach event listeners to quick action buttons
+                    document.querySelectorAll('.quick-action-btn').forEach(btn => {
+                        btn.addEventListener('click', handleQuickAction);
+                    });
+                }
+            });
+            
+            helpButton.addEventListener('click', function() {
+                const helpMessage = `
+                    <strong>Available Commands:</strong><br>
+                    • add property - Start adding a new property<br>
+                    • add unit - Start adding a new unit<br>
+                    • add tenant - Start adding a new tenant<br>
+                    • list properties - Show all properties<br>
+                    • list units - Show all units<br>
+                    • list tenants - Show all tenants<br>
+                    • get summary for property [name] - Show property summary<br>
+                    • get summary for unit [unitId] - Show unit summary<br>
+                    • get summary for tenant [tenantId] - Show tenant summary<br>
+                    • more - Show more items when viewing a list
+                `;
+                
+                addMessage(helpMessage, 'bot', true);
+            });
+            
+            // Add event listeners to quick action buttons
+            quickActionButtons.forEach(btn => {
+                btn.addEventListener('click', handleQuickAction);
+            });
+            
+            function handleQuickAction(e) {
+                const action = e.target.getAttribute('data-action');
+                let message = '';
+                
+                switch (action) {
+                    case 'add-property':
+                        message = 'add property';
+                        break;
+                    case 'add-unit':
+                        message = 'add unit';
+                        break;
+                    case 'add-tenant':
+                        message = 'add tenant';
+                        break;
+                    case 'list-properties':
+                        message = 'list properties';
+                        break;
+                }
+                
+                if (message) {
+                    messageInput.value = message;
+                    sendMessage();
+                }
+            }
+            
+            function sendMessage() {
+                const message = messageInput.value.trim();
+                if (message === '' && !fileUpload.files[0]) return;
+                
+                // Add user message to chat
+                addMessage(message, 'user');
+                
+                // Clear input
+                messageInput.value = '';
+                
+                // Prepare form data for sending
+                const formData = new FormData();
+                formData.append('userId', userId);
+                formData.append('message', message);
+                
+                if (fileUpload.files[0]) {
+                    formData.append('file', fileUpload.files[0]);
+                    // Clear file upload
+                    fileUpload.value = '';
+                    filePreview.style.display = 'none';
+                }
+                
+                // Show typing indicator
+                const typingIndicator = document.createElement('div');
+                typingIndicator.className = 'message bot-message typing-indicator';
+                typingIndicator.id = 'typingIndicator';
+                typingIndicator.innerHTML = `
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                `;
+                chatMessages.appendChild(typingIndicator);
+                chatMessages.appendChild(document.createElement('div')).className = 'clear-both';
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                
+                // Send to server
+                fetch('/api/webhook', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Remove typing indicator
+                    const indicator = document.getElementById('typingIndicator');
+                    if (indicator) indicator.remove();
+                    
+                    // Process and display bot response
+                    let botMessage = data.response;
+                    
+                    // Process the response for special formatting
+                    botMessage = processResponseForDisplay(botMessage);
+                    
+                    addMessage(botMessage, 'bot', true);
+                    
+                    // Add quick action buttons after certain responses
+                    if (botMessage.includes('added the property') || 
+                        botMessage.includes('added unit') || 
+                        botMessage.includes('added') && botMessage.includes('as a tenant')) {
+                        
+                        const quickActions = document.createElement('div');
+                        quickActions.className = 'quick-actions';
+                        
+                        if (botMessage.includes('added the property')) {
+                            quickActions.innerHTML = `
+                                <div class="quick-action-btn" data-action="add-unit">Add Unit</div>
+                                <div class="quick-action-btn" data-action="list-properties">List Properties</div>
+                            `;
+                        } else if (botMessage.includes('added unit')) {
+                            quickActions.innerHTML = `
+                                <div class="quick-action-btn" data-action="add-tenant">Add Tenant</div>
+                                <div class="quick-action-btn" data-action="list-units">List Units</div>
+                            `;
+                        } else if (botMessage.includes('as a tenant')) {
+                            quickActions.innerHTML = `
+                                <div class="quick-action-btn" data-action="list-tenants">List Tenants</div>
+                            `;
+                        }
+                        
+                        chatMessages.appendChild(quickActions);
+                        chatMessages.appendChild(document.createElement('div')).className = 'clear-both';
+                        
+                        // Add event listeners to new quick action buttons
+                        document.querySelectorAll('.quick-action-btn').forEach(btn => {
+                            btn.addEventListener('click', handleQuickAction);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    // Remove typing indicator
+                    const indicator = document.getElementById('typingIndicator');
+                    if (indicator) indicator.remove();
+                    
+                    addMessage('Sorry, there was an error processing your request.', 'bot');
+                });
+            }
+            
+            function addMessage(message, sender, isHtml = false) {
+                const messageElement = document.createElement('div');
+                messageElement.className = `message ${sender}-message`;
+                
+                if (isHtml) {
+                    messageElement.innerHTML = message;
+                } else {
+                    messageElement.textContent = message;
+                }
+                
+                const timeElement = document.createElement('span');
+                timeElement.className = 'message-time';
+                timeElement.textContent = new Date().toLocaleTimeString();
+                messageElement.appendChild(timeElement);
+                
+                chatMessages.appendChild(messageElement);
+                chatMessages.appendChild(document.createElement('div')).className = 'clear-both';
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+            
+            function processResponseForDisplay(message) {
+                // Process property, unit, and tenant summaries
+                if (message.includes('<h4>Property Summary</h4>') || 
+                    message.includes('<h4>Unit Summary</h4>') || 
+                    message.includes('<h4>Tenant Summary</h4>')) {
+                    
+                    // Wrap in appropriate container
+                    if (message.includes('<h4>Property Summary</h4>')) {
+                        message = `<div class="property-summary">${message}</div>`;
+                    } else if (message.includes('<h4>Unit Summary</h4>')) {
+                        message = `<div class="unit-summary">${message}</div>`;
+                    } else if (message.includes('<h4>Tenant Summary</h4>')) {
+                        message = `<div class="tenant-summary">${message}</div>`;
+                    }
+                }
+                
+                // Process lists (properties, units, tenants)
+                if (message.includes('Here are your properties:') || 
+                    message.includes('Here are your units:') || 
+                    message.includes('Here are your tenants:') ||
+                    message.includes('Here are more properties:') ||
+                    message.includes('Here are more units:') ||
+                    message.includes('Here are more tenants:')) {
+                    
+                    // Extract the list part
+                    const parts = message.split('\n\n');
+                    if (parts.length >= 2) {
+                        const intro = parts[0];
+                        const list = parts[1];
+                        
+                        // Convert the list to HTML
+                        const listItems = list.split('\n').map(item => {
+                            return `<div class="list-item">${item}</div>`;
+                        }).join('');
+                        
+                        // Check if there's pagination info
+                        let paginationInfo = '';
+                        if (parts.length >= 3 && parts[2].includes('Showing')) {
+                            paginationInfo = `<div class="list-pagination">${parts[2]}</div>`;
+                        }
+                        
+                        // Combine everything
+                        message = `${intro}\n\n<div class="list-container">${listItems}${paginationInfo}</div>`;
+                    }
+                }
+                
+                // Replace image URLs with actual images
+                const imgRegex = /(https?:\/\/[^\s]+\.(jpg|jpeg|png|gif))/gi;
+                message = message.replace(imgRegex, url => {
+                    return `<img src="${url}" class="thumbnail" alt="Image">`;
+                });
+                
+                return message;
+            }
+        });
+    </script>
+</body>
+</html>
