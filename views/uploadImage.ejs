@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upload Image</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Arial', sans-serif; background-color: #f4f6f8; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+    .container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); padding: 30px; width: 100%; max-width: 400px; text-align: center; }
+    h1 { font-size: 24px; color: #333; margin-bottom: 20px; font-weight: 600; }
+    form { display: flex; flex-direction: column; gap: 20px; }
+    input[type="file"] { font-size: 16px; color: #555; border: 2px dashed #ccc; border-radius: 5px; padding: 15px; width: 100%; cursor: pointer; transition: border-color 0.3s ease; }
+    input[type="file"]:hover { border-color: #007bff; }
+    input[type="file"]::-webkit-file-upload-button { display: none; }
+    button { background-color: #007bff; color: #fff; border: none; border-radius: 5px; padding: 12px 20px; font-size: 16px; font-weight: 500; cursor: pointer; transition: background-color 0.3s ease; }
+    button:hover { background-color: #0056b3; }
+    button:active { background-color: #004085; }
+    @media (max-width: 480px) {
+      .container { padding: 20px; max-width: 100%; }
+      h1 { font-size: 20px; }
+      input[type="file"] { font-size: 14px; padding: 10px; }
+      button { font-size: 14px; padding: 10px 15px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Upload Image for <%= type.charAt(0).toUpperCase() + type.slice(1) %></h1>
+    <form action="/upload-image/<%= phoneNumber %>/<%= type %>/<%= id %>" method="POST" enctype="multipart/form-data">
+      <input type="file" name="image" accept="image/jpeg, image/jpg, image/png" required>
+      <input type="hidden" name="token" value="<%= token %>">
+      <button type="submit">Upload</button>
+    </form>
+  </div>
+</body>
+</html>

@@ -1,75 +1,29 @@
 const mongoose = require('mongoose');
 
-const TenantSchema = new mongoose.Schema({
-  tenantId: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true
+const tenantSchema = new mongoose.Schema({
+  tenantId: { type: String, unique: true },
+  fullName: { type: String, required: true },
+  email: { type: String },
+  phoneNumber: { type: String, required: true },
+  currentAddress: { type: String },
+  unitAssigned: { type: mongoose.Schema.Types.ObjectId, ref: 'Unit', required: true },
+  leaseStartDate: { type: Date, required: true },
+  leaseEndDate: { type: Date },
+  monthlyRent: { type: Number, required: true },
+  depositAmount: { type: Number, required: true },
+  leaseAgreement: { type: String }, // e.g., a URL reference
+  employmentInformation: { type: String },
+  creditScore: { type: Number },
+  screeningResults: { type: String },
+  // You can later add a subdocument or reference for payment history
+  paymentHistory: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Payment' }],
+  emergencyContact: {
+    name: String,
+    phone: String,
+    relationship: String,
   },
-  name: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  contact: {
-    email: {
-      type: String,
-      trim: true
-    },
-    phone: {
-      type: String,
-      trim: true
-    }
-  },
-  unit: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Unit',
-    required: true
-  },
-  moveInDate: {
-    type: Date,
-    required: true
-  },
-  rentInfo: {
-    amount: Number,
-    dueDate: {
-      type: Number,
-      min: 1,
-      max: 31,
-      default: 1
-    },
-    paymentHistory: [{
-      date: Date,
-      amount: Number,
-      status: {
-        type: String,
-        enum: ['Paid', 'Pending', 'Late', 'Partial'],
-        default: 'Pending'
-      }
-    }]
-  },
-  documents: [{
-    url: String,
-    filename: String,
-    type: {
-      type: String,
-      enum: ['Lease', 'ID', 'Other'],
-      default: 'Other'
-    },
-    uploadDate: {
-      type: Date,
-      default: Date.now
-    }
-  }],
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
-  }
-});
+  notes: { type: String },
+  status: { type: String, default: 'active' },
+}, { timestamps: true });
 
-module.exports = mongoose.model('Tenant', TenantSchema);
+module.exports = mongoose.model('Tenant', tenantSchema);
