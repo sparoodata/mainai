@@ -1,138 +1,137 @@
-const mongoose = require('mongoose');
 const { ZepClient } = require('@getzep/zep-js');
-const dotenv = require('dotenv');
 
-// Load environment variables
-dotenv.config();
-
-// Initialize Zep client
-const zepClient = new ZepClient(process.env.ZEP_API_URL);
+// Initialize Zep client with cloud API configuration
+let zepClient = null;
 
 /**
- * Initialize Zep memory collection
+ * Initialize Zep memory system
  * @returns {Promise<boolean>} Success status
  */
-const initializeZepMemory = async () => {
+async function initializeZepMemory() {
   try {
-    // Check if collection exists
-    let collection;
-    try {
-      collection = await zepClient.document.getCollection(process.env.ZEP_COLLECTION_NAME);
-    } catch (error) {
-      console.log('Collection does not exist yet, will create it');
-    }
+    // Initialize Zep client with cloud API
+    zepClient = new ZepClient({
+      apiUrl: process.env.ZEP_API_URL || 'https://api.getzep.com', // Cloud ZEP API URL
+      apiKey: process.env.ZEP_API_KEY // Your cloud ZEP API key
+    });
     
-    // Create collection if it doesn't exist
-    if (!collection) {
-      await zepClient.document.addCollection({
-        name: process.env.ZEP_COLLECTION_NAME,
-        description: "Rental property management conversations",
+    // Collection name for conversations
+    const collectionName = process.env.ZEP_COLLECTION_NAME || 'rental-bot-conversations';
+    
+    // Check if collection exists, create if not
+    try {
+      await zepClient.getCollection(collectionName);
+      console.log(`ZEP collection '${collectionName}' exists`);
+    } catch (error) {
+      // Collection doesn't exist, create it
+      console.log(`Creating ZEP collection '${collectionName}'...`);
+      await zepClient.createCollection({
+        name: collectionName,
+        description: "Rental property management chatbot conversations",
         metadata: {
-          application: "rental-bot"
+          application: "rental-property-management"
         }
       });
-      console.log(`Created Zep collection: ${process.env.ZEP_COLLECTION_NAME}`);
-    } else {
-      console.log(`Zep collection already exists: ${process.env.ZEP_COLLECTION_NAME}`);
+      console.log(`ZEP collection '${collectionName}' created successfully`);
     }
     
     return true;
   } catch (error) {
-    console.error('Error initializing Zep memory:', error);
+    console.error('Error initializing ZEP memory:', error);
     return false;
   }
-};
+}
 
 /**
- * Add memory to Zep collection
+ * Add memory to Zep
  * @param {string} userId - User identifier
  * @param {string} message - Message content
- * @param {boolean} isUser - Whether the message is from user (true) or assistant (false)
+ * @param {string} role - Message role (user or assistant)
  * @returns {Promise<boolean>} Success status
  */
-const addMemory = async (userId, message, isUser = true) => {
+async function addMemory(userId, message, role = 'user') {
   try {
-    await zepClient.memory.addMemory(
-      process.env.ZEP_COLLECTION_NAME,
-      userId,
-      {
-        role: isUser ? "user" : "assistant",
-        content: message
+    if (!zepClient) {
+      console.error('ZEP client not initialized');
+      return false;
+    }
+    
+    const collectionName = process.env.ZEP_COLLECTION_NAME || 'rental-bot-conversations';
+    
+    // Add memory to Zep
+    await zepClient.addMemory(collectionName, userId, [{
+      role: role,
+      content: message,
+      metadata: {
+        timestamp: new Date().toISOString()
       }
-    );
+    }]);
     
     return true;
   } catch (error) {
-    console.error('Error adding memory to Zep:', error);
+    console.error('Error adding memory to ZEP:', error);
     return false;
   }
-};
+}
 
 /**
- * Get conversation history from Zep
+ * Get memory from Zep
  * @param {string} userId - User identifier
- * @param {number} limit - Maximum number of messages to retrieve
- * @returns {Promise<Array>} Conversation history
+ * @param {number} limit - Maximum number of memories to retrieve
+ * @returns {Promise<Array>} Array of memories
  */
-const getMemory = async (userId, limit = 50) => {
+async function getMemory(userId, limit = 20) {
   try {
-    const history = await zepClient.memory.getMemory(
-      process.env.ZEP_COLLECTION_NAME,
-      userId,
-      { limit }
-    );
+    if (!zepClient) {
+      console.error('ZEP client not initialized');
+      return [];
+    }
     
-    return history || [];
+    const collectionName = process.env.ZEP_COLLECTION_NAME || 'rental-bot-conversations';
+    
+    // Get memory from Zep
+    const memories = await zepClient.getMemory(collectionName, userId, { limit });
+    
+    // Format memories for use with Groq
+    return memories.map(memory => ({
+      role: memory.role,
+      content: memory.content
+    }));
   } catch (error) {
-    console.error('Error retrieving memory from Zep:', error);
+    console.error('Error getting memory from ZEP:', error);
     return [];
   }
-};
+}
 
 /**
- * Search memory for specific content
+ * Search memory in Zep
  * @param {string} userId - User identifier
  * @param {string} query - Search query
- * @returns {Promise<Array>} Search results
+ * @param {number} limit - Maximum number of results
+ * @returns {Promise<Array>} Array of search results
  */
-const searchMemory = async (userId, query) => {
+async function searchMemory(userId, query, limit = 5) {
   try {
-    const results = await zepClient.memory.searchMemory(
-      process.env.ZEP_COLLECTION_NAME,
-      userId,
-      { text: query }
-    );
+    if (!zepClient) {
+      console.error('ZEP client not initialized');
+      return [];
+    }
     
-    return results || [];
+    const collectionName = process.env.ZEP_COLLECTION_NAME || 'rental-bot-conversations';
+    
+    // Search memory in Zep
+    const results = await zepClient.searchMemory(collectionName, userId, query, { limit });
+    
+    return results;
   } catch (error) {
-    console.error('Error searching Zep memory:', error);
+    console.error('Error searching memory in ZEP:', error);
     return [];
   }
-};
-
-/**
- * Summarize conversation history
- * @param {string} userId - User identifier
- * @returns {Promise<string>} Conversation summary
- */
-const summarizeMemory = async (userId) => {
-  try {
-    const summary = await zepClient.memory.summarizeMemory(
-      process.env.ZEP_COLLECTION_NAME,
-      userId
-    );
-    
-    return summary?.summary || "No conversation summary available.";
-  } catch (error) {
-    console.error('Error summarizing Zep memory:', error);
-    return "Failed to generate conversation summary.";
-  }
-};
+}
 
 module.exports = {
   initializeZepMemory,
   addMemory,
   getMemory,
-  searchMemory,
-  summarizeMemory
+  searchMemory
 };

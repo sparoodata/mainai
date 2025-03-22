@@ -43,26 +43,28 @@ app.use(session({
 // Static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Initialize Zep memory
-const zepMemory = require('./utils/zepMemory');
-zepMemory.initializeZepMemory()
-  .then(success => {
-    if (success) {
-      console.log('Zep memory initialized successfully');
-    } else {
-      console.error('Failed to initialize Zep memory');
-    }
-  })
-  .catch(err => {
-    console.error('Error initializing Zep memory:', err);
-  });
-
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
 })
-.then(() => console.log('MongoDB connected'))
+.then(() => {
+  console.log('MongoDB connected');
+  
+  // Initialize MongoDB memory system
+  const mongoMemory = require('./utils/mongoMemory');
+  mongoMemory.initializeMongoMemory()
+    .then(success => {
+      if (success) {
+        console.log('MongoDB memory system initialized successfully');
+      } else {
+        console.error('Failed to initialize MongoDB memory system');
+      }
+    })
+    .catch(err => {
+      console.error('Error initializing MongoDB memory system:', err);
+    });
+})
 .catch(err => console.error('MongoDB connection error:', err));
 
 // Routes
