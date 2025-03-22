@@ -40,8 +40,8 @@ function generatePropertyId() {
 }
 
 /*
-  Helper: Send an interactive list for country selection.
-  (Header text removed)
+  Helper: Send an interactive list for country selection (only "India").
+  (Heading removed)
 */
 async function sendCountrySelectionList(fromNumber) {
   const rows = [{
@@ -57,7 +57,7 @@ async function sendCountrySelectionList(fromNumber) {
       type: 'list',
       header: { type: 'text', text: '' },
       body: { text: 'Please select your country:' },
-      footer: { text: 'Powered by MyTenants' },
+      footer: { text: 'Powered by Your Rental App' },
       action: {
         button: 'View Country',
         sections: [{ title: 'Country', rows }]
@@ -71,7 +71,7 @@ async function sendCountrySelectionList(fromNumber) {
 
 /*
   Helper: Send interactive buttons for property type selection.
-  (Header text removed)
+  (Heading removed)
 */
 async function sendPropertyTypeButtons(fromNumber) {
   const messageData = {
@@ -98,7 +98,7 @@ async function sendPropertyTypeButtons(fromNumber) {
 
 /*
   Helper: Send interactive buttons for Year Built option.
-  (Header text removed)
+  (Heading removed)
 */
 async function sendYearBuiltOptionButtons(fromNumber) {
   const messageData = {
@@ -124,7 +124,7 @@ async function sendYearBuiltOptionButtons(fromNumber) {
 
 /*
   Helper: Send interactive buttons for Purchase Price option.
-  (Header text removed)
+  (Heading removed)
 */
 async function sendPurchasePriceOptionButtons(fromNumber) {
   const messageData = {
@@ -151,7 +151,7 @@ async function sendPurchasePriceOptionButtons(fromNumber) {
 /*
   Helper: Send an interactive list for property selection.
   Splits properties into chunks of up to 10.
-  (Header text removed)
+  (Heading removed)
 */
 async function sendPropertySelectionLists(fromNumber, properties) {
   const chunks = chunkArray(properties, 10);
@@ -161,16 +161,20 @@ async function sendPropertySelectionLists(fromNumber, properties) {
       title: prop.name,
       description: prop.address || ''
     }));
+    const headerText = '';
+    const bodyText = 'Please select a property from the list below:';
+    const footerText = '';
+    const actionButton = i === 0 ? 'View Properties' : 'View More';
     const messageData = {
       messaging_product: 'whatsapp',
       to: fromNumber,
       type: 'interactive',
       interactive: {
         type: 'list',
-        header: { type: 'text', text: '' },
-        body: { text: 'Please select a property from the list below:' },
-        footer: { text: '' },
-        action: { button: i === 0 ? 'View Properties' : 'View More', sections: [{ title: 'Properties', rows }] }
+        header: { type: 'text', text: headerText },
+        body: { text: bodyText },
+        footer: { text: footerText },
+        action: { button: actionButton, sections: [{ title: 'Properties', rows }] }
       }
     };
     await axios.post(WHATSAPP_API_URL, messageData, {
@@ -182,7 +186,7 @@ async function sendPropertySelectionLists(fromNumber, properties) {
 /*
   Helper: Send an interactive list for unit selection.
   Splits units into chunks of up to 10.
-  (Header text removed)
+  (Heading removed)
 */
 async function sendUnitSelectionLists(fromNumber, units) {
   const chunks = chunkArray(units, 10);
@@ -192,16 +196,20 @@ async function sendUnitSelectionLists(fromNumber, units) {
       title: unit.unitNumber,
       description: `Floor: ${unit.floor}`
     }));
+    const headerText = '';
+    const bodyText = 'Please select a unit from the list below:';
+    const footerText = '';
+    const actionButton = i === 0 ? 'View Units' : 'View More';
     const messageData = {
       messaging_product: 'whatsapp',
       to: fromNumber,
       type: 'interactive',
       interactive: {
         type: 'list',
-        header: { type: 'text', text: '' },
-        body: { text: 'Please select a unit from the list below:' },
-        footer: { text: '' },
-        action: { button: i === 0 ? 'View Units' : 'View More', sections: [{ title: 'Units', rows }] }
+        header: { type: 'text', text: headerText },
+        body: { text: bodyText },
+        footer: { text: footerText },
+        action: { button: actionButton, sections: [{ title: 'Units', rows }] }
       }
     };
     await axios.post(WHATSAPP_API_URL, messageData, {
@@ -212,8 +220,8 @@ async function sendUnitSelectionLists(fromNumber, units) {
 
 /*
   Helper: Send image upload option.
-  Sends a link and then an interactive skip button.
-  (Header text removed)
+  Sends a clickable tinyURL link as text, then an interactive message with a skip button.
+  (Heading removed)
 */
 async function sendImageOptionButton(fromNumber, type, entityId) {
   const token = await generateUploadToken(fromNumber, type, entityId);
@@ -260,7 +268,6 @@ router.post('/', async (req, res) => {
     const entry = body.entry[0];
     const changes = entry.changes[0];
     const value = changes.value;
-    // Process contacts
     if (value.contacts) {
       const contact = value.contacts[0];
       const contactPhoneNumber = `+${contact.wa_id}`;
@@ -277,8 +284,6 @@ router.post('/', async (req, res) => {
       const text = message.text ? message.text.body.trim() : null;
       const interactive = message.interactive || null;
       console.log(`Message from ${fromNumber}:`, { text, interactive });
-      
-      // Capture interactive replies
       if (interactive && interactive.type === 'list_reply') {
         userResponses[fromNumber] = interactive.list_reply.id;
         console.log(`List reply received: ${userResponses[fromNumber]}`);
@@ -286,66 +291,35 @@ router.post('/', async (req, res) => {
         userResponses[fromNumber] = interactive.button_reply.id;
         console.log(`Button reply received: ${userResponses[fromNumber]}`);
       }
-      
-      // Initialize session if needed
       if (!sessions[fromNumber]) {
-        sessions[fromNumber] = { action: null, hasSeenWelcome: false };
+        sessions[fromNumber] = { action: null };
       }
-      
-      // Send welcome message with main menu only once per session.
-      if (!sessions[fromNumber].hasSeenWelcome) {
-        const welcomeText = 
-`Welcome to MyTenants – Your Rental Management Companion!
-Manage your properties, units, tenants, and maintenance with ease.
-Please select an option below:`;
-        
-        const mainMenuMessage = {
-          messaging_product: 'whatsapp',
-          to: fromNumber,
-          type: 'interactive',
-          interactive: {
-            type: 'list',
-            header: { type: 'text', text: 'MyTenants' },
-            body: { text: welcomeText },
-            footer: { text: 'Powered by MyTenants' },
-            action: {
-              button: 'Menu Options',
-              sections: [
-                {
-                  title: 'Main Menu',
-                  rows: [
-                    { id: 'dashboard', title: 'Dashboard', description: '' },
-                    { id: 'properties', title: 'Properties', description: '' },
-                    { id: 'units', title: 'Units', description: '' },
-                    { id: 'tenants', title: 'Tenants', description: '' },
-                    { id: 'maintenance', title: 'Maintenance', description: '' },
-                    { id: 'reports', title: 'Reports', description: '' },
-                    { id: 'settings', title: 'Settings', description: '' },
-                    { id: 'support', title: 'Support', description: '' }
-                  ]
-                }
-              ]
-            }
-          }
-        };
-        
-        await axios.post(WHATSAPP_API_URL, mainMenuMessage, {
-          headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-        });
-        
-        sessions[fromNumber].action = "main_menu";
-        sessions[fromNumber].hasSeenWelcome = true;
-        return res.sendStatus(200);
-      }
-      
-      // Process flows based on sessions and text input.
       if (text) {
-        // If session is at main menu, you might ignore plain text to let interactive replies work.
-        if (sessions[fromNumber].action === "main_menu") {
-          console.log(`User in main_menu sent: ${text}`);
+        if (text.toLowerCase() === 'help') {
+          if (sessions[fromNumber].action === 'awaiting_image_choice') return res.sendStatus(200);
+          const buttonMenu = {
+            messaging_product: 'whatsapp',
+            to: fromNumber,
+            type: 'interactive',
+            interactive: {
+              type: 'button',
+              header: { type: 'text', text: '🏠 Rental Management' },
+              body: { text: '*Welcome!* Please select an option below:' },
+              footer: { text: 'Powered by Your Rental App' },
+              action: {
+                buttons: [
+                  { type: 'reply', reply: { id: 'account_info', title: '👤 Account Info' } },
+                  { type: 'reply', reply: { id: 'manage', title: '🛠️ Manage' } },
+                  { type: 'reply', reply: { id: 'tools', title: '🧰 Tools' } }
+                ]
+              }
+            }
+          };
+          await axios.post(WHATSAPP_API_URL, buttonMenu, {
+            headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+          });
           return res.sendStatus(200);
         }
-        
         // --- Property Creation Flow ---
         if (sessions[fromNumber].action === 'add_property_name') {
           if (isValidName(text)) {
@@ -388,9 +362,9 @@ Please select an option below:`;
           await sendCountrySelectionList(fromNumber);
           sessions[fromNumber].action = 'awaiting_property_country';
         } else if (sessions[fromNumber].action === 'awaiting_property_country') {
-          // Handled via interactive reply.
+          // Handled via interactive reply below.
         } else if (sessions[fromNumber].action === 'awaiting_property_type') {
-          // Handled via interactive reply.
+          // Handled via interactive reply below.
         } else if (sessions[fromNumber].action === 'add_property_yearBuilt') {
           const currentYear = new Date().getFullYear();
           const year = parseInt(text, 10);
@@ -523,8 +497,7 @@ Please select an option below:`;
           }
         }
       }
-      
-      // Process interactive replies (list or button)
+      // Process interactive replies
       if (interactive && userResponses[fromNumber]) {
         const selectedOption = userResponses[fromNumber];
         if (selectedOption === 'account_info') {
@@ -734,7 +707,7 @@ Please select an option below:`;
   res.sendStatus(200);
 });
 
-// Summary function: Sends a message (image with caption) with an edit option.
+// Summary function: Sends a single message (image with caption only) with an edit option.
 async function sendSummary(phoneNumber, type, entityId, imageUrl) {
   let caption;
   if (type === 'property') {
