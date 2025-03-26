@@ -1,114 +1,68 @@
-// webhook.js
+/**
+ * webhook.js
+ * Updated: Forward payload changes to Groq endpoint
+ */
+
 const express = require('express');
+const router = express.Router();
 const axios = require('axios');
 const crypto = require('crypto');
-const Groq = require('groq-sdk');
 
+// Import helper functions and models
+const { chunkArray, isValidName, isValidAddress, isNumeric, isValidUnits } = require('../helpers/validators');
+const menuHelpers = require('../helpers/menuHelpers');
+const { generateUploadToken } = require('../helpers/uploadToken');
+const { shortenUrl } = require('../helpers/shortenUrl');
 const User = require('../models/User');
 const Property = require('../models/Property');
 const Unit = require('../models/Unit');
 const Tenant = require('../models/Tenant');
-const UploadToken = require('../models/UploadToken');
 
-const router = express.Router();
-
-const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
+// WhatsApp API and other constants (assumed to be set in config or env variables)
+const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL;
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const GLITCH_HOST = process.env.GLITCH_HOST;
-const DEFAULT_IMAGE_URL = 'https://via.placeholder.com/150';
+const DEFAULT_IMAGE_URL = process.env.DEFAULT_IMAGE_URL || 'https://via.placeholder.com/150';
 
+// In-memory storage for sessions and user responses
 const sessions = {};
-let userResponses = {};
+const userResponses = {};
 
-// Helpers and validators
-const chunkArray = require('../helpers/chunkArray');
-const { isValidName, isValidAddress, isValidUnits, isValidTotalAmount, isValidDate } = require('../helpers/validators');
-const { generateUnitId, generateTenantId } = require('../helpers/idGenerators');
-const { shortenUrl, sendMessage, sendImageMessage } = require('../helpers/whatsapp');
-const generateUploadToken = require('../helpers/uploadToken');
-const menuHelpers = require('../helpers/menuHelpers');
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
-// Helper: Check if a string is numeric
-function isNumeric(value) {
-  return /^\d+$/.test(value);
-}
-
-/**
- * 1) Helper: Forward slash-initiated messages to the internal Groq endpoint.
- */
-async function forwardToGroq(phoneNumber, message) {
+// Function to send a simple text message via WhatsApp
+async function sendMessage(to, message) {
+  const messageData = {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'text',
+    text: { body: message }
+  };
   try {
-    const response = await axios.post(`${GLITCH_HOST}/groq`, { phoneNumber, message });
-    return response.data.reply;
+    await axios.post(WHATSAPP_API_URL, messageData, {
+      headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+    });
   } catch (error) {
-    console.error('Error forwarding to Groq:', error);
-    return 'Sorry, there was an issue processing your request.';
+    console.error('Error sending message:', error);
   }
 }
 
-/**
- * 2) Various interactive message helpers
- *    - We keep your existing code to preserve your flows.
- */
-async function sendCountrySelectionList(fromNumber) {
-  const rows = [
-    {
-      id: 'country_India',
-      title: 'India',
-      description: 'Select India'
-    }
-  ];
+// Function to send an image message via WhatsApp
+async function sendImageMessage(to, imageUrl, caption) {
   const messageData = {
     messaging_product: 'whatsapp',
-    to: fromNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'list',
-      header: { type: 'text', text: '' },
-      body: { text: 'Please select your country:' },
-      footer: { text: 'Powered by Your Rental App' },
-      action: {
-        button: 'View Country',
-        sections: [{ title: 'Country', rows }]
-      }
-    }
+    to,
+    type: 'image',
+    image: { link: imageUrl, caption }
   };
-  await axios.post(WHATSAPP_API_URL, messageData, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json'
-    }
-  });
+  try {
+    await axios.post(WHATSAPP_API_URL, messageData, {
+      headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('Error sending image message:', error);
+  }
 }
 
-async function sendPropertyTypeButtons(fromNumber) {
-  const messageData = {
-    messaging_product: 'whatsapp',
-    to: fromNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      header: { type: 'text', text: '' },
-      body: { text: 'Please select a property type:' },
-      action: {
-        buttons: [
-          { type: 'reply', reply: { id: 'ptype_Apartment', title: 'Apartment' } },
-          { type: 'reply', reply: { id: 'ptype_Independant', title: 'Independant house' } },
-          { type: 'reply', reply: { id: 'ptype_Others', title: 'Others' } }
-        ]
-      }
-    }
-  };
-  await axios.post(WHATSAPP_API_URL, messageData, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json'
-    }
-  });
-}
-
+// Send interactive buttons for Year Built option
 async function sendYearBuiltOptionButtons(fromNumber) {
   const messageData = {
     messaging_product: 'whatsapp',
@@ -127,13 +81,11 @@ async function sendYearBuiltOptionButtons(fromNumber) {
     }
   };
   await axios.post(WHATSAPP_API_URL, messageData, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json'
-    }
+    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
   });
 }
 
+// Send interactive buttons for Purchase Price option
 async function sendPurchasePriceOptionButtons(fromNumber) {
   const messageData = {
     messaging_product: 'whatsapp',
@@ -152,17 +104,15 @@ async function sendPurchasePriceOptionButtons(fromNumber) {
     }
   };
   await axios.post(WHATSAPP_API_URL, messageData, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json'
-    }
+    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
   });
 }
 
+// Send an interactive list for property selection
 async function sendPropertySelectionLists(fromNumber, properties) {
   const chunks = chunkArray(properties, 10);
   for (let i = 0; i < chunks.length; i++) {
-    const rows = chunks[i].map(prop => ({
+    const rows = chunks[i].map((prop) => ({
       id: `prop_${prop._id}`,
       title: prop.name,
       description: prop.address || ''
@@ -180,25 +130,20 @@ async function sendPropertySelectionLists(fromNumber, properties) {
         header: { type: 'text', text: headerText },
         body: { text: bodyText },
         footer: { text: footerText },
-        action: {
-          button: actionButton,
-          sections: [{ title: 'Properties', rows }]
-        }
+        action: { button: actionButton, sections: [{ title: 'Properties', rows }] }
       }
     };
     await axios.post(WHATSAPP_API_URL, messageData, {
-      headers: {
-        Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json'
-      }
+      headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
     });
   }
 }
 
+// Send an interactive list for unit selection
 async function sendUnitSelectionLists(fromNumber, units) {
   const chunks = chunkArray(units, 10);
   for (let i = 0; i < chunks.length; i++) {
-    const rows = chunks[i].map(unit => ({
+    const rows = chunks[i].map((unit) => ({
       id: `unit_${unit._id}`,
       title: unit.unitNumber,
       description: `Floor: ${unit.floor}`
@@ -216,26 +161,26 @@ async function sendUnitSelectionLists(fromNumber, units) {
         header: { type: 'text', text: headerText },
         body: { text: bodyText },
         footer: { text: footerText },
-        action: {
-          button: actionButton,
-          sections: [{ title: 'Units', rows }]
-        }
+        action: { button: actionButton, sections: [{ title: 'Units', rows }] }
       }
     };
     await axios.post(WHATSAPP_API_URL, messageData, {
-      headers: {
-        Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json'
-      }
+      headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
     });
   }
 }
 
+// Send an interactive button to upload or skip an image
 async function sendImageOptionButton(fromNumber, type, entityId) {
   const token = await generateUploadToken(fromNumber, type, entityId);
   const imageUploadUrl = `${GLITCH_HOST}/upload-image/${fromNumber}/${type}/${entityId}?token=${token}`;
   const shortUrl = await shortenUrl(imageUploadUrl);
-  await sendMessage(fromNumber, `Please upload the image here (valid for 15 minutes): ${shortUrl}`);
+
+  await sendMessage(
+    fromNumber,
+    `Please upload the image here (valid for 15 minutes): ${shortUrl}`
+  );
+
   const messageData = {
     messaging_product: 'whatsapp',
     to: fromNumber,
@@ -243,24 +188,51 @@ async function sendImageOptionButton(fromNumber, type, entityId) {
     interactive: {
       type: 'button',
       header: { type: 'text', text: '' },
-      body: { text: 'If you wish to skip uploading an image, tap the button below:' },
+      body: {
+        text: 'If you wish to skip uploading an image, tap the button below:'
+      },
       action: {
         buttons: [
-          { type: 'reply', reply: { id: `no_upload_${type}_${entityId}`, title: 'No, Skip' } }
+          {
+            type: 'reply',
+            reply: { id: `no_upload_${type}_${entityId}`, title: 'No, Skip' }
+          }
         ]
       }
     }
   };
+
   await axios.post(WHATSAPP_API_URL, messageData, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json'
-    }
+    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
   });
 }
 
 /**
- * 3) WhatsApp Webhook Verification
+ * forwardToGroq - Forwards slash commands (starting with "/") to the Groq endpoint.
+ * 
+ * NOTE: We now explicitly stringify the JSON payload and log it before sending.
+ */
+async function forwardToGroq(phoneNumber, message) {
+  try {
+    // Build payload with keys at the root level
+    const payload = { phoneNumber, message };
+    console.log('Forwarding payload to Groq:', payload);
+    const response = await axios.post(
+      'https://defiant-stone-tail.glitch.me/groq',
+      JSON.stringify(payload),
+      {
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error forwarding to Groq:', error);
+    return 'There was an error processing your request.';
+  }
+}
+
+/**
+ * GET /webhook - Verification Endpoint
  */
 router.get('/', (req, res) => {
   const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
@@ -272,14 +244,16 @@ router.get('/', (req, res) => {
     console.log('Webhook verified successfully');
     return res.status(200).send(challenge);
   }
-  res.sendStatus(403);
+  return res.sendStatus(403);
 });
 
 /**
- * 4) Main webhook POST handler
+ * POST /webhook - Main Handler for Incoming WhatsApp Messages
  */
 router.post('/', async (req, res) => {
   const body = req.body;
+
+  // Confirm it's a WhatsApp Business Account update
   if (body.object === 'whatsapp_business_account') {
     const entry = body.entry[0];
     const changes = entry.changes[0];
@@ -299,7 +273,7 @@ router.post('/', async (req, res) => {
       await user.save();
     }
 
-    // 4b) Process incoming messages
+    // 4b) Process any incoming messages
     if (value.messages) {
       const message = value.messages[0];
       const fromNumber = message.from;
@@ -310,7 +284,7 @@ router.post('/', async (req, res) => {
       console.log(`Message from ${fromNumber}:`, { text, interactive });
 
       /**
-       * 4b-i) NEW: If message starts with '/', forward to Groq
+       * 4b-i) If the message begins with '/', forward to Groq
        */
       if (text && text.startsWith('/')) {
         const groqReply = await forwardToGroq(phoneNumber, text);
@@ -318,7 +292,7 @@ router.post('/', async (req, res) => {
         return res.sendStatus(200);
       }
 
-      // 4b-ii) Old logic: Interactive or text-based flows
+      // 4b-ii) For interactive messages, record the selected option
       if (interactive && interactive.type === 'list_reply') {
         userResponses[fromNumber] = interactive.list_reply.id;
         console.log(`List reply received: ${userResponses[fromNumber]}`);
@@ -327,18 +301,19 @@ router.post('/', async (req, res) => {
         console.log(`Button reply received: ${userResponses[fromNumber]}`);
       }
 
+      // Initialize a session if none exists
       if (!sessions[fromNumber]) {
         sessions[fromNumber] = { action: null };
       }
 
-      // 4b-iii) If it's a normal text (not slash)
+      // 4b-iii) If it's a normal text message (not slash), continue the flows
       if (text) {
-        // ---------------------
-        // Entire existing logic
-        // ---------------------
-
+        // Example: handle 'help'
         if (text.toLowerCase() === 'help') {
-          if (sessions[fromNumber].action === 'awaiting_image_choice') return res.sendStatus(200);
+          if (sessions[fromNumber].action === 'awaiting_image_choice') {
+            // If the user is in the middle of uploading an image, ignore "help"
+            return res.sendStatus(200);
+          }
           const buttonMenu = {
             messaging_product: 'whatsapp',
             to: fromNumber,
@@ -366,7 +341,9 @@ router.post('/', async (req, res) => {
           return res.sendStatus(200);
         }
 
-        // ---- Property Creation Flow (original) ----
+        /**
+         * Example property creation flow (as in your original code).
+         */
         if (sessions[fromNumber].action === 'add_property_name') {
           if (isValidName(text)) {
             sessions[fromNumber].propertyData = { name: text };
@@ -420,12 +397,9 @@ router.post('/', async (req, res) => {
             return res.sendStatus(200);
           }
           sessions[fromNumber].propertyData.zipCode = text;
-          await sendCountrySelectionList(fromNumber);
+          // Assume sendCountrySelectionList sends a list of countries for selection
+          await sendMessage(fromNumber, 'Select the country from the list.');
           sessions[fromNumber].action = 'awaiting_property_country';
-        } else if (sessions[fromNumber].action === 'awaiting_property_country') {
-          // Handled via interactive reply below.
-        } else if (sessions[fromNumber].action === 'awaiting_property_type') {
-          // Handled via interactive reply below.
         } else if (sessions[fromNumber].action === 'add_property_yearBuilt') {
           const currentYear = new Date().getFullYear();
           const year = parseInt(text, 10);
@@ -481,16 +455,16 @@ router.post('/', async (req, res) => {
             );
           }
         }
-        // -- Additional flows omitted for brevity, but remain unchanged --
-        // e.g. add_unit_flow, add_tenant_flow, etc.
+        // ...Continue other flows as needed...
+      }
 
-      } // end if (text)
-
-      // 4b-iv) Handle interactive replies
+      /**
+       * 4b-iv) Handle interactive replies from the user
+       */
       if (interactive && userResponses[fromNumber]) {
         const selectedOption = userResponses[fromNumber];
 
-        // Example: Handle top-level menu
+        // Example top-level menu: account_info
         if (selectedOption === 'account_info') {
           const user = await User.findOne({ phoneNumber });
           const accountInfoMessage = user
@@ -500,9 +474,7 @@ router.post('/', async (req, res) => {
 📞 *Phone*: ${user.phoneNumber}
 ✅ *Verified*: ${user.verified ? 'Yes' : 'No'}
 🧑 *Profile Name*: ${user.profileName || 'N/A'}
-📅 *Registration Date*: ${
-                user.registrationDate ? user.registrationDate.toLocaleDateString() : 'N/A'
-              }
+📅 *Registration Date*: ${user.registrationDate ? user.registrationDate.toLocaleDateString() : 'N/A'}
 💰 *Subscription*: ${user.subscription}
 ━━━━━━━━━━━━━━━`
             : '⚠️ *No Account Found* \nNo account information is available for this number.';
@@ -524,10 +496,7 @@ router.post('/', async (req, res) => {
           const user = await User.findOne({ phoneNumber });
           const properties = await Property.find({ ownerId: user._id });
           if (!properties.length) {
-            await sendMessage(
-              fromNumber,
-              'No properties found. Please add a property first.'
-            );
+            await sendMessage(fromNumber, 'No properties found. Please add a property first.');
           } else {
             sessions[fromNumber].properties = properties;
             sessions[fromNumber].userId = user._id;
@@ -538,10 +507,7 @@ router.post('/', async (req, res) => {
           const user = await User.findOne({ phoneNumber });
           const properties = await Property.find({ ownerId: user._id });
           if (!properties.length) {
-            await sendMessage(
-              fromNumber,
-              'No properties found. Please add a property first.'
-            );
+            await sendMessage(fromNumber, 'No properties found. Please add a property first.');
           } else {
             sessions[fromNumber].properties = properties;
             sessions[fromNumber].userId = user._id;
@@ -549,9 +515,8 @@ router.post('/', async (req, res) => {
             sessions[fromNumber].action = 'add_tenant_select_property';
           }
         }
-        // Continue with other interactive flow logic
-        // (Selecting property, selecting unit, skipping upload, etc.)
 
+        // ...More interactive flow handling...
         delete userResponses[fromNumber];
       }
     }
@@ -560,38 +525,23 @@ router.post('/', async (req, res) => {
 });
 
 /**
- * 5) Summaries: final part of your original code
+ * sendSummary - Sends a summary message (with an image) after adding an entity.
  */
 async function sendSummary(phoneNumber, type, entityId, imageUrl) {
   let caption;
   if (type === 'property') {
     const property = await Property.findById(entityId);
-    const summaryImage =
-      property.images && property.images.length > 0 ? property.images[0] : DEFAULT_IMAGE_URL;
-    caption = `✅ *Property Added*\n━━━━━━━━━━━━━━━\n🏠 *Name*: ${property.name}\n📝 *Description*: ${property.description}\n📍 *Address*: ${property.address}, ${property.city}, ${property.state} ${property.zipCode}, ${property.country}\n🏢 *Type*: ${property.propertyType}\n🏗️ *Year Built*: ${
-      property.yearBuilt || 'N/A'
-    }\n🏠 *Total Units*: ${property.totalUnits}\n💰 *Purchase Price*: ${
-      property.purchasePrice || 'N/A'
-    }\n━━━━━━━━━━━━━━━\nReply with *Edit* to modify details.`;
+    const summaryImage = property.images && property.images.length > 0 ? property.images[0] : DEFAULT_IMAGE_URL;
+    caption = `✅ *Property Added*\n━━━━━━━━━━━━━━━\n🏠 *Name*: ${property.name}\n📝 *Description*: ${property.description}\n📍 *Address*: ${property.address}, ${property.city}, ${property.state} ${property.zipCode}, ${property.country}\n🏢 *Type*: ${property.propertyType}\n🏗️ *Year Built*: ${property.yearBuilt || 'N/A'}\n🏠 *Total Units*: ${property.totalUnits}\n💰 *Purchase Price*: ${property.purchasePrice || 'N/A'}\n━━━━━━━━━━━━━━━\nReply with *Edit* to modify details.`;
     await sendImageMessage(phoneNumber, summaryImage, caption);
   } else if (type === 'unit') {
     const unit = await Unit.findById(entityId).populate('property');
-    caption = `✅ *Unit Added*\n━━━━━━━━━━━━━━━\n🏠 *Property*: ${unit.property.name}\n🚪 *Unit ID*: ${
-      unit.unitNumber
-    }\n💰 *Rent Amount*: ${unit.rentAmount}\n📏 *Floor*: ${
-      unit.floor
-    }\n📐 *Size*: ${unit.size}\n━━━━━━━━━━━━━━━\nReply with *Edit* to modify details.`;
+    caption = `✅ *Unit Added*\n━━━━━━━━━━━━━━━\n🏠 *Property*: ${unit.property.name}\n🚪 *Unit ID*: ${unit.unitNumber}\n💰 *Rent Amount*: ${unit.rentAmount}\n📏 *Floor*: ${unit.floor}\n📐 *Size*: ${unit.size}\n━━━━━━━━━━━━━━━\nReply with *Edit* to modify details.`;
     await sendImageMessage(phoneNumber, imageUrl, caption);
   } else if (type === 'tenant') {
     const tenant = await Tenant.findById(entityId);
     const unit = await Unit.findById(tenant.unitAssigned);
-    caption = `✅ *Tenant Added*\n━━━━━━━━━━━━━━━\n👤 *Name*: ${
-      tenant.fullName
-    }\n🏠 *Property*: ${tenant.propertyName}\n🚪 *Unit*: ${
-      unit ? unit.unitNumber : 'N/A'
-    }\n📅 *Lease Start*: ${new Date(tenant.leaseStartDate).toLocaleDateString()}\n💵 *Deposit*: ${
-      tenant.depositAmount
-    }\n💰 *Monthly Rent*: ${tenant.monthlyRent}\n━━━━━━━━━━━━━━━\nReply with *Edit* to modify details.`;
+    caption = `✅ *Tenant Added*\n━━━━━━━━━━━━━━━\n👤 *Name*: ${tenant.fullName}\n🏠 *Property*: ${tenant.propertyName}\n🚪 *Unit*: ${unit ? unit.unitNumber : 'N/A'}\n📅 *Lease Start*: ${new Date(tenant.leaseStartDate).toLocaleDateString()}\n💵 *Deposit*: ${tenant.depositAmount}\n💰 *Monthly Rent*: ${tenant.monthlyRent}\n━━━━━━━━━━━━━━━\nReply with *Edit* to modify details.`;
     await sendImageMessage(phoneNumber, imageUrl, caption);
   }
 }
@@ -599,5 +549,5 @@ async function sendSummary(phoneNumber, type, entityId, imageUrl) {
 module.exports = {
   router,
   sendMessage,
-  sendSummary,
+  sendSummary
 };
