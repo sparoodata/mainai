@@ -21,7 +21,10 @@ const { router, sendMessage, sendSummary } = require('./routes/webhook');
 
 const app = express();
 const port = process.env.PORT || 3000;
+const groqRoute = require('./routes/groq');
 
+// Use Groq route for messages starting with '/'
+app.use('/groq', groqRoute);
 // Configure AWS R2 (S3 compatible)
 const s3 = new AWS.S3({
   endpoint: process.env.R2_ENDPOINT,
