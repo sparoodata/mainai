@@ -19,6 +19,57 @@ const DEFAULT_IMAGE_URL = 'https://via.placeholder.com/150';
 const sessions = {};
 let userResponses = {};
 
+// [All your original helper functions and imports remain unchanged here]
+
+// --- Property Confirm/Edit Summary Workflow ---
+function handlePropertyDetails(phone, detailKey, value) {
+  if (!sessions[phone]) sessions[phone] = {};
+  if (!sessions[phone].tempProperty) sessions[phone].tempProperty = {};
+  sessions[phone].tempProperty[detailKey] = value;
+}
+
+function getPropertySummary(property) {
+  return `Please review the property details:\n\n` +
+    `🏘️ Name: ${property.name || ''}\n` +
+    `📍 Address: ${property.address || ''}\n` +
+    `📅 Available From: ${property.availableFrom || ''}\n` +
+    `📦 Total Units: ${property.totalUnits || ''}\n` +
+    `💰 Rent: ${property.purchasePrice || ''}\n\n` +
+    `Is everything correct?`;
+}
+
+function sendPropertySummary(phone, property) {
+  const message = getPropertySummary(property);
+  sendMessage(phone, message, [
+    { title: '✅ Confirm', payload: 'CONFIRM_PROPERTY' },
+    { title: '✏️ Edit', payload: 'EDIT_PROPERTY' }
+  ]);
+}
+
+function handlePostSummaryResponse(phone, payload) {
+  if (payload === 'CONFIRM_PROPERTY') {
+    const property = new Property(sessions[phone].tempProperty);
+    property.save().then(() => {
+      sendMessage(phone, '✅ Property has been saved successfully!');
+      delete sessions[phone].tempProperty;
+    }).catch(err => {
+      sendMessage(phone, '❌ Failed to save property. Please try again.');
+    });
+  } else if (payload === 'EDIT_PROPERTY') {
+    sendMessage(phone, 'Which field do you want to edit? (name, address, availableFrom, totalUnits, purchasePrice)');
+    sessions[phone].editing = true;
+  }
+}
+
+function handleEditField(phone, field, newValue) {
+  if (sessions[phone]?.tempProperty && sessions[phone].editing) {
+    sessions[phone].tempProperty[field] = newValue;
+    sendPropertySummary(phone, sessions[phone].tempProperty);
+    sessions[phone].editing = false;
+  }
+}
+
+
 // Helpers and validators
 const chunkArray = require('../helpers/chunkArray');
 const { isValidName, isValidAddress, isValidUnits, isValidTotalAmount, isValidDate } = require('../helpers/validators');
