@@ -123,8 +123,8 @@ app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validat
   const { phoneNumber, type, id } = req.params;
   const { token } = req.body;
   console.log(`POST request received - Token: ${token}, File: ${req.file ? req.file.originalname : 'No file'}`);
-  
   try {
+    // Create an object key for the image in R2
     const key = `images/${Date.now()}-${req.file.originalname}`;
     const uploadParams = {
       Bucket: process.env.R2_BUCKET,
@@ -133,49 +133,47 @@ app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validat
       ContentType: req.file.mimetype,
     };
 
+    // Upload the image to R2
     await s3.upload(uploadParams).promise();
 
+    // Generate a pre-signed URL (valid for 5 minutes)
     const signedUrl = s3.getSignedUrl('getObject', {
       Bucket: process.env.R2_BUCKET,
       Key: key,
       Expires: 300,
     });
     console.log(`Image uploaded to R2 and signed URL generated: ${signedUrl}`);
-
-    // Update entity immediately with image, but set status as "pending confirmation"
+    
+    // Update the related entity using extended models
     let entity;
     if (type === 'property') {
       entity = await Property.findById(id);
-      entity.images = [signedUrl];
-      entity.status = 'pending'; // New field for confirmation
+      entity.images.push(signedUrl);
       await entity.save();
     } else if (type === 'unit') {
       entity = await Unit.findById(id);
-      entity.images = [signedUrl];
-      entity.status = 'pending';
+      entity.images.push(signedUrl);
       await entity.save();
     } else if (type === 'tenant') {
       entity = await Tenant.findById(id);
+      // For tenant, we assume a single photo field
       entity.photo = signedUrl;
-      entity.status = 'pending';
       await entity.save();
     }
 
     console.log(`Sending summary for ${type} with signed URL: ${signedUrl}`);
-    
-    // Send summary asking explicitly for Confirm or Edit action
     await sendSummary(phoneNumber, type, id, signedUrl);
 
     req.uploadToken.used = true;
     await req.uploadToken.save();
 
-    res.send('Image uploaded successfully! Please confirm via WhatsApp.');
+    res.send('Image uploaded successfully!');
   } catch (error) {
     console.error(`Error uploading image for ${type}:`, error);
     const retryUrl = `${process.env.GLITCH_HOST}/upload-image/${phoneNumber}/${type}/${id}?token=${token}`;
     const shortUrl = await axios.post('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(retryUrl))
       .then(response => response.data);
-    await sendMessage(phoneNumber, `❌ *Error* \nFailed to upload image. Please retry: ${shortUrl}`);
+    await sendMessage(phoneNumber, `❌ *Error* \nFailed to upload image. Please try again using this link: ${shortUrl}`);
     res.status(500).send('Error uploading image.');
   }
 });
