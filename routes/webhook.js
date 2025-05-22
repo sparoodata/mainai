@@ -17,6 +17,52 @@ const GLITCH_HOST = process.env.GLITCH_HOST;
 const DEFAULT_IMAGE_URL = 'https://via.placeholder.com/150';
 
 const sessions = {};
+// --- Property Creation Helpers ---
+function handlePropertyDetails(phone, detailKey, value) {
+  if (!sessions[phone]) sessions[phone] = {};
+  if (!sessions[phone].tempProperty) sessions[phone].tempProperty = {};
+  sessions[phone].tempProperty[detailKey] = value;
+}
+
+function getPropertySummary(property) {
+  return `Please review the property details:\n\n` +
+    `🏘️ Name: ${property.name}\n` +
+    `📍 Address: ${property.address}\n` +
+    `📅 Available From: ${property.availableFrom}\n` +
+    `📦 Total Units: ${property.totalUnits}\n` +
+    `💰 Rent: ${property.rent}\n\n` +
+    `Is everything correct?`;
+}
+
+function sendPropertySummary(phone, property) {
+  const message = getPropertySummary(property);
+  sendMessage(phone, message, [
+    { type: 'reply', title: '✅ Confirm', payload: 'CONFIRM_PROPERTY' },
+    { type: 'reply', title: '✏️ Edit', payload: 'EDIT_PROPERTY' }
+  ]);
+}
+
+function handlePostSummaryResponse(phone, payload) {
+  if (payload === 'CONFIRM_PROPERTY') {
+    const property = new Property(sessions[phone].tempProperty);
+    property.save().then(() => {
+      sendMessage(phone, '✅ Property has been saved successfully!');
+      delete sessions[phone].tempProperty;
+    });
+  } else if (payload === 'EDIT_PROPERTY') {
+    sendMessage(phone, 'Which field do you want to edit? (name, address, availableFrom, totalUnits, rent)');
+    sessions[phone].editing = true;
+  }
+}
+
+function handleEditField(phone, field, newValue) {
+  if (sessions[phone]?.tempProperty && sessions[phone].editing) {
+    sessions[phone].tempProperty[field] = newValue;
+    sendPropertySummary(phone, sessions[phone].tempProperty);
+    sessions[phone].editing = false;
+  }
+}
+
 let userResponses = {};
 
 // Helpers and validators
