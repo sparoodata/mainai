@@ -327,6 +327,12 @@ router.get('/', (req, res) => {
 
 // Main webhook POST handler
 router.post('/', async (req, res) => {
+  const entry = req.body.entry?.[0]?.changes?.[0]?.value;
+const messageObj = entry?.messages?.[0];
+const phone = messageObj?.from;
+const message = messageObj?.text?.body || null;
+const interactive = messageObj?.interactive || null;
+
   const body = req.body;
   if (body.object === 'whatsapp_business_account') {
     const entry = body.entry[0];
