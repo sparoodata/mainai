@@ -46,20 +46,22 @@ function sendPropertySummary(phone, property) {
   ]);
 }
 
-function handlePostSummaryResponse(phone, payload) {
+async function handlePostSummaryResponse(phone, payload) {
   if (payload === 'CONFIRM_PROPERTY') {
-    const property = new Property(sessions[phone].tempProperty);
-    property.save().then(() => {
-      sendMessage(phone, '✅ Property has been saved successfully!');
-      delete sessions[phone].tempProperty;
-    }).catch(err => {
-      sendMessage(phone, '❌ Failed to save property. Please try again.');
-    });
+    const property = await Property.findOne({ ownerId: phone, status: 'pending' }).sort({ createdAt: -1 });
+    if (property) {
+      property.status = 'active';
+      await property.save();
+      await sendMessage(phone, '✅ Property confirmed and saved successfully!');
+    } else {
+      await sendMessage(phone, '⚠️ No pending property found.');
+    }
   } else if (payload === 'EDIT_PROPERTY') {
-    sendMessage(phone, 'Which field do you want to edit? (name, address, availableFrom, totalUnits, purchasePrice)');
-    sessions[phone].editing = true;
+    sessions[phone] = { editing: true, editingPropertyId: id };
+    await sendMessage(phone, 'Type the field name and new value to edit (e.g., "name My Property").');
   }
 }
+
 
 function handleEditField(phone, field, newValue) {
   if (sessions[phone]?.tempProperty && sessions[phone].editing) {
@@ -332,6 +334,7 @@ router.get('/', (req, res) => {
 
 // Main webhook POST handler
 router.post('/', async (req, res) => {
+  
   const body = req.body;
   if (body.object === 'whatsapp_business_account') {
     const entry = body.entry[0];
@@ -392,6 +395,22 @@ router.post('/', async (req, res) => {
               }
             }
           };
+          if (sessions[fromNumber]?.editing && text) {
+  const [field, ...rest] = text.split(' ');
+  const newValue = rest.join(' ');
+  const property = await Property.findById(sessions[fromNumber].editingPropertyId);
+  
+  if (property && field in property.toObject()) {
+    property[field] = newValue;
+    await property.save();
+    await sendSummary(fromNumber, 'property', property._id, property.images[0]);
+  } else {
+    await sendMessage(fromNumber, '⚠️ Invalid field or property not found.');
+  }
+
+  sessions[fromNumber].editing = false;
+  return res.sendStatus(200);
+}
           await axios.post(WHATSAPP_API_URL, buttonMenu, {
             headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
           });
