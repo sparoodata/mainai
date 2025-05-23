@@ -1,149 +1,185 @@
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
+const session = require('express-session');
+const MongoStore = require('connect-mongo');
 const mongoose = require('mongoose');
-const axios = require('axios');
+const path = require('path');
+const axios = require("axios");
+const multer = require('multer');
+const crypto = require('crypto');
+const AWS = require('aws-sdk');
+
+// Updated models
+const Property = require('./models/Property');
+const Unit = require('./models/Unit');
+const Tenant = require('./models/Tenant');
+const User = require('./models/User');
+const UploadToken = require('./models/UploadToken');
+
+const { router, sendMessage, sendSummary } = require('./routes/webhook');
 
 const app = express();
+const port = process.env.PORT || 3000;
+const groqRoute = require('./routes/groq');
+
+// Use Groq route for messages starting with '/'
+app.use('/groq', groqRoute);
+// Configure AWS R2 (S3 compatible)
+const s3 = new AWS.S3({
+  endpoint: process.env.R2_ENDPOINT,
+  accessKeyId: process.env.R2_ACCESS_KEY_ID,
+  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  region: 'auto',
+  signatureVersion: 'v4',
+});
+
+app.set('trust proxy', 1);
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+
+// Parse JSON and URL-encoded data
 app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-mongoose.connect(process.env.MONGODB_URI);
+mongoose.set('strictQuery', false);
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+  .then(() => console.log('MongoDB connected'))
+  .catch(error => console.error('MongoDB connection error:', error));
 
-const Account = require('./models/Account');
-const Property = require('./models/Property');
-const Tenant = require('./models/Tenant');
+// Use sessions stored in MongoDB
+app.use(session({
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: true,
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGODB_URI,
+    collectionName: 'sessions',
+    ttl: 3600,
+  }),
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 3600000,
+  },
+}));
 
-const whatsappUrl = `https://graph.facebook.com/v20.0/110765315459068/messages`;
+app.use(express.static(path.join(__dirname, 'public')));
 
-async function sendMessage(to, messageData) {
-  await axios.post(whatsappUrl, {
-    messaging_product: 'whatsapp',
-    to,
-    ...messageData
-  }, {
-    headers: { 'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}` }
-  });
+// Multer setup for file uploads (memory storage)
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+});
+
+// Use the webhook router for WhatsApp interactions
+app.use('/webhook', router);
+
+// Middleware to validate the upload token for image uploads
+async function validateUploadToken(req, res, next) {
+  // For GET requests, token is in query; for POST requests, it's in the body
+  const token = req.method === 'GET' ? req.query.token : req.body.token;
+  console.log(`Validating token: ${token}, Method: ${req.method}`);
+  if (!token) {
+    console.log('No token provided in request');
+    return res.status(403).send('No token provided.');
+  }
+  try {
+    const uploadToken = await UploadToken.findOne({ token });
+    if (!uploadToken) {
+      console.log('Token not found in database');
+      return res.status(403).send('Invalid or expired token.');
+    }
+    if (uploadToken.used) {
+      console.log('Token already used');
+      return res.status(403).send('This upload link has already been used.');
+    }
+    if (new Date() > uploadToken.expiresAt) {
+      console.log('Token expired');
+      return res.status(403).send('This upload link has expired.');
+    }
+    req.uploadToken = uploadToken;
+    next();
+  } catch (error) {
+    console.error('Error validating token:', error);
+    res.status(500).send('Server error during token validation.');
+  }
 }
 
-const userStates = {};
-
-app.get('/webhook', (req, res) => {
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
-
-  if (mode && token === process.env.VERIFY_TOKEN) {
-    return res.status(200).send(challenge);
-  } else {
-    return res.sendStatus(403);
-  }
+// GET route to render the image upload page (make sure you have an "uploadImage.ejs" in your views folder)
+app.get('/upload-image/:phoneNumber/:type/:id', validateUploadToken, (req, res) => {
+  const { phoneNumber, type, id } = req.params;
+  const { token } = req.query;
+  console.log(`Rendering upload page with token: ${token}`);
+  res.render('uploadImage', { phoneNumber, type, id, token });
 });
 
-app.post('/webhook', async (req, res) => {
+// POST route for handling image uploads
+app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validateUploadToken, async (req, res) => {
+  const { phoneNumber, type, id } = req.params;
+  const { token } = req.body;
+  console.log(`POST request received - Token: ${token}, File: ${req.file ? req.file.originalname : 'No file'}`);
+  
   try {
-    const message = req.body.entry[0].changes[0].value.messages[0];
-    const phone = message.from;
-    const text = message.text?.body;
-    const type = message.type;
+    const key = `images/${Date.now()}-${req.file.originalname}`;
+    const uploadParams = {
+      Bucket: process.env.R2_BUCKET,
+      Key: key,
+      Body: req.file.buffer,
+      ContentType: req.file.mimetype,
+    };
 
-    let account = await Account.findOne({ whatsappNumber: phone });
+    await s3.upload(uploadParams).promise();
 
-    if (!account && type === 'interactive' && message.interactive?.button_reply?.id === 'register') {
-      await sendMessage(phone, { text: { body: 'Please provide your email ID:' } });
-      userStates[phone] = { step: 'email', data: { whatsappNumber: phone } };
-    } else if (!account && type === 'text' && !userStates[phone]) {
-      await sendMessage(phone, {
-        interactive: {
-          type: 'button',
-          body: { text: 'Welcome to Rental Assistant! Register to manage tenants.' },
-          action: {
-            buttons: [
-              { type: 'reply', reply: { id: 'register', title: 'Register' } },
-              { type: 'reply', reply: { id: 'learn_more', title: 'Learn More' } }
-            ]
-          }
-        }
-      });
-    } else if (userStates[phone]) {
-      const state = userStates[phone];
-      const data = state.data;
+    const signedUrl = s3.getSignedUrl('getObject', {
+      Bucket: process.env.R2_BUCKET,
+      Key: key,
+      Expires: 300,
+    });
+    console.log(`Image uploaded to R2 and signed URL generated: ${signedUrl}`);
 
-      if (state.step === 'email') {
-        data.email = text;
-        userStates[phone].step = 'age';
-        await sendMessage(phone, { text: { body: 'Enter your age:' } });
-      } else if (state.step === 'age') {
-        data.age = parseInt(text);
-        userStates[phone].step = 'country';
-        await sendMessage(phone, { text: { body: 'Enter your country:' } });
-      } else if (state.step === 'country') {
-        data.country = text;
-        userStates[phone].step = 'state';
-        await sendMessage(phone, { text: { body: 'Enter your state:' } });
-      } else if (state.step === 'state') {
-        data.state = text;
-        userStates[phone].step = 'newsletter';
-        await sendMessage(phone, {
-          interactive: {
-            type: 'button',
-            body: { text: 'Would you like to receive newsletters?' },
-            action: {
-              buttons: [
-                { type: 'reply', reply: { id: 'newsletter_yes', title: 'Yes' } },
-                { type: 'reply', reply: { id: 'newsletter_no', title: 'No' } }
-              ]
-            }
-          }
-        });
-      }
-    } else if (type === 'interactive' && ['newsletter_yes', 'newsletter_no'].includes(message.interactive.button_reply.id)) {
-      const phone = message.from;
-      if (userStates[phone]) {
-        userStates[phone].data.newsletter = message.interactive.button_reply.id === 'newsletter_yes';
-        await Account.create(userStates[phone].data);
-        delete userStates[phone];
-        await sendMessage(phone, {
-          text: {
-            body: `✅ Registration successful! You're a free user (1 property, 5 tenants). Upgrade for more!`
-          }
-        });
-      }
-    } else if (text?.toLowerCase() === 'upgrade') {
-      if (account) {
-        account.subscriptionType = 'premium';
-        account.propertiesLimit = 10;
-        account.tenantsLimit = 100;
-        await account.save();
-        await sendMessage(phone, { text: { body: '🎉 You are now a premium user!' } });
-      }
-    } else if (text?.toLowerCase().startsWith('add property')) {
-      const name = text.split(':')[1]?.trim();
-      if (account) {
-        const count = await Property.countDocuments({ ownerPhone: phone });
-        if (count >= account.propertiesLimit) {
-          await sendMessage(phone, { text: { body: '❌ Property limit reached. Upgrade for more.' } });
-        } else {
-          await Property.create({ ownerPhone: phone, name, address: 'Not set' });
-          await sendMessage(phone, { text: { body: `🏠 Property '${name}' added.` } });
-        }
-      }
-    } else if (text?.toLowerCase() === 'list properties') {
-      const props = await Property.find({ ownerPhone: phone });
-      const list = props.map(p => `• ${p.name}`).join('\n');
-      await sendMessage(phone, { text: { body: `📋 Your Properties:\n${list}` } });
-    } else {
-      await sendMessage(phone, { text: { body: 'You are already registered. Use commands like: "upgrade", "add property: House1", "list properties"' } });
+    // Update entity immediately with image, but set status as "pending confirmation"
+    let entity;
+    if (type === 'property') {
+      entity = await Property.findById(id);
+      entity.images = [signedUrl];
+      entity.status = 'pending'; // New field for confirmation
+      await entity.save();
+    } else if (type === 'unit') {
+      entity = await Unit.findById(id);
+      entity.images = [signedUrl];
+      entity.status = 'pending';
+      await entity.save();
+    } else if (type === 'tenant') {
+      entity = await Tenant.findById(id);
+      entity.photo = signedUrl;
+      entity.status = 'pending';
+      await entity.save();
     }
 
-    res.sendStatus(200);
+    console.log(`Sending summary for ${type} with signed URL: ${signedUrl}`);
+    
+    // Send summary asking explicitly for Confirm or Edit action
+    await sendSummary(phoneNumber, type, id, signedUrl);
+
+    req.uploadToken.used = true;
+    await req.uploadToken.save();
+
+    res.send('Image uploaded successfully! Please confirm via WhatsApp.');
   } catch (error) {
-    console.error(error);
-    res.sendStatus(500);
+    console.error(`Error uploading image for ${type}:`, error);
+    const retryUrl = `${process.env.GLITCH_HOST}/upload-image/${phoneNumber}/${type}/${id}?token=${token}`;
+    const shortUrl = await axios.post('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(retryUrl))
+      .then(response => response.data);
+    await sendMessage(phoneNumber, `❌ *Error* \nFailed to upload image. Please retry: ${shortUrl}`);
+    res.status(500).send('Error uploading image.');
   }
 });
 
-app.get('/', (req, res) => {
-  res.send('WhatsApp Rental Assistant is running.');
+app.listen(port, () => {
+  console.log(`Server running on http://localhost:${port}`);
 });
-
-app.listen(process.env.PORT || 3000, () => console.log('Server is up'));
