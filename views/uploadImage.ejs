@@ -3,28 +3,80 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Upload Image</title>
+  <title>mytenantsOnline - Upload Image</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Arial', sans-serif; background-color: #f4f6f8; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
-    .container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); padding: 30px; width: 100%; max-width: 400px; text-align: center; }
-    h1 { font-size: 24px; color: #333; margin-bottom: 20px; font-weight: 600; }
-    form { display: flex; flex-direction: column; gap: 20px; }
-    input[type="file"] { font-size: 16px; color: #555; border: 2px dashed #ccc; border-radius: 5px; padding: 15px; width: 100%; cursor: pointer; transition: border-color 0.3s ease; }
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: #f4f6f8;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 10px;
+    }
+    header {
+      width: 100%;
+      background-color: #007bff;
+      padding: 15px;
+      text-align: center;
+      color: #fff;
+      font-size: 20px;
+      font-weight: bold;
+      margin-bottom: 20px;
+      border-radius: 5px;
+    }
+    .container {
+      background-color: #ffffff;
+      border-radius: 10px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      padding: 25px;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+    h1 {
+      font-size: 22px;
+      color: #333;
+      margin-bottom: 15px;
+      font-weight: 600;
+    }
+    form { display: flex; flex-direction: column; gap: 15px; }
+    input[type="file"] {
+      font-size: 14px;
+      color: #555;
+      border: 2px dashed #ccc;
+      border-radius: 5px;
+      padding: 12px;
+      width: 100%;
+      cursor: pointer;
+      transition: border-color 0.3s ease;
+    }
     input[type="file"]:hover { border-color: #007bff; }
     input[type="file"]::-webkit-file-upload-button { display: none; }
-    button { background-color: #007bff; color: #fff; border: none; border-radius: 5px; padding: 12px 20px; font-size: 16px; font-weight: 500; cursor: pointer; transition: background-color 0.3s ease; }
+    button {
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      padding: 10px;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
     button:hover { background-color: #0056b3; }
-    button:active { background-color: #004085; }
+
     @media (max-width: 480px) {
-      .container { padding: 20px; max-width: 100%; }
-      h1 { font-size: 20px; }
-      input[type="file"] { font-size: 14px; padding: 10px; }
-      button { font-size: 14px; padding: 10px 15px; }
+      .container { padding: 15px; max-width: 100%; }
+      h1 { font-size: 18px; }
+      header { font-size: 18px; padding: 12px; }
     }
   </style>
 </head>
 <body>
+  <header>mytenantsOnline</header>
   <div class="container">
     <h1>Upload Image for <%= type.charAt(0).toUpperCase() + type.slice(1) %></h1>
     <form action="/upload-image/<%= phoneNumber %>/<%= type %>/<%= id %>" method="POST" enctype="multipart/form-data">
