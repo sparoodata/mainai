@@ -13,7 +13,7 @@ const Account = require('./models/Account');
 const Property = require('./models/Property');
 const Tenant = require('./models/Tenant');
 
-const whatsappUrl = `https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`;
+const whatsappUrl = `https://graph.facebook.com/v20.0/110765315459068/messages`;
 
 async function sendMessage(to, messageData) {
   await axios.post(whatsappUrl, {
