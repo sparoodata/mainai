@@ -1,185 +1,101 @@
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
-const session = require('express-session');
-const MongoStore = require('connect-mongo');
 const mongoose = require('mongoose');
-const path = require('path');
-const axios = require("axios");
-const multer = require('multer');
-const crypto = require('crypto');
-const AWS = require('aws-sdk');
-
-// Updated models
-const Property = require('./models/Property');
-const Unit = require('./models/Unit');
-const Tenant = require('./models/Tenant');
-const User = require('./models/User');
-const UploadToken = require('./models/UploadToken');
-
-const { router, sendMessage, sendSummary } = require('./routes/webhook');
+const axios = require('axios');
 
 const app = express();
-const port = process.env.PORT || 3000;
-const groqRoute = require('./routes/groq');
-
-// Use Groq route for messages starting with '/'
-app.use('/groq', groqRoute);
-// Configure AWS R2 (S3 compatible)
-const s3 = new AWS.S3({
-  endpoint: process.env.R2_ENDPOINT,
-  accessKeyId: process.env.R2_ACCESS_KEY_ID,
-  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-  region: 'auto',
-  signatureVersion: 'v4',
-});
-
-app.set('trust proxy', 1);
-app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, 'views'));
-
-// Parse JSON and URL-encoded data
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
 
-mongoose.set('strictQuery', false);
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-  .then(() => console.log('MongoDB connected'))
-  .catch(error => console.error('MongoDB connection error:', error));
+mongoose.connect(process.env.MONGODB_URI);
 
-// Use sessions stored in MongoDB
-app.use(session({
-  secret: process.env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: true,
-  store: MongoStore.create({
-    mongoUrl: process.env.MONGODB_URI,
-    collectionName: 'sessions',
-    ttl: 3600,
-  }),
-  cookie: {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 3600000,
-  },
-}));
-
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Multer setup for file uploads (memory storage)
-const storage = multer.memoryStorage();
-const upload = multer({
-  storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+const accountSchema = new mongoose.Schema({
+  whatsappNumber: String,
+  email: String,
+  age: Number,
+  country: String,
+  state: String,
+  newsletter: Boolean,
+  subscriptionType: { type: String, default: 'free' },
+  propertiesLimit: { type: Number, default: 1 },
+  tenantsLimit: { type: Number, default: 5 }
 });
 
-// Use the webhook router for WhatsApp interactions
-app.use('/webhook', router);
+const Account = mongoose.model('Account', accountSchema);
 
-// Middleware to validate the upload token for image uploads
-async function validateUploadToken(req, res, next) {
-  // For GET requests, token is in query; for POST requests, it's in the body
-  const token = req.method === 'GET' ? req.query.token : req.body.token;
-  console.log(`Validating token: ${token}, Method: ${req.method}`);
-  if (!token) {
-    console.log('No token provided in request');
-    return res.status(403).send('No token provided.');
-  }
-  try {
-    const uploadToken = await UploadToken.findOne({ token });
-    if (!uploadToken) {
-      console.log('Token not found in database');
-      return res.status(403).send('Invalid or expired token.');
+const whatsappToken = process.env.VERIFY_TOKEN;
+const whatsappUrl = `https://graph.facebook.com/v19.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+
+const sendMessage = async (to, messageData) => {
+  await axios.post(whatsappUrl, {
+    messaging_product: 'whatsapp',
+    to,
+    ...messageData
+  }, {
+    headers: { 'Authorization': `Bearer ${whatsappToken}` }
+  });
+};
+
+app.post('/webhook', async (req, res) => {
+  const message = req.body.entry[0].changes[0].value.messages[0];
+  const whatsappNumber = message.from;
+
+  let account = await Account.findOne({ whatsappNumber });
+
+  if (!account) {
+    if (message.type === 'interactive' && message.interactive.button_reply.id === 'register') {
+      await sendMessage(whatsappNumber, { text: { body: 'Please provide your email ID:' } });
+      await Account.create({ whatsappNumber });
+    } else {
+      await sendMessage(whatsappNumber, {
+        interactive: {
+          type: 'button',
+          body: { text: 'Welcome to the Rental Management Assistant! Manage tenants easily via WhatsApp.' },
+          action: {
+            buttons: [
+              { type: 'reply', reply: { id: 'register', title: 'Register' } },
+              { type: 'reply', reply: { id: 'learn_more', title: 'Learn More' } }
+            ]
+          }
+        }
+      });
     }
-    if (uploadToken.used) {
-      console.log('Token already used');
-      return res.status(403).send('This upload link has already been used.');
-    }
-    if (new Date() > uploadToken.expiresAt) {
-      console.log('Token expired');
-      return res.status(403).send('This upload link has expired.');
-    }
-    req.uploadToken = uploadToken;
-    next();
-  } catch (error) {
-    console.error('Error validating token:', error);
-    res.status(500).send('Server error during token validation.');
-  }
-}
-
-// GET route to render the image upload page (make sure you have an "uploadImage.ejs" in your views folder)
-app.get('/upload-image/:phoneNumber/:type/:id', validateUploadToken, (req, res) => {
-  const { phoneNumber, type, id } = req.params;
-  const { token } = req.query;
-  console.log(`Rendering upload page with token: ${token}`);
-  res.render('uploadImage', { phoneNumber, type, id, token });
-});
-
-// POST route for handling image uploads
-app.post('/upload-image/:phoneNumber/:type/:id', upload.single('image'), validateUploadToken, async (req, res) => {
-  const { phoneNumber, type, id } = req.params;
-  const { token } = req.body;
-  console.log(`POST request received - Token: ${token}, File: ${req.file ? req.file.originalname : 'No file'}`);
-  
-  try {
-    const key = `images/${Date.now()}-${req.file.originalname}`;
-    const uploadParams = {
-      Bucket: process.env.R2_BUCKET,
-      Key: key,
-      Body: req.file.buffer,
-      ContentType: req.file.mimetype,
-    };
-
-    await s3.upload(uploadParams).promise();
-
-    const signedUrl = s3.getSignedUrl('getObject', {
-      Bucket: process.env.R2_BUCKET,
-      Key: key,
-      Expires: 300,
+  } else if (!account.email) {
+    account.email = message.text.body;
+    await account.save();
+    await sendMessage(whatsappNumber, { text: { body: 'Please provide your age:' } });
+  } else if (!account.age) {
+    account.age = parseInt(message.text.body);
+    await account.save();
+    await sendMessage(whatsappNumber, { text: { body: 'Please provide your country:' } });
+  } else if (!account.country) {
+    account.country = message.text.body;
+    await account.save();
+    await sendMessage(whatsappNumber, { text: { body: 'Please provide your state:' } });
+  } else if (!account.state) {
+    account.state = message.text.body;
+    await account.save();
+    await sendMessage(whatsappNumber, {
+      interactive: {
+        type: 'button',
+        body: { text: 'Would you like to receive newsletters via email?' },
+        action: {
+          buttons: [
+            { type: 'reply', reply: { id: 'newsletter_yes', title: 'Yes' } },
+            { type: 'reply', reply: { id: 'newsletter_no', title: 'No' } }
+          ]
+        }
+      }
     });
-    console.log(`Image uploaded to R2 and signed URL generated: ${signedUrl}`);
-
-    // Update entity immediately with image, but set status as "pending confirmation"
-    let entity;
-    if (type === 'property') {
-      entity = await Property.findById(id);
-      entity.images = [signedUrl];
-      entity.status = 'pending'; // New field for confirmation
-      await entity.save();
-    } else if (type === 'unit') {
-      entity = await Unit.findById(id);
-      entity.images = [signedUrl];
-      entity.status = 'pending';
-      await entity.save();
-    } else if (type === 'tenant') {
-      entity = await Tenant.findById(id);
-      entity.photo = signedUrl;
-      entity.status = 'pending';
-      await entity.save();
-    }
-
-    console.log(`Sending summary for ${type} with signed URL: ${signedUrl}`);
-    
-    // Send summary asking explicitly for Confirm or Edit action
-    await sendSummary(phoneNumber, type, id, signedUrl);
-
-    req.uploadToken.used = true;
-    await req.uploadToken.save();
-
-    res.send('Image uploaded successfully! Please confirm via WhatsApp.');
-  } catch (error) {
-    console.error(`Error uploading image for ${type}:`, error);
-    const retryUrl = `${process.env.GLITCH_HOST}/upload-image/${phoneNumber}/${type}/${id}?token=${token}`;
-    const shortUrl = await axios.post('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(retryUrl))
-      .then(response => response.data);
-    await sendMessage(phoneNumber, `❌ *Error* \nFailed to upload image. Please retry: ${shortUrl}`);
-    res.status(500).send('Error uploading image.');
+  } else if (message.type === 'interactive' && ['newsletter_yes', 'newsletter_no'].includes(message.interactive.button_reply.id)) {
+    account.newsletter = message.interactive.button_reply.id === 'newsletter_yes';
+    await account.save();
+    await sendMessage(whatsappNumber, { text: { body: `🎉 You are now registered as a free user! You can manage 1 property and 5 tenants. Subscribe to premium for more benefits!` } });
+  } else {
+    await sendMessage(whatsappNumber, { text: { body: 'You are already registered! How can I assist you today?' } });
   }
+
+  res.sendStatus(200);
 });
 
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
-});
+app.listen(process.env.PORT || 3000, () => console.log('Server started'));
