@@ -369,19 +369,58 @@ if (!user && registrationStates[fromNumber]?.step && ['email', 'age', 'state', '
   const msg = text;
 
   if (reg.step === 'email') {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(msg)) {
+      await sendMessage(fromNumber, '⚠️ Please enter a valid email address (e.g., test@example.com)');
+      return res.sendStatus(200);
+    }
     reg.data.email = msg;
     reg.step = 'age';
     await sendMessage(fromNumber, 'How old are you?');
   } else if (reg.step === 'age') {
-    reg.data.age = parseInt(msg);
-    reg.step = 'state';
-    await sendMessage(fromNumber, 'Which state do you live in?');
-  } else if (reg.step === 'state') {
-    reg.data.state = msg;
-    reg.step = 'newsletter';
-    await sendMessage(fromNumber, 'Do you want to receive newsletters? (yes/no)');
+    const age = parseInt(msg);
+    if (isNaN(age) || age < 18 || age > 100) {
+      await sendMessage(fromNumber, '⚠️ Please enter a valid age between 18 and 100.');
+      return res.sendStatus(200);
+    }
+    reg.data.age = age;
+    reg.step = 'state_selection';
+    await sendMessage(fromNumber, 'Please select your state 👇');
+    const stateMessage = {
+      messaging_product: 'whatsapp',
+      to: fromNumber,
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        header: { type: 'text', text: '🏙️ Select State' },
+        body: { text: 'Please choose your state:' },
+        footer: { text: 'Powered by Teraa Assistant' },
+        action: {
+          button: 'Select State',
+          sections: [{
+            title: 'States in India',
+            rows: [
+              { id: 'state_Telangana', title: 'Telangana' },
+              { id: 'state_AndhraPradesh', title: 'Andhra Pradesh' },
+              { id: 'state_Karnataka', title: 'Karnataka' },
+              { id: 'state_Tamilnadu', title: 'Tamil Nadu' },
+              { id: 'state_Kerala', title: 'Kerala' },
+              { id: 'state_Delhi', title: 'Delhi' },
+              { id: 'state_Maharashtra', title: 'Maharashtra' }
+            ]
+          }]
+        }
+      }
+    };
+    await axios.post(WHATSAPP_API_URL, stateMessage, {
+      headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+    });
   } else if (reg.step === 'newsletter') {
-    reg.data.newsletter = msg.toLowerCase() === 'yes';
+    const answer = msg.trim().toLowerCase();
+    if (answer !== 'yes' && answer !== 'no') {
+      await sendMessage(fromNumber, '⚠️ Please reply with *yes* or *no*.');
+      return res.sendStatus(200);
+    }
+    reg.data.newsletter = answer === 'yes';
     const newUser = new User(reg.data);
     await newUser.save();
     delete registrationStates[fromNumber];
@@ -389,6 +428,7 @@ if (!user && registrationStates[fromNumber]?.step && ['email', 'age', 'state', '
   }
   return res.sendStatus(200);
 }
+
 
 
       if (!sessions[fromNumber]) {
@@ -650,6 +690,14 @@ if (selectedOption.startsWith('lang_') && registrationStates[fromNumber]?.step =
   return res.sendStatus(200);
 }
 
+        if (selectedOption.startsWith('state_') && registrationStates[fromNumber]?.step === 'state_selection') {
+  const state = selectedOption.replace('state_', '').replace(/([A-Z])/g, ' $1').trim();
+  registrationStates[fromNumber].data.state = state;
+  registrationStates[fromNumber].step = 'newsletter';
+  await sendMessage(fromNumber, 'Do you want to receive newsletters? (yes/no)');
+  return res.sendStatus(200);
+}
+        
         if (selectedOption.startsWith('state_') && registrationStates[fromNumber]?.step === 'state_selection') {
   const state = selectedOption.replace('state_', '').replace(/([A-Z])/g, ' $1').trim();
   registrationStates[fromNumber].data.state = state;
