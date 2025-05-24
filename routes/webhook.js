@@ -365,25 +365,7 @@ const user = await User.findOne({ phoneNumber });
 
 if (!user && !registrationStates[fromNumber]) {
   registrationStates[fromNumber] = { step: 'email', data: { phoneNumber } };
-await sendMessage(fromNumber, {
-  messaging_product: 'whatsapp',
-  to: fromNumber,
-  type: 'interactive',
-  interactive: {
-    type: 'button',
-    header: { type: 'text', text: '👋 Welcome to Teraa Assistant' },
-    body: {
-      text: `Hi there! I’m *Teraa Assistant* – your personal rental management partner.\n\n🧑‍💼 *For Property Owners:*\nEasily manage your assets, properties, and tenants right from WhatsApp.\n\nPlease choose an option below to continue.`
-    },
-    footer: { text: 'Trusted by property owners across India' },
-    action: {
-      buttons: [
-        { type: 'reply', reply: { id: 'register', title: '📝 Register' } },
-        { type: 'reply', reply: { id: 'learn_more', title: '📖 Learn More' } }
-      ]
-    }
-  }
-});
+  await sendMessage(fromNumber, '👋 Welcome! Please enter your email ID to begin registration:');
   return res.sendStatus(200);
 } else if (!user && registrationStates[fromNumber]) {
   const reg = registrationStates[fromNumber];
