@@ -331,10 +331,12 @@ router.post('/', async (req, res) => {
       const contact = value.contacts[0];
       const contactPhoneNumber = `+${contact.wa_id}`;
       const profileName = contact.profile.name;
-      const user = (await User.findOne({ phoneNumber: contactPhoneNumber })) ||
-                   new User({ phoneNumber: contactPhoneNumber });
-      user.profileName = profileName || user.profileName;
-      await user.save();
+let user = await User.findOne({ phoneNumber: contactPhoneNumber });
+if (user) {
+  user.profileName = profileName || user.profileName;
+  await user.save();
+}
+
     }
     if (value.messages) {
       const message = value.messages[0];
