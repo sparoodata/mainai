@@ -650,6 +650,15 @@ if (selectedOption.startsWith('lang_') && registrationStates[fromNumber]?.step =
   return res.sendStatus(200);
 }
 
+        if (selectedOption.startsWith('state_') && registrationStates[fromNumber]?.step === 'state_selection') {
+  const state = selectedOption.replace('state_', '').replace(/([A-Z])/g, ' $1').trim();
+  registrationStates[fromNumber].data.state = state;
+  registrationStates[fromNumber].step = 'email';
+  await sendMessage(fromNumber, 'Please enter your email ID:');
+  return res.sendStatus(200);
+}
+
+        
         if (selectedOption === 'account_info') {
           const user = await User.findOne({ phoneNumber });
           const accountInfoMessage = user
