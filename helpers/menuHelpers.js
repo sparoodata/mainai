@@ -182,6 +182,35 @@ async function sendPropertyOptions(phoneNumber) {
   });
 }
 
+async function sendMainMenu(fromNumber) {
+  const menu = {
+    messaging_product: 'whatsapp',
+    to: fromNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '🏡 Teraa Assistant Menu' },
+      body: {
+        text: 'What would you like to do today?'
+      },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'manage', title: '🏘 Manage' } },
+          { type: 'reply', reply: { id: 'tools', title: '🛠 Tools' } },
+          { type: 'reply', reply: { id: 'account_info', title: '👤 My Account' } }
+        ]
+      }
+    }
+  };
+
+  await axios.post(WHATSAPP_API_URL, menu, {
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
+}
+
 async function sendUnitOptions(phoneNumber) {
   const buttonMenu = {
     messaging_product: 'whatsapp',
@@ -237,5 +266,6 @@ module.exports = {
   sendToolsSubmenu,
   sendPropertyOptions,
   sendUnitOptions,
+  sendMainMenu,
   sendTenantOptions,
 };

@@ -67,6 +67,7 @@ const { shortenUrl, sendMessage, sendImageMessage } = require('../helpers/whatsa
 const generateUploadToken = require('../helpers/uploadToken');
 const menuHelpers = require('../helpers/menuHelpers');
 
+
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // Helper: Check if a string is numeric
@@ -120,8 +121,7 @@ async function sendCountrySelectionList(fromNumber) {
     interactive: {
       type: 'list',
       header: { type: 'text', text: '' },
-      body: { text: 'Please select your country:' },
-      footer: { text: 'Powered by Your Rental App' },
+      body: { text: 'Please select your country 👇' },
       action: {
         button: 'View Country',
         sections: [{ title: 'Country', rows }]
@@ -362,6 +362,12 @@ if (user) {
       }
       // Registration flow
 const user = await User.findOne({ phoneNumber });
+      if (user && !sessions[fromNumber]?.action && !interactive) {
+  // Send main menu if user is registered and not in the middle of any flow
+  await menuHelpers.sendMainMenu(fromNumber); // Use your main menu function here
+  return res.sendStatus(200);
+}
+
 
       
 // Skip legacy registration flow if new button-based flow is used
@@ -392,9 +398,7 @@ if (!user && registrationStates[fromNumber]?.step && ['email', 'age', 'state', '
       type: 'interactive',
       interactive: {
         type: 'list',
-        header: { type: 'text', text: '🏙️ Select State' },
-        body: { text: 'Please choose your state:' },
-        footer: { text: 'Powered by Teraa Assistant' },
+        body: { text: 'Please choose your state 👇' },
         action: {
           button: 'Select State',
           sections: [{
@@ -661,9 +665,7 @@ const languageMessage = {
   type: 'interactive',
   interactive: {
     type: 'list',
-    header: { type: 'text', text: '🌐 Choose Language' },
-    body: { text: 'Please select your preferred language:' },
-    footer: { text: 'Powered by Teraa Assistant' },
+    body: { text: 'Please select your preferred language 👇' },
     action: {
       button: 'Select Language',
       sections: [{
