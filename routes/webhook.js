@@ -444,9 +444,10 @@ if (!user && registrationStates[fromNumber]?.step && ['email', 'age', 'state', '
       type: 'button',
       header: { type: 'text', text: '👋 Welcome to Teraa Assistant' },
       body: {
-        text: `Teraa Assistant helps rental property owners manage their properties, units, and tenants directly via WhatsApp. What would you like to do?`
+        text: `
+        Teraa Assistant helps rental property owners manage their properties, units, and tenants directly via WhatsApp. What would you like to do?
+        `
       },
-      footer: { text: 'Your Rental Management Assistant' },
       action: {
         buttons: [
           { type: 'reply', reply: { id: 'start_registration', title: '📝 Register' } },
