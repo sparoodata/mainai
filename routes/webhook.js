@@ -401,47 +401,32 @@ if (!user && !registrationStates[fromNumber]) {
         sessions[fromNumber] = { action: null };
       }
       if (text) {
-        if (text.toLowerCase() === 'help') {
-          if (sessions[fromNumber].action === 'awaiting_image_choice') return res.sendStatus(200);
-          const buttonMenu = {
-            messaging_product: 'whatsapp',
-            to: fromNumber,
-            type: 'interactive',
-            interactive: {
-              type: 'button',
-              header: { type: 'text', text: '🏠 Rental Management' },
-              body: { text: '*Welcome!* Please select an option below:' },
-              footer: { text: 'Powered by Your Rental App' },
-              action: {
-                buttons: [
-                  { type: 'reply', reply: { id: 'account_info', title: '👤 Account Info' } },
-                  { type: 'reply', reply: { id: 'manage', title: '🛠️ Manage' } },
-                  { type: 'reply', reply: { id: 'tools', title: '🧰 Tools' } }
-                ]
-              }
-            }
-          };
-          if (sessions[fromNumber]?.editing && text) {
-  const [field, ...rest] = text.split(' ');
-  const newValue = rest.join(' ');
-  const property = await Property.findById(sessions[fromNumber].editingPropertyId);
-  
-  if (property && field in property.toObject()) {
-    property[field] = newValue;
-    await property.save();
-    await sendSummary(fromNumber, 'property', property._id, property.images[0]);
-  } else {
-    await sendMessage(fromNumber, '⚠️ Invalid field or property not found.');
-  }
-
-  sessions[fromNumber].editing = false;
+        if (text.toLowerCase() === 'help' || text.toLowerCase() === 'start') {
+  const welcomeMessage = {
+    messaging_product: 'whatsapp',
+    to: fromNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '👋 Welcome to Teraa Assistant' },
+      body: {
+        text: `Teraa Assistant helps rental property owners manage their properties, units, and tenants directly via WhatsApp. What would you like to do?`
+      },
+      footer: { text: 'Your Rental Management Assistant' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'start_registration', title: '📝 Register' } },
+          { type: 'reply', reply: { id: 'learn_more', title: 'ℹ️ Learn More' } }
+        ]
+      }
+    }
+  };
+  await axios.post(WHATSAPP_API_URL, welcomeMessage, {
+    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+  });
   return res.sendStatus(200);
 }
-          await axios.post(WHATSAPP_API_URL, buttonMenu, {
-            headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-          });
-          return res.sendStatus(200);
-        }
+
         // --- Property Creation Flow ---
         if (sessions[fromNumber].action === 'add_property_name') {
           if (isValidName(text)) {
@@ -622,6 +607,50 @@ if (!user && !registrationStates[fromNumber]) {
       // Process interactive replies
       if (interactive && userResponses[fromNumber]) {
         const selectedOption = userResponses[fromNumber];
+        if (selectedOption === 'start_registration') {
+  registrationStates[fromNumber] = { step: 'language', data: { phoneNumber } };
+
+  const languageMessage = {
+    messaging_product: 'whatsapp',
+    to: fromNumber,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '🌐 Choose Language' },
+      body: { text: 'Please select your preferred language:' },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'lang_english', title: 'English' } },
+          { type: 'reply', reply: { id: 'lang_hindi', title: 'Hindi' } },
+          { type: 'reply', reply: { id: 'lang_telugu', title: 'Telugu' } },
+          { type: 'reply', reply: { id: 'lang_tamil', title: 'Tamil' } },
+          { type: 'reply', reply: { id: 'lang_malayalam', title: 'Malayalam' } },
+          { type: 'reply', reply: { id: 'lang_kannada', title: 'Kannada' } }
+        ]
+      }
+    }
+  };
+  await axios.post(WHATSAPP_API_URL, languageMessage, {
+    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+  });
+  return res.sendStatus(200);
+}
+
+        if (selectedOption.startsWith('lang_') && registrationStates[fromNumber]?.step === 'language') {
+  const lang = selectedOption.replace('lang_', '');
+  registrationStates[fromNumber].data.language = lang;
+  registrationStates[fromNumber].step = 'country_selection';
+  await sendCountrySelectionList(fromNumber);
+  return res.sendStatus(200);
+}
+
+        if (selectedOption === 'country_India' && registrationStates[fromNumber]?.step === 'country_selection') {
+  registrationStates[fromNumber].data.country = 'India';
+  registrationStates[fromNumber].step = 'email';
+  await sendMessage(fromNumber, 'Please enter your email to continue registration:');
+  return res.sendStatus(200);
+}
+
         if (selectedOption === 'account_info') {
           const user = await User.findOne({ phoneNumber });
           const accountInfoMessage = user
