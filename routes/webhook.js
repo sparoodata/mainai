@@ -363,11 +363,8 @@ if (user) {
       // Registration flow
 const user = await User.findOne({ phoneNumber });
 
-if (!user && !registrationStates[fromNumber]) {
-  registrationStates[fromNumber] = { step: 'email', data: { phoneNumber } };
-  await sendMessage(fromNumber, '👋 Welcome! Please enter your email ID to begin registration:');
-  return res.sendStatus(200);
-} else if (!user && registrationStates[fromNumber]) {
+// Skip legacy registration flow if new button-based flow is used
+if (!user && registrationStates[fromNumber]?.step && ['email', 'age', 'state', 'newsletter'].includes(registrationStates[fromNumber].step)) {
   const reg = registrationStates[fromNumber];
   const msg = text;
 
@@ -377,12 +374,8 @@ if (!user && !registrationStates[fromNumber]) {
     await sendMessage(fromNumber, 'How old are you?');
   } else if (reg.step === 'age') {
     reg.data.age = parseInt(msg);
-    reg.step = 'country';
-    await sendMessage(fromNumber, 'Which country do you live in?');
-  } else if (reg.step === 'country') {
-    reg.data.country = msg;
     reg.step = 'state';
-    await sendMessage(fromNumber, 'Which state?');
+    await sendMessage(fromNumber, 'Which state do you live in?');
   } else if (reg.step === 'state') {
     reg.data.state = msg;
     reg.step = 'newsletter';
@@ -396,6 +389,7 @@ if (!user && !registrationStates[fromNumber]) {
   }
   return res.sendStatus(200);
 }
+
 
       if (!sessions[fromNumber]) {
         sessions[fromNumber] = { action: null };
@@ -610,40 +604,45 @@ if (!user && !registrationStates[fromNumber]) {
         if (selectedOption === 'start_registration') {
   registrationStates[fromNumber] = { step: 'language', data: { phoneNumber } };
 
-  const languageMessage = {
-    messaging_product: 'whatsapp',
-    to: fromNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      header: { type: 'text', text: '🌐 Choose Language' },
-      body: { text: 'Please select your preferred language:' },
-      action: {
-        buttons: [
-          { type: 'reply', reply: { id: 'lang_english', title: 'English' } },
-          { type: 'reply', reply: { id: 'lang_hindi', title: 'Hindi' } },
-          { type: 'reply', reply: { id: 'lang_telugu', title: 'Telugu' } },
-          { type: 'reply', reply: { id: 'lang_tamil', title: 'Tamil' } },
-          { type: 'reply', reply: { id: 'lang_malayalam', title: 'Malayalam' } },
-          { type: 'reply', reply: { id: 'lang_kannada', title: 'Kannada' } }
+const languageMessage = {
+  messaging_product: 'whatsapp',
+  to: fromNumber,
+  type: 'interactive',
+  interactive: {
+    type: 'list',
+    header: { type: 'text', text: '🌐 Choose Language' },
+    body: { text: 'Please select your preferred language:' },
+    footer: { text: 'Powered by Teraa Assistant' },
+    action: {
+      button: 'Select Language',
+      sections: [{
+        title: 'Available Languages',
+        rows: [
+          { id: 'lang_english', title: 'English' },
+          { id: 'lang_hindi', title: 'Hindi' },
+          { id: 'lang_telugu', title: 'Telugu' },
+          { id: 'lang_tamil', title: 'Tamil' },
+          { id: 'lang_malayalam', title: 'Malayalam' },
+          { id: 'lang_kannada', title: 'Kannada' }
         ]
-      }
+      }]
     }
-  };
+  }
+};
+
   await axios.post(WHATSAPP_API_URL, languageMessage, {
     headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
   });
   return res.sendStatus(200);
 }
 
-        if (selectedOption.startsWith('lang_') && registrationStates[fromNumber]?.step === 'language') {
+if (selectedOption.startsWith('lang_') && registrationStates[fromNumber]?.step === 'language') {
   const lang = selectedOption.replace('lang_', '');
   registrationStates[fromNumber].data.language = lang;
   registrationStates[fromNumber].step = 'country_selection';
   await sendCountrySelectionList(fromNumber);
   return res.sendStatus(200);
 }
-
         if (selectedOption === 'country_India' && registrationStates[fromNumber]?.step === 'country_selection') {
   registrationStates[fromNumber].data.country = 'India';
   registrationStates[fromNumber].step = 'email';
