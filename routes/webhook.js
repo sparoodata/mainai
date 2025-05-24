@@ -363,6 +363,7 @@ if (user) {
       // Registration flow
 const user = await User.findOne({ phoneNumber });
 
+      
 // Skip legacy registration flow if new button-based flow is used
 if (!user && registrationStates[fromNumber]?.step && ['email', 'age', 'state', 'newsletter'].includes(registrationStates[fromNumber].step)) {
   const reg = registrationStates[fromNumber];
@@ -435,32 +436,35 @@ if (!user && registrationStates[fromNumber]?.step && ['email', 'age', 'state', '
         sessions[fromNumber] = { action: null };
       }
       if (text) {
-        if (text.toLowerCase() === 'help' || text.toLowerCase() === 'start') {
-  const welcomeMessage = {
-    messaging_product: 'whatsapp',
-    to: fromNumber,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      header: { type: 'text', text: '👋 Welcome to Teraa Assistant' },
-      body: {
-        text: `
-        Teraa Assistant helps rental property owners manage their properties, units, and tenants directly via WhatsApp. What would you like to do?
-        `
-      },
-      action: {
-        buttons: [
-          { type: 'reply', reply: { id: 'start_registration', title: '📝 Register' } },
-          { type: 'reply', reply: { id: 'learn_more', title: 'ℹ️ Learn More' } }
-        ]
+if (text.toLowerCase() === 'help' || text.toLowerCase() === 'start') {
+  if (!user) {
+    const welcomeMessage = {
+      messaging_product: 'whatsapp',
+      to: fromNumber,
+      type: 'interactive',
+      interactive: {
+        type: 'button',
+        header: { type: 'text', text: '👋 Welcome to Teraa Assistant' },
+        body: {
+          text: `Teraa Assistant helps rental property owners manage their properties, units, and tenants directly via WhatsApp. What would you like to do?`
+        },
+        action: {
+          buttons: [
+            { type: 'reply', reply: { id: 'start_registration', title: '📝 Register' } },
+            { type: 'reply', reply: { id: 'learn_more', title: 'ℹ️ Learn More' } }
+          ]
+        }
       }
-    }
-  };
-  await axios.post(WHATSAPP_API_URL, welcomeMessage, {
-    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-  });
+    };
+    await axios.post(WHATSAPP_API_URL, welcomeMessage, {
+      headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+    });
+  } else {
+    await sendMessage(fromNumber, '👋 You are already registered. Type *menu* to manage your properties.');
+  }
   return res.sendStatus(200);
 }
+
 
         // --- Property Creation Flow ---
         if (sessions[fromNumber].action === 'add_property_name') {
@@ -529,6 +533,12 @@ if (!user && registrationStates[fromNumber]?.step && ['email', 'age', 'state', '
           if (!isNaN(parseFloat(text)) && parseFloat(text) > 0) {
             sessions[fromNumber].propertyData.purchasePrice = parseFloat(text);
             const user = await User.findOne({ phoneNumber });
+if (user && !sessions[fromNumber]?.action && !interactive) {
+  // Send main menu if user is registered and not in the middle of any flow
+  await menuHelpers.sendMainMenu(fromNumber); // Use your main menu function here
+  return res.sendStatus(200);
+}
+
             const property = new Property({
               propertyId: generatePropertyId(),
               name: sessions[fromNumber].propertyData.name,
