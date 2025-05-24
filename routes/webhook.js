@@ -18,6 +18,7 @@ const DEFAULT_IMAGE_URL = 'https://via.placeholder.com/150';
 
 const sessions = {};
 let userResponses = {};
+const registrationStates = {};
 
 // [All your original helper functions and imports remain unchanged here]
 
@@ -46,21 +47,7 @@ function sendPropertySummary(phone, property) {
   ]);
 }
 
-async function handlePostSummaryResponse(phone, payload) {
-  if (payload === 'CONFIRM_PROPERTY') {
-    const property = await Property.findOne({ ownerId: phone, status: 'pending' }).sort({ createdAt: -1 });
-    if (property) {
-      property.status = 'active';
-      await property.save();
-      await sendMessage(phone, '✅ Property confirmed and saved successfully!');
-    } else {
-      await sendMessage(phone, '⚠️ No pending property found.');
-    }
-  } else if (payload === 'EDIT_PROPERTY') {
-    sessions[phone] = { editing: true, editingPropertyId: id };
-    await sendMessage(phone, 'Type the field name and new value to edit (e.g., "name My Property").');
-  }
-}
+
 
 
 function handleEditField(phone, field, newValue) {
@@ -371,6 +358,43 @@ router.post('/', async (req, res) => {
         userResponses[fromNumber] = interactive.button_reply.id;
         console.log(`Button reply received: ${userResponses[fromNumber]}`);
       }
+      // Registration flow
+const user = await User.findOne({ phoneNumber });
+
+if (!user && !registrationStates[fromNumber]) {
+  registrationStates[fromNumber] = { step: 'email', data: { phoneNumber } };
+  await sendMessage(fromNumber, '👋 Welcome! Please enter your email ID to begin registration:');
+  return res.sendStatus(200);
+} else if (!user && registrationStates[fromNumber]) {
+  const reg = registrationStates[fromNumber];
+  const msg = text;
+
+  if (reg.step === 'email') {
+    reg.data.email = msg;
+    reg.step = 'age';
+    await sendMessage(fromNumber, 'How old are you?');
+  } else if (reg.step === 'age') {
+    reg.data.age = parseInt(msg);
+    reg.step = 'country';
+    await sendMessage(fromNumber, 'Which country do you live in?');
+  } else if (reg.step === 'country') {
+    reg.data.country = msg;
+    reg.step = 'state';
+    await sendMessage(fromNumber, 'Which state?');
+  } else if (reg.step === 'state') {
+    reg.data.state = msg;
+    reg.step = 'newsletter';
+    await sendMessage(fromNumber, 'Do you want to receive newsletters? (yes/no)');
+  } else if (reg.step === 'newsletter') {
+    reg.data.newsletter = msg.toLowerCase() === 'yes';
+    const newUser = new User(reg.data);
+    await newUser.save();
+    delete registrationStates[fromNumber];
+    await sendMessage(fromNumber, `✅ You are now registered as a *free* user!\n\n🎁 *Free Plan*: Manage 1 property, 5 tenants.\n💼 *Upgrade*: Type *upgrade* to unlock 10 properties & 100 tenants.`);
+  }
+  return res.sendStatus(200);
+}
+
       if (!sessions[fromNumber]) {
         sessions[fromNumber] = { action: null };
       }

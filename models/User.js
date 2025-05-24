@@ -36,6 +36,11 @@ const userSchema = new mongoose.Schema({
     type: Date, 
     default: Date.now 
   },
+  
+age: Number,
+country: String,
+state: String,
+newsletter: Boolean,
   // Role for access control (e.g., landlord, tenant, admin)
   role: { 
     type: String, 
@@ -49,7 +54,8 @@ const userSchema = new mongoose.Schema({
     state: { type: String },
     zipCode: { type: String },
     country: { type: String }
-  }
+  },
+  
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);
