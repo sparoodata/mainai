@@ -46,7 +46,7 @@ async function sendRegistrationSuccess(to) {
       type: 'button',
       header: { type: 'text', text: '✅ Registration Successful!' },
       body: {
-        text: `You're now registered on *Teraa Assistant* 🎉\n\n🔐 *Plan:* Free Subscription\n🏘️ Manage 1 Property with 5 Rental Units\n📈 Upgrade to Premium for more features!`
+        text: `You're now registered on *Teraa Assistant* 🎉\n\n🔐 *Plan:* Free Subscription\n🏘️ Manage 1 Property with 5 Rental Units\n💡 No rent reminders\n📊 Basic reporting only\n\n✨ *Upgrade to Premium* for:\n✔️ Unlimited Units\n✔️ Rent reminders\n✔️ AI Help & Custom Reports\n✔️ ₹29/month per unit (billed yearly)\n\n🛠️ You can also upgrade anytime from *Settings* in Main Menu.`
       },
       action: {
         buttons: [
@@ -128,7 +128,8 @@ router.post('/', async (req, res) => {
     return res.sendStatus(200);
   } else if (user) {
     if (userResponses[phone] === 'pricing_info') {
-      await sendMessage(from, '💰 *Pricing Info*\n━━━━━━━━━━━━\nFree Plan: 1 property, 5 tenants\nPremium Plan: 10 properties, 100 tenants\nTo upgrade, type *upgrade* or visit your dashboard.');
+      const pricingText = `💳 *Your Current Plan: Free Plan*\n\n✔️ Manage 1 Property\n✔️ Add up to *5 Rental Units*\n📊 Basic reporting\n❌ No rent reminders\n❌ No priority support\n❌ No AI-powered help\n\n━━━━━━━━━━━━━━━━━━━\n✨ *Upgrade to Premium*\n\n🏠 Add unlimited properties & units\n🔔 Get automatic rent reminders\n📊 Advanced reports & payment tracking\n🧠 *AI Help*: Get custom answers, insights & summaries\n📞 Priority WhatsApp support\n\n💰 *Pricing*:\nEach extra unit: ₹29/month\n*Billed annually* → ₹348/unit/year\n\n🧾 Need more than 50 units?\nLet’s talk for custom pricing & enterprise support.\n\n━━━━━━━━━━━━━━━━━━━\n🛠️ You can also upgrade anytime from the *Settings* section in Main Menu.`;
+      await sendMessage(from, pricingText);
     } else {
       await menuHelpers.sendMainMenu(from);
     }
@@ -161,28 +162,27 @@ router.post('/', async (req, res) => {
   }
 
   if (!user && registrationStates[phone]) {
-    const step = reg.step;
+    const step = registrationStates[phone].step;
     if (step === 'email') {
       const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
       if (!isValid) return await sendMessage(from, '⚠️ Invalid email. Try again.');
-      reg.data.email = text;
-      reg.step = 'age';
+      registrationStates[phone].data.email = text;
+      registrationStates[phone].step = 'age';
       await sendMessage(from, 'How old are you?');
     } else if (step === 'age') {
       const age = parseInt(text);
       if (isNaN(age) || age < 18 || age > 100) return await sendMessage(from, '⚠️ Enter a valid age (18-100).');
-      reg.data.age = age;
-      reg.step = 'state';
+      registrationStates[phone].data.age = age;
+      registrationStates[phone].step = 'state';
       await sendList(from, 'State', 'Please select your state 👇', stateRows);
     } else if (step === 'newsletter') {
       const ans = text.toLowerCase();
       if (!['yes', 'no'].includes(ans)) return await sendMessage(from, '⚠️ Reply with *yes* or *no*.');
-      reg.data.newsletter = ans === 'yes';
-      await new User(reg.data).save();
+      registrationStates[phone].data.newsletter = ans === 'yes';
+      await new User(registrationStates[phone].data).save();
       delete registrationStates[phone];
       await sendRegistrationSuccess(from);
     }
-    registrationStates[phone] = reg;
     return res.sendStatus(200);
   }
 
