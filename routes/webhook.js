@@ -13,34 +13,55 @@ const userResponses = {};
 
 // Send interactive welcome menu
 async function sendWelcomeMenu(to) {
-const welcome = {
-  messaging_product: 'whatsapp',
-  to,
-  type: 'interactive',
-  interactive: {
-    type: 'button',
-    header: { type: 'text', text: '🏠 Welcome to Teraa Assistant' },
-    body: {
-      text: `Hi there! 👋\n\n*Teraa Assistant* is your personal WhatsApp-based **rental management assistant** designed for landlords and property owners.\n\nWith Teraa, you can easily:\n🔹 Track rent payments\n🔹 Get automated tenant alerts\n🔹 Manage units & properties\n🔹 Store tenant details securely\n\nLet’s get you started! 🚀`
-    },
-    action: {
-      buttons: [
-        { type: 'reply', reply: { id: 'start_registration', title: '📝 Register Now' } },
-        { type: 'reply', reply: { id: 'learn_more', title: 'ℹ️ Learn More' } }
-      ]
+  const welcome = {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '🏠 Welcome to Teraa Assistant' },
+      body: {
+        text: `Hi there! 👋\n\n*Teraa Assistant* is your personal WhatsApp-based **rental management assistant** designed for landlords and property owners.\n\nWith Teraa, you can:\n• Track rent payments\n• Get payment alerts\n• Manage units & tenants\n• Store all data securely\n\nLet’s get started! 🚀`
+      },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'start_registration', title: '📝 Register Now' } },
+          { type: 'reply', reply: { id: 'learn_more', title: 'ℹ️ Learn More' } }
+        ]
+      }
     }
-  }
-};
-
+  };
   await axios.post(WHATSAPP_API_URL, welcome, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json'
-    }
+    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
   });
 }
 
-// Interactive lists
+// Send interactive registration success message
+async function sendRegistrationSuccess(to) {
+  const message = {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: { type: 'text', text: '✅ Registration Successful!' },
+      body: {
+        text: `You're now registered on *Teraa Assistant* 🎉\n\n🔐 *Plan:* Free Subscription\n🏘️ Manage 1 Property with 5 Rental Units\n📈 Upgrade to Premium for more features!`
+      },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'main_menu', title: '🏠 Main Menu' } },
+          { type: 'reply', reply: { id: 'pricing_info', title: '💰 Pricing Info' } }
+        ]
+      }
+    }
+  };
+  await axios.post(WHATSAPP_API_URL, message, {
+    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+  });
+}
+
+// Send dynamic interactive list
 async function sendList(to, type, title, rows) {
   const message = {
     messaging_product: 'whatsapp',
@@ -79,7 +100,6 @@ const stateRows = [
   { id: 'state_Maharashtra', title: 'Maharashtra' },
 ];
 
-// Webhook GET verification
 router.get('/', (req, res) => {
   const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
   if (req.query['hub.mode'] === 'subscribe' && req.query['hub.verify_token'] === VERIFY_TOKEN) {
@@ -88,7 +108,6 @@ router.get('/', (req, res) => {
   res.sendStatus(403);
 });
 
-// Webhook POST handler
 router.post('/', async (req, res) => {
   const entry = req.body?.entry?.[0];
   const message = entry?.changes?.[0]?.value?.messages?.[0];
@@ -108,7 +127,11 @@ router.post('/', async (req, res) => {
     await sendWelcomeMenu(from);
     return res.sendStatus(200);
   } else if (user) {
-    await menuHelpers.sendMainMenu(from);
+    if (userResponses[phone] === 'pricing_info') {
+      await sendMessage(from, '💰 *Pricing Info*\n━━━━━━━━━━━━\nFree Plan: 1 property, 5 tenants\nPremium Plan: 10 properties, 100 tenants\nTo upgrade, type *upgrade* or visit your dashboard.');
+    } else {
+      await menuHelpers.sendMainMenu(from);
+    }
     return res.sendStatus(200);
   }
 
@@ -137,7 +160,6 @@ router.post('/', async (req, res) => {
     return res.sendStatus(200);
   }
 
-  // Handle input responses
   if (!user && registrationStates[phone]) {
     const step = reg.step;
     if (step === 'email') {
@@ -158,7 +180,7 @@ router.post('/', async (req, res) => {
       reg.data.newsletter = ans === 'yes';
       await new User(reg.data).save();
       delete registrationStates[phone];
-      await sendMessage(from, '✅ Registered successfully! Type *menu* to begin.');
+      await sendRegistrationSuccess(from);
     }
     registrationStates[phone] = reg;
     return res.sendStatus(200);
