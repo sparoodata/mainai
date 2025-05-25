@@ -13,24 +13,25 @@ const userResponses = {};
 
 // Send interactive welcome menu
 async function sendWelcomeMenu(to) {
-  const welcome = {
-    messaging_product: 'whatsapp',
-    to,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      header: { type: 'text', text: '👋 Welcome to Teraa Assistant' },
-      body: {
-        text: `Teraa Assistant helps rental property owners manage properties, units, and tenants directly via WhatsApp. What would you like to do?`
-      },
-      action: {
-        buttons: [
-          { type: 'reply', reply: { id: 'start_registration', title: '📝 Register' } },
-          { type: 'reply', reply: { id: 'learn_more', title: 'ℹ️ Learn More' } }
-        ]
-      }
+const welcome = {
+  messaging_product: 'whatsapp',
+  to,
+  type: 'interactive',
+  interactive: {
+    type: 'button',
+    header: { type: 'text', text: '🏠 Welcome to Teraa Assistant' },
+    body: {
+      text: `Hi there! 👋\n\n*Teraa Assistant* is your personal WhatsApp-based **rental management assistant** designed for landlords and property owners.\n\nWith Teraa, you can easily:\n🔹 Track rent payments\n🔹 Get automated tenant alerts\n🔹 Manage units & properties\n🔹 Store tenant details securely\n\nLet’s get you started! 🚀`
+    },
+    action: {
+      buttons: [
+        { type: 'reply', reply: { id: 'start_registration', title: '📝 Register Now' } },
+        { type: 'reply', reply: { id: 'learn_more', title: 'ℹ️ Learn More' } }
+      ]
     }
-  };
+  }
+};
+
   await axios.post(WHATSAPP_API_URL, welcome, {
     headers: {
       Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
