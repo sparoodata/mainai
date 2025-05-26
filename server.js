@@ -21,6 +21,8 @@ mongoose.connect(process.env.MONGODB_URI, {
 // Middleware
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+// Webhook must come before bodyParser.json()
+app.post('/razorpay-webhook', express.raw({ type: 'application/json' }));
 
 
 // WhatsApp Webhook

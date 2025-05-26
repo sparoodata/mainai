@@ -1,4 +1,4 @@
-// ✅ FIXED payment.js - Razorpay integration using GET callback (with correct signature validation)
+// payment.js - Razorpay integration
 const express = require('express');
 const crypto = require('crypto');
 const Razorpay = require('razorpay');
@@ -14,12 +14,12 @@ const razorpay = new Razorpay({
 
 const CALLBACK_HOST = process.env.GLITCH_HOST || 'https://yourdomain.com';
 
-// Create Razorpay Payment Link
+// Generate Razorpay Payment Link
 router.get('/pay/:phoneNumber', async (req, res) => {
   const phoneNumber = decodeURIComponent(req.params.phoneNumber);
   try {
     const paymentLink = await razorpay.paymentLink.create({
-      amount: 49900,
+      amount: 49900, // Rs. 499 in paise
       currency: 'INR',
       accept_partial: false,
       description: 'Teraa Assistant Premium Plan (Monthly)',
@@ -32,59 +32,62 @@ router.get('/pay/:phoneNumber', async (req, res) => {
         sms: false,
         email: false
       },
-      callback_url: `${CALLBACK_HOST}/razorpay-webhook`,
-      callback_method: 'get'
+      reminder_enable: true
     });
 
-    await sendMessage(phoneNumber, `💳 *Upgrade to Premium*\nClick below to complete your payment of \u20B9499/month:`);
+    await sendMessage(phoneNumber, `💳 *Upgrade to Premium*
+Click below to complete your payment of ₹499/month:`);
     await sendMessage(phoneNumber, paymentLink.short_url);
 
-    res.status(200).json({ success: true, url: paymentLink.short_url });
+    return res.status(200).json({ success: true, url: paymentLink.short_url });
   } catch (error) {
-    console.error('Error creating payment link:', error);
-    res.status(500).json({ success: false, error: 'Payment link error' });
+    console.error('❌ Error creating payment link:', error);
+    return res.status(500).json({ success: false, error: 'Payment link error' });
   }
 });
 
-// Razorpay GET Callback - Signature validation (FOR CALLBACK, not webhook)
-router.get('/razorpay-webhook', async (req, res) => {
-  const {
-    razorpay_payment_id,
-    razorpay_payment_link_id,
-    razorpay_payment_link_reference_id = '',
-    razorpay_payment_link_status,
-    razorpay_signature
-  } = req.query;
+// Razorpay POST Webhook Handler
+// Razorpay POST Webhook Handler
+router.post('/razorpay-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  const signature = req.headers['x-razorpay-signature'];
 
-  const payload = `${razorpay_payment_link_id}|${razorpay_payment_link_reference_id}|${razorpay_payment_link_status}`;
-  const expectedSignature = crypto
-    .createHmac('sha256', process.env.RAZORPAY_SECRET)
-    .update(payload)
-    .digest('hex');
+  try {
+    // ✅ Use raw buffer directly
+    const rawBody = req.body;
 
-  if (expectedSignature !== razorpay_signature) {
-    console.error('❌ Invalid Razorpay signature');
-    return res.status(400).send('Invalid signature');
-  }
+    // ✅ Generate expected signature
+    const expectedSignature = crypto
+      .createHmac('sha256', webhookSecret)
+      .update(rawBody) // MUST be a Buffer
+      .digest('hex');
 
-  if (razorpay_payment_link_status === 'paid') {
-    try {
-      const payment = await razorpay.payments.fetch(razorpay_payment_id);
-      const phone = `+91${payment.contact}`;
+    // ❌ Invalid Signature
+    if (signature !== expectedSignature) {
+      console.error('❌ Invalid webhook signature');
+      return res.status(400).send('Invalid signature');
+    }
+
+    // ✅ Parse raw body after verifying signature
+    const payload = JSON.parse(rawBody.toString());
+    const event = payload.event;
+
+    if (event === 'payment.link.paid') {
+      const phone = `+91${payload.payload.payment.entity.contact}`;
       const user = await User.findOne({ phoneNumber: phone });
-
       if (user) {
         user.subscription = 'premium';
         await user.save();
-
-        await sendMessage(phone, `🎉 *Payment Successful!*\n\nYour subscription is now upgraded to *Premium*.\nEnjoy unlimited properties, AI help, and smart rent automation!`);
+        await sendMessage(phone, `🎉 *Payment Successful!*\n\nYour subscription is now upgraded to *Premium*. Enjoy unlimited units, AI reports, and automated reminders!`);
       }
-    } catch (err) {
-      console.error('❌ Error during payment processing:', err);
     }
-  }
 
-  res.status(200).send('✅ Payment processed successfully.');
+    return res.status(200).send('✅ Webhook processed');
+  } catch (err) {
+    console.error('❌ Webhook processing failed:', err);
+    return res.status(500).send('Webhook processing error');
+  }
 });
+
 
 module.exports = router;
