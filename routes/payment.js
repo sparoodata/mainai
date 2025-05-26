@@ -92,13 +92,11 @@ Enjoy unlimited properties, AI help, and smart rent automation!`);
   res.status(200).send('✅ Payment processed successfully.');
 });
 
-router.post('/razorpay-webhook', async (req, res) => {
-  const crypto = require('crypto');
-
-  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || 'hcbsydhbcsdk';
+router.post('/razorpay-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
   const signature = req.headers['x-razorpay-signature'];
+  const body = req.body;
 
-  const body = JSON.stringify(req.body);
   const expectedSignature = crypto
     .createHmac('sha256', webhookSecret)
     .update(body)
@@ -109,29 +107,25 @@ router.post('/razorpay-webhook', async (req, res) => {
     return res.status(400).send('Invalid signature');
   }
 
-  const event = req.body.event;
+  const payload = JSON.parse(body.toString());
+  const event = payload.event;
 
   if (event === 'payment.link.paid') {
-    const payment = req.body.payload.payment.entity;
-    const phone = `+91${payment.contact}`;
+    const phone = `+91${payload.payload.payment.entity.contact}`;
     try {
       const user = await User.findOne({ phoneNumber: phone });
       if (user) {
         user.subscription = 'premium';
         await user.save();
-        await sendMessage(phone, `🎉 *Payment Successful!*
-
-Your subscription is now upgraded to *Premium*.
-Enjoy unlimited properties, AI help, and rent automation.`);
+        await sendMessage(phone, `🎉 *Payment Successful!*\n\nYour subscription is now upgraded to *Premium*. Enjoy all features including AI help, unlimited units, and automated reminders.`);
       }
     } catch (err) {
-      console.error('❌ Error updating user:', err);
+      console.error('❌ MongoDB update failed:', err);
     }
   }
 
   res.status(200).send('✅ Webhook received');
 });
-
 
 
 
