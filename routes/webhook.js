@@ -46,12 +46,13 @@ async function sendRegistrationSuccess(to) {
       type: 'button',
       header: { type: 'text', text: '✅ Registration Successful!' },
       body: {
-        text: `You're now registered on *Teraa Assistant* 🎉\n\n🔐 *Plan:* Free Subscription\n🏘️ Manage 1 Property with 5 Rental Units\n💡 No rent reminders\n📊 Basic reporting only\n\n✨ *Upgrade to Premium* for:\n✔️ Unlimited Units\n✔️ Rent reminders\n✔️ AI Help & Custom Reports\n✔️ ₹29/month per unit (billed yearly)\n\n🛠️ You can also upgrade anytime from *Settings* in Main Menu.`
+        text: `You're now registered on *Teraa Assistant* 🎉\n\n🔐 *Plan:* Free Subscription\n🏘️ Manage 1 Property with 5 Rental Units\n🚫 No rent reminders or basic reporting\n\n🧾 Need more than 50 rental units?\nLet’s talk for custom pricing & enterprise support.`
       },
       action: {
         buttons: [
           { type: 'reply', reply: { id: 'main_menu', title: '🏠 Main Menu' } },
-          { type: 'reply', reply: { id: 'pricing_info', title: '💰 Pricing Info' } }
+          { type: 'reply', reply: { id: 'upgrade_premium', title: '🚀 Upgrade to Premium' } },
+          { type: 'reply', reply: { id: 'chat_support', title: '💬 Chat with Support' } }
         ]
       }
     }
@@ -127,9 +128,10 @@ router.post('/', async (req, res) => {
     await sendWelcomeMenu(from);
     return res.sendStatus(200);
   } else if (user) {
-    if (userResponses[phone] === 'pricing_info') {
-      const pricingText = `💳 *Your Current Plan: Free Plan*\n\n✔️ Manage 1 Property\n✔️ Add up to *5 Rental Units*\n📊 Basic reporting\n❌ No rent reminders\n❌ No priority support\n❌ No AI-powered help\n\n━━━━━━━━━━━━━━━━━━━\n✨ *Upgrade to Premium*\n\n🏠 Add unlimited properties & units\n🔔 Get automatic rent reminders\n📊 Advanced reports & payment tracking\n🧠 *AI Help*: Get custom answers, insights & summaries\n📞 Priority WhatsApp support\n\n💰 *Pricing*:\nEach extra unit: ₹29/month\n*Billed annually* → ₹348/unit/year\n\n🧾 Need more than 50 units?\nLet’s talk for custom pricing & enterprise support.\n\n━━━━━━━━━━━━━━━━━━━\n🛠️ You can also upgrade anytime from the *Settings* section in Main Menu.`;
-      await sendMessage(from, pricingText);
+    if (userResponses[phone] === 'upgrade_premium') {
+      await sendMessage(from, '🚀 *Premium Plan Details*\n━━━━━━━━━━━━\n• Unlimited properties\n• Up to 100 tenants\n• AI-powered help with custom reports\n• Automated rent reminders\n• ₹29/month per extra unit (yearly plan)\n\n🧾 Need more than 50 units? Let’s talk!');
+    } else if (userResponses[phone] === 'chat_support') {
+      await sendMessage(from, '💬 Our support team will reach out to you shortly. You can also email us at support@teraa.ai.');
     } else {
       await menuHelpers.sendMainMenu(from);
     }
@@ -162,27 +164,28 @@ router.post('/', async (req, res) => {
   }
 
   if (!user && registrationStates[phone]) {
-    const step = registrationStates[phone].step;
+    const step = reg.step;
     if (step === 'email') {
       const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
       if (!isValid) return await sendMessage(from, '⚠️ Invalid email. Try again.');
-      registrationStates[phone].data.email = text;
-      registrationStates[phone].step = 'age';
+      reg.data.email = text;
+      reg.step = 'age';
       await sendMessage(from, 'How old are you?');
     } else if (step === 'age') {
       const age = parseInt(text);
       if (isNaN(age) || age < 18 || age > 100) return await sendMessage(from, '⚠️ Enter a valid age (18-100).');
-      registrationStates[phone].data.age = age;
-      registrationStates[phone].step = 'state';
+      reg.data.age = age;
+      reg.step = 'state';
       await sendList(from, 'State', 'Please select your state 👇', stateRows);
     } else if (step === 'newsletter') {
       const ans = text.toLowerCase();
       if (!['yes', 'no'].includes(ans)) return await sendMessage(from, '⚠️ Reply with *yes* or *no*.');
-      registrationStates[phone].data.newsletter = ans === 'yes';
-      await new User(registrationStates[phone].data).save();
+      reg.data.newsletter = ans === 'yes';
+      await new User(reg.data).save();
       delete registrationStates[phone];
       await sendRegistrationSuccess(from);
     }
+    registrationStates[phone] = reg;
     return res.sendStatus(200);
   }
 
