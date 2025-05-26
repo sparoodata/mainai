@@ -48,48 +48,47 @@ Click below to complete your payment of ₹499/month:`);
 });
 
 // Razorpay Webhook (POST is better but we keep GET for test links)
-router.get('/razorpay-webhook', async (req, res) => {
-  const {
-    razorpay_payment_id,
-    razorpay_payment_link_id,
-    razorpay_payment_link_reference_id = '',
-    razorpay_payment_link_status,
-    razorpay_signature
-  } = req.query;
+router.post('/razorpay-webhook', async (req, res) => {
+  const crypto = require('crypto');
 
-  const body = `${razorpay_payment_link_id}|${razorpay_payment_link_reference_id}|${razorpay_payment_link_status}`;
+  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || 'hcbsydhbcsdk';
+  const signature = req.headers['x-razorpay-signature'];
 
+  const body = JSON.stringify(req.body);
   const expectedSignature = crypto
-    .createHmac('sha256', process.env.RAZORPAY_SECRET)
-    .update(body.toString())
+    .createHmac('sha256', webhookSecret)
+    .update(body)
     .digest('hex');
 
-  if (razorpay_signature !== expectedSignature) {
-    console.error('❌ Invalid Razorpay signature');
+  if (signature !== expectedSignature) {
+    console.error('❌ Invalid webhook signature');
     return res.status(400).send('Invalid signature');
   }
 
-  if (razorpay_payment_link_status === 'paid') {
-    try {
-      const payment = await razorpay.payments.fetch(razorpay_payment_id);
-      const phone = `+91${payment.contact}`;
-      const user = await User.findOne({ phoneNumber: phone });
+  const event = req.body.event;
 
+  if (event === 'payment.link.paid') {
+    const payment = req.body.payload.payment.entity;
+    const phone = `+91${payment.contact}`;
+    try {
+      const user = await User.findOne({ phoneNumber: phone });
       if (user) {
         user.subscription = 'premium';
         await user.save();
         await sendMessage(phone, `🎉 *Payment Successful!*
 
-Your subscription has been upgraded to *Premium*.
-Enjoy unlimited properties, AI help, and more!`);
+Your subscription is now upgraded to *Premium*.
+Enjoy unlimited properties, AI help, and rent automation.`);
       }
     } catch (err) {
-      console.error('❌ Error processing payment:', err);
+      console.error('❌ Error updating user:', err);
     }
   }
 
-  return res.status(200).send('OK');
+  res.status(200).send('✅ Webhook received');
 });
+
+
 
 
 module.exports = router;
