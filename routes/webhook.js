@@ -46,7 +46,24 @@ async function sendRegistrationSuccess(to) {
       type: 'button',
       header: { type: 'text', text: '✅ Registration Successful!' },
       body: {
-        text: `You're now registered on *Teraa Assistant* 🎉\n\n🔐 *Plan:* Free Subscription\n🏘️ Manage 1 Property with 5 Rental Units\n🚫 No rent reminders or basic reporting\n\n🧾 Need more than 50 rental units?\nLet’s talk for custom pricing & enterprise support.`
+        text:
+`You're now registered on *Teraa Assistant* 🎉
+
+🔐 *Plan*: Free Subscription  
+🏘️ Manage 1 Property with 5 Rental Units  
+💡 No rent reminders  
+📊 Basic reporting only
+
+✨ *Upgrade to Premium* for:  
+✔️ Unlimited Units  
+✔️ Rent reminders  
+✔️ AI Help & Custom Reports  
+✔️ ₹29/month per unit (billed yearly)
+
+🧾 *Need more than 50 rental units?*
+Let’s talk for custom pricing & enterprise support.
+
+🛠️ You can also upgrade anytime from *Settings* in Main Menu.`
       },
       action: {
         buttons: [
@@ -57,10 +74,15 @@ async function sendRegistrationSuccess(to) {
       }
     }
   };
+
   await axios.post(WHATSAPP_API_URL, message, {
-    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
   });
 }
+
 
 // Send dynamic interactive list
 async function sendList(to, type, title, rows) {
