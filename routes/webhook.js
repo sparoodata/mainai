@@ -49,21 +49,21 @@ async function sendRegistrationSuccess(to) {
         text:
 `You're now registered on *Teraa Assistant* 🎉
 
-🔐 *Plan*: Free Subscription  
-🏘️ Manage 1 Property with 5 Rental Units  
-💡 No rent reminders  
+🔐 Plan: Free Subscription
+🏘️ Manage 1 Property with 5 Rental Units
+💡 No rent reminders
 📊 Basic reporting only
 
-✨ *Upgrade to Premium* for:  
-✔️ Unlimited Units  
-✔️ Rent reminders  
-✔️ AI Help & Custom Reports  
+✨ Upgrade to Premium for:
+✔️ Unlimited Units
+✔️ Rent reminders
+✔️ AI Help & Custom Reports
 ✔️ ₹29/month per unit (billed yearly)
 
 🧾 *Need more than 50 rental units?*
 Let’s talk for custom pricing & enterprise support.
 
-🛠️ You can also upgrade anytime from *Settings* in Main Menu.`
+🛠️ You can also upgrade anytime from Settings in Main Menu.`
       },
       action: {
         buttons: [
