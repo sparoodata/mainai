@@ -4,6 +4,8 @@ const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 
 const { router } = require('./routes/webhook'); // This contains only registration + menu logic
+const paymentRoutes = require('./routes/payment');
+
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -20,8 +22,10 @@ mongoose.connect(process.env.MONGODB_URI, {
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+
 // WhatsApp Webhook
 app.use('/webhook', router);
+app.use('/', paymentRoutes);
 
 // Root route
 app.get('/', (req, res) => {
