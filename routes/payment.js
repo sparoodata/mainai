@@ -49,12 +49,32 @@ Click below to complete your payment of ₹499/month:`);
 
 // Razorpay Webhook (POST is better but we keep GET for test links)
 router.get('/razorpay-webhook', async (req, res) => {
-  const { razorpay_payment_id, razorpay_payment_link_id, razorpay_payment_link_status } = req.query;
+  const {
+    razorpay_payment_id,
+    razorpay_payment_link_id,
+    razorpay_payment_link_reference_id = '',
+    razorpay_payment_link_status,
+    razorpay_signature
+  } = req.query;
+
+  const body = `${razorpay_payment_link_id}|${razorpay_payment_link_reference_id}|${razorpay_payment_link_status}`;
+
+  const expectedSignature = crypto
+    .createHmac('sha256', process.env.RAZORPAY_SECRET)
+    .update(body.toString())
+    .digest('hex');
+
+  if (razorpay_signature !== expectedSignature) {
+    console.error('❌ Invalid Razorpay signature');
+    return res.status(400).send('Invalid signature');
+  }
+
   if (razorpay_payment_link_status === 'paid') {
     try {
       const payment = await razorpay.payments.fetch(razorpay_payment_id);
       const phone = `+91${payment.contact}`;
       const user = await User.findOne({ phoneNumber: phone });
+
       if (user) {
         user.subscription = 'premium';
         await user.save();
@@ -64,10 +84,12 @@ Your subscription has been upgraded to *Premium*.
 Enjoy unlimited properties, AI help, and more!`);
       }
     } catch (err) {
-      console.error('Webhook error:', err);
+      console.error('❌ Error processing payment:', err);
     }
   }
+
   return res.status(200).send('OK');
 });
+
 
 module.exports = router;
