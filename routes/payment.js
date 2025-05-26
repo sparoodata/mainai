@@ -48,6 +48,50 @@ Click below to complete your payment of ₹499/month:`);
 });
 
 // Razorpay Webhook (POST is better but we keep GET for test links)
+router.get('/razorpay-webhook', async (req, res) => {
+  const {
+    razorpay_payment_id,
+    razorpay_payment_link_id,
+    razorpay_payment_link_reference_id = '',
+    razorpay_payment_link_status,
+    razorpay_signature
+  } = req.query;
+
+  // Razorpay signature format: id|reference|status (reference can be empty string, but pipes must remain)
+  const body = `${razorpay_payment_link_id}|${razorpay_payment_link_reference_id}|${razorpay_payment_link_status}`;
+  const expectedSignature = crypto
+    .createHmac('sha256', process.env.RAZORPAY_SECRET)
+    .update(body)
+    .digest('hex');
+
+  if (razorpay_signature !== expectedSignature) {
+    console.error('❌ Invalid Razorpay signature');
+    return res.status(400).send('Invalid signature');
+  }
+
+  if (razorpay_payment_link_status === 'paid') {
+    try {
+      const payment = await razorpay.payments.fetch(razorpay_payment_id);
+      const phone = `+91${payment.contact}`;
+
+      const user = await User.findOne({ phoneNumber: phone });
+      if (user) {
+        user.subscription = 'premium';
+        await user.save();
+
+        await sendMessage(phone, `🎉 *Payment Successful!*
+        
+Your subscription is now upgraded to *Premium*.
+Enjoy unlimited properties, AI help, and smart rent automation!`);
+      }
+    } catch (err) {
+      console.error('❌ Error during payment processing:', err);
+    }
+  }
+
+  res.status(200).send('✅ Payment processed successfully.');
+});
+
 router.post('/razorpay-webhook', async (req, res) => {
   const crypto = require('crypto');
 
