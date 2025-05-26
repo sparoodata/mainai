@@ -36,7 +36,7 @@ async function sendWelcomeMenu(to) {
   });
 }
 
-// Send interactive registration success message
+// Send registration success message with buttons
 async function sendRegistrationSuccess(to) {
   const message = {
     messaging_product: 'whatsapp',
@@ -46,20 +46,7 @@ async function sendRegistrationSuccess(to) {
       type: 'button',
       header: { type: 'text', text: '✅ Registration Successful!' },
       body: {
-        text:
-`You're now registered on *Teraa Assistant* 🎉
-
-🔐 *Plan*: Free Subscription  
-🏘️ Manage up to 4 rental Units  
-📊 Basic reporting only  
-📩 Payment reminders
-
-✨ *Upgrade to Premium* for:  
-✔️ Unlimited Units  
-✔️ AI Help & Custom Reports  
-✔️ ₹499/month (billed yearly)
-
-🛠️ You can also upgrade anytime from *Settings* in Main Menu.`
+        text: `You're now registered on *Teraa Assistant* 🎉\n\n🔐 *Plan*: Free Subscription\n🏘️ Manage up to 4 rental Units\n📊 Basic reporting only\n📩 Payment reminders\n\n✨ *Upgrade to Premium* for:\n✔️ Unlimited Units\n✔️ AI Help & Custom Reports\n✔️ ₹499/month (billed yearly)\n\n🛠️ You can also upgrade anytime from *Settings* in Main Menu.`
       },
       action: {
         buttons: [
@@ -70,16 +57,10 @@ async function sendRegistrationSuccess(to) {
       }
     }
   };
-
   await axios.post(WHATSAPP_API_URL, message, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json'
-    }
+    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
   });
 }
-
-
 
 // Send dynamic interactive list
 async function sendList(to, type, title, rows) {
@@ -148,7 +129,7 @@ router.post('/', async (req, res) => {
     return res.sendStatus(200);
   } else if (user) {
     if (userResponses[phone] === 'upgrade_premium') {
-      await sendMessage(from, '🚀 *Premium Plan Details*\n━━━━━━━━━━━━\n• Unlimited properties\n• Up to 100 tenants\n• AI-powered help with custom reports\n• Automated rent reminders\n• ₹29/month per extra unit (yearly plan)\n\n🧾 Need more than 50 units? Let’s talk!');
+      await axios.get(`${process.env.GLITCH_HOST}/pay/${encodeURIComponent(phone)}`);
     } else if (userResponses[phone] === 'chat_support') {
       await sendMessage(from, '💬 Our support team will reach out to you shortly. You can also email us at support@teraa.ai.');
     } else {
