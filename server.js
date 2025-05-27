@@ -1,5 +1,4 @@
 // server.js
-
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
@@ -10,23 +9,27 @@ const { router: whatsappRouter } = require('./routes/webhook');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// 1. Connect to MongoDB...
-// (omitted for brevity)
+// MongoDB Connection
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+})
+.then(() => console.log('✅ MongoDB connected'))
+.catch(err => console.error('❌ MongoDB connection error:', err));
 
-// 2. Raw‐body parser for the Razorpay webhook **before** any JSON parser
-app.post(
-  '/razorpay-webhook',
-  express.raw({ type: 'application/json' }),
-  paymentRoutes   // mount the paymentRoutes handler _only_ for this route
-);
+// Mount payment routes (Webhook raw-body is handled in paymentRoutes)
+app.use('/', paymentRoutes);
 
-// 3. Now apply your JSON & urlencoded parsers
+// JSON & URL-encoded parsers for other routes
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// 4. Other routes
+// WhatsApp Webhook routes
 app.use('/webhook', whatsappRouter);
-app.use('/', whatsappRouter); // or however you're mounting your other routes
 
-app.get('/', (req, res) => res.send('🟢 Teraa Assistant is running...'));
+// Root route
+app.get('/', (req, res) => {
+  res.send('🟢 Teraa Assistant is running...');
+});
+
 app.listen(port, () => console.log(`🚀 Server running on http://localhost:${port}`));
