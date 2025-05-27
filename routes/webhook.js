@@ -21,7 +21,9 @@ async function sendWelcomeMenu(to) {
     interactive: {
       type: 'button',
       header: { type: 'text', text: '🏠 Welcome to Teraa Assistant' },
-      body: { text: `Hi there! 👋\n\n*Teraa Assistant* is your personal rental management assistant on WhatsApp.\n\nWith Teraa, you can:\n• Track rent payments\n• Get payment alerts\n• Manage units & tenants\n• Store data securely\n\nLet’s get started! 🚀` },
+      body: {
+        text: `Hi there! 👋\n\n*Teraa Assistant* is your personal rental management assistant on WhatsApp.\n\nWith Teraa, you can:\n• Track rent payments\n• Get payment alerts\n• Manage units & tenants\n• Store data securely\n\nLet’s get started! 🚀`
+      },
       action: {
         buttons: [
           { type: 'reply', reply: { id: 'start_registration', title: '📝 Register Now' } },
@@ -31,7 +33,10 @@ async function sendWelcomeMenu(to) {
     }
   };
   await axios.post(WHATSAPP_API_URL, welcome, {
-    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
   });
 }
 
@@ -44,7 +49,9 @@ async function sendRegistrationSuccess(to) {
     interactive: {
       type: 'button',
       header: { type: 'text', text: '✅ Registration Successful!' },
-      body: { text: `You're now registered on *Teraa Assistant*! 🎉\n\n🔐 Plan: Free (4 units)\n📈 Basic Reports\n📩 Reminders\n\nUpgrade anytime from *Settings* in Main Menu.` },
+      body: {
+        text: `You're now registered on *Teraa Assistant*! 🎉\n\n🔐 Plan: Free (4 units)\n📈 Basic Reports\n📩 Reminders\n\nUpgrade anytime from *Settings* in Main Menu.`
+      },
       action: {
         buttons: [
           { type: 'reply', reply: { id: 'main_menu', title: '🏠 Main Menu' } },
@@ -55,7 +62,10 @@ async function sendRegistrationSuccess(to) {
     }
   };
   await axios.post(WHATSAPP_API_URL, msg, {
-    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
   });
 }
 
@@ -70,11 +80,17 @@ async function sendList(to, type, title, rows) {
       header: { type: 'text', text: title },
       body: { text: title },
       footer: { text: 'Teraa Assistant' },
-      action: { button: `Select ${type}`, sections: [{ title: `${type}s`, rows }] }
+      action: {
+        button: `Select ${type}`,
+        sections: [{ title: `${type}s`, rows }]
+      }
     }
   };
   await axios.post(WHATSAPP_API_URL, message, {
-    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
   });
 }
 
@@ -87,7 +103,9 @@ const languageRows = [
   { id: 'lang_kannada', title: 'Kannada' }
 ];
 
-const countryRows = [ { id: 'country_India', title: 'India' } ];
+const countryRows = [
+  { id: 'country_India', title: 'India' }
+];
 
 const stateRows = [
   { id: 'state_Telangana', title: 'Telangana' },
@@ -99,10 +117,10 @@ const stateRows = [
   { id: 'state_Maharashtra', title: 'Maharashtra' }
 ];
 
-// Verification
+// Verification endpoint
 router.get('/', (req, res) => {
   const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
-  if (req.query['hub.mode']==='subscribe' && req.query['hub.verify_token']===VERIFY_TOKEN) {
+  if (req.query['hub.mode'] === 'subscribe' && req.query['hub.verify_token'] === VERIFY_TOKEN) {
     return res.status(200).send(req.query['hub.challenge']);
   }
   res.sendStatus(403);
@@ -124,101 +142,130 @@ router.post('/', async (req, res) => {
 
   const user = await User.findOne({ phoneNumber: phone });
 
-  // New user start/help
-  if (!user && (text==='start' || text==='help')) {
+  // New user: 'start' or 'help'
+  if (!user && (text === 'start' || text === 'help')) {
     await sendWelcomeMenu(from);
     return res.sendStatus(200);
   }
 
-  // Registered user
+  // Registered user menu actions
   if (user) {
     switch (selected) {
       case 'main_menu':
       case undefined:
-        await menuHelpers.sendMainMenu(from);
+        await menuHelpers.sendMainMenu(from, user.subscription);
         break;
+
       case 'manage_units':
         await menuHelpers.sendUnitsMenu(from);
         break;
+
       case 'add_unit':
         await menuHelpers.promptAddUnit(from);
         break;
+
       case 'view_tenants':
         await menuHelpers.sendTenantsMenu(from);
         break;
+
       case 'add_tenant':
         await menuHelpers.promptAddTenant(from);
         break;
+
       case 'record_payment':
         await menuHelpers.promptRecordPayment(from);
         break;
+
       case 'payment_history':
         await menuHelpers.sendPaymentHistory(from);
         break;
+
       case 'setup_reminders':
         await menuHelpers.sendRemindersMenu(from);
         break;
+
       case 'settings':
         await menuHelpers.sendSettingsMenu(from);
         break;
+
       case 'upgrade_premium':
-        await axios.get(`${process.env.GLITCH_HOST}/pay/${encodeURIComponent(phone)}`);
+        if (user.subscription === 'premium') {
+          await sendMessage(from, '🎉 You are already a Premium subscriber!');
+        } else {
+          await axios.get(
+            `${process.env.GLITCH_HOST}/pay/${encodeURIComponent(phone)}`
+          );
+        }
         break;
+
       case 'help_support':
-        await sendMessage(from, '💬 Our support team will reach out soon or email support@teraa.ai');
+        await sendMessage(
+          from,
+          '💬 Our support team will reach out soon or email support@teraa.ai'
+        );
         break;
+
       default:
-        await menuHelpers.sendMainMenu(from);
+        await menuHelpers.sendMainMenu(from, user.subscription);
     }
+
     delete userResponses[phone];
     return res.sendStatus(200);
   }
 
   // Registration flow
   let reg = registrationStates[phone] || { data: { phoneNumber: phone } };
-  if (selected==='start_registration') {
+
+  if (selected === 'start_registration') {
     reg.step = 'language';
     await sendList(from, 'Language', 'Select language', languageRows);
-  } else if (selected && selected.startsWith('lang_') && reg.step==='language') {
+
+  } else if (selected && selected.startsWith('lang_') && reg.step === 'language') {
     reg.data.language = selected.replace('lang_', '');
     reg.step = 'country';
     await sendList(from, 'Country', 'Select country', countryRows);
-  } else if (selected && selected.startsWith('country_') && reg.step==='country') {
+
+  } else if (selected && selected.startsWith('country_') && reg.step === 'country') {
     reg.data.country = selected.replace('country_', '');
     reg.step = 'email';
     await sendMessage(from, 'Please enter your email:');
-  } else if (reg.step==='email' && text) {
+
+  } else if (reg.step === 'email' && text) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) {
       return await sendMessage(from, '⚠️ Invalid email. Try again.');
     }
     reg.data.email = text;
     reg.step = 'age';
     await sendMessage(from, 'How old are you?');
-  } else if (reg.step==='age' && text) {
+
+  } else if (reg.step === 'age' && text) {
     const age = parseInt(text);
-    if (isNaN(age) || age<18 || age>100) {
-      return await sendMessage(from, '⚠️ Enter valid age (18-100).');
+    if (isNaN(age) || age < 18 || age > 100) {
+      return await sendMessage(from, '⚠️ Enter valid age (18–100).');
     }
     reg.data.age = age;
     reg.step = 'state';
     await sendList(from, 'State', 'Select your state', stateRows);
-  } else if (selected && selected.startsWith('state_') && reg.step==='state') {
+
+  } else if (selected && selected.startsWith('state_') && reg.step === 'state') {
     reg.data.state = selected.replace('state_', '');
     reg.step = 'newsletter';
     await sendMessage(from, 'Receive newsletter? (yes/no)');
-  } else if (reg.step==='newsletter' && text) {
+
+  } else if (reg.step === 'newsletter' && text) {
     const ans = text.toLowerCase();
-    if (!['yes','no'].includes(ans)) {
+    if (!['yes', 'no'].includes(ans)) {
       return await sendMessage(from, '⚠️ Reply yes or no.');
     }
-    reg.data.newsletter = ans==='yes';
-    // Save user
+    reg.data.newsletter = ans === 'yes';
+
+    // Save new user
     await new User(reg.data).save();
     delete registrationStates[phone];
     await sendRegistrationSuccess(from);
   }
-  registrationStates[phone] = reg;
 
+  registrationStates[phone] = reg;
   return res.sendStatus(200);
 });
 
