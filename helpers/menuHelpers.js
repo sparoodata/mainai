@@ -182,34 +182,64 @@ async function sendPropertyOptions(phoneNumber) {
   });
 }
 
-async function sendMainMenu(fromNumber) {
-  const menu = {
+async function sendMainMenu(to) {
+  const message = {
     messaging_product: 'whatsapp',
-    to: fromNumber,
+    to,
     type: 'interactive',
     interactive: {
-      type: 'button',
-      header: { type: 'text', text: '🏡 Teraa Assistant Menu' },
-      body: {
-        text: 'What would you like to do today?'
-      },
+      type: 'list',
+      header: { type: 'text', text: '🏠 Main Menu' },
+      body: { text: 'Please select an option 👇' },
+      footer: { text: 'Teraa Assistant' },
       action: {
-        buttons: [
-          { type: 'reply', reply: { id: 'manage', title: '🏘 Manage' } },
-          { type: 'reply', reply: { id: 'tools', title: '🛠 Tools' } },
-          { type: 'reply', reply: { id: 'account_info', title: '👤 My Account' } }
+        button: 'Choose',
+        sections: [
+          {
+            title: 'Properties',
+            rows: [
+              { id: 'manage_units', title: '🏘️ Manage Units' },
+              { id: 'add_unit', title: '➕ Add Unit' }
+            ]
+          },
+          {
+            title: 'Tenants',
+            rows: [
+              { id: 'view_tenants', title: '👥 View Tenants' },
+              { id: 'add_tenant', title: '➕ Add Tenant' }
+            ]
+          },
+          {
+            title: 'Payments',
+            rows: [
+              { id: 'record_payment', title: '💰 Record Payment' },
+              { id: 'payment_history', title: '📜 Payment History' },
+              { id: 'setup_reminders', title: '⏰ Set Reminders' }
+            ]
+          },
+          {
+            title: 'Account',
+            rows: [
+              { id: 'settings', title: '⚙️ Settings' },
+              { id: 'upgrade_premium', title: '🚀 Upgrade' },
+              { id: 'help_support', title: '❓ Help' }
+            ]
+          }
         ]
       }
     }
   };
 
-  await axios.post(WHATSAPP_API_URL, menu, {
+  await axios.post(WHATSAPP_API_URL, message, {
     headers: {
       Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
       'Content-Type': 'application/json'
     }
   });
 }
+
+
+
 
 async function sendUnitOptions(phoneNumber) {
   const buttonMenu = {
