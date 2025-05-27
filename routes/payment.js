@@ -62,11 +62,15 @@ router.post(
       const payload = JSON.parse(rawBody.toString());
       const event   = payload.event;
       console.log(event);
-      if (event === 'payment.link.paid') {
+      if (event === 'payment_link.paid') {
+              console.log('In If loop');
         const contactNumber = payload.payload.payment.entity.contact;
         const phone         = `+91${contactNumber}`;
+              console.log(contactNumber);
+      console.log(phone);
 
         const user = await User.findOne({ phoneNumber: phone });
+        console.log(user);
         if (user) {
           user.subscription = 'premium';
           await user.save();
