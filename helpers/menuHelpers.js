@@ -289,6 +289,134 @@ async function sendTenantOptions(phoneNumber) {
   });
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Generic List Sender
+async function sendList(to, title, rows) {
+  const message = {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'list',
+      header: { type: 'text', text: title },
+      body: { text: title },
+      footer: { text: 'Teraa Assistant' },
+      action: {
+        button: 'Choose',
+        sections: [{ title: 'Options', rows }]
+      }
+    }
+  };
+  await axios.post(WHATSAPP_API_URL, message, {
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
+}
+
+// Main Menu
+
+// Units Menu
+async function sendUnitsMenu(to) {
+  const rows = [
+    { id: 'view_units', title: '📋 View Units' },
+    { id: 'edit_unit', title: '✏️ Edit Unit' },
+    { id: 'delete_unit', title: '🗑️ Delete Unit' }
+  ];
+  await sendList(to, 'Units Menu', rows);
+}
+
+// Prompt to Add Unit
+async function promptAddUnit(to) {
+  const text = 'Please enter the unit details (e.g., 2BHK Apartment at 45 River Street):';
+  await axios.post(WHATSAPP_API_URL, { messaging_product: 'whatsapp', to, text: { body: text }, type: 'text' }, {
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
+}
+
+// Tenants Menu
+async function sendTenantsMenu(to) {
+  const rows = [
+    { id: 'view_tenants', title: '👥 View Tenants' },
+    { id: 'edit_tenant', title: '✏️ Edit Tenant' },
+    { id: 'remove_tenant', title: '🗑️ Remove Tenant' }
+  ];
+  await sendList(to, 'Tenants Menu', rows);
+}
+
+// Prompt to Add Tenant
+async function promptAddTenant(to) {
+  const text = 'Please enter tenant info (Name, Unit, Rent amount, e.g., John Doe, Apt 3A, ₹12000):';
+  await axios.post(WHATSAPP_API_URL, { messaging_product: 'whatsapp', to, text: { body: text }, type: 'text' }, {
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
+}
+
+// Prompt to Record Payment
+async function promptRecordPayment(to) {
+  const text = 'Please enter payment details (Tenant, Unit, Amount, Date, e.g., John Doe, Apt 3A, ₹12000, 2025-06-01):';
+  await axios.post(WHATSAPP_API_URL, { messaging_product: 'whatsapp', to, text: { body: text }, type: 'text' }, {
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
+}
+
+// Payment History
+async function sendPaymentHistory(to) {
+  const rows = [
+    { id: 'history_1', title: '🗓️ Last 5 Payments' }
+  ];
+  await sendList(to, 'Payment History', rows);
+}
+
+// Reminders Menu
+async function sendRemindersMenu(to) {
+  const rows = [
+    { id: 'view_reminders', title: '⏰ View Reminders' },
+    { id: 'add_reminder', title: '➕ Add Reminder' }
+  ];
+  await sendList(to, 'Reminders', rows);
+}
+
+// Settings Menu
+async function sendSettingsMenu(to) {
+  const rows = [
+    { id: 'profile', title: '👤 Profile' },
+    { id: 'notifications', title: '🔔 Notifications' },
+    { id: 'language', title: '🌐 Language' }
+  ];
+  await sendList(to, 'Settings', rows);
+}
+
+
+
 module.exports = {
   sendPropertySelectionMenu,
   sendUnitSelectionMenu,
@@ -298,4 +426,13 @@ module.exports = {
   sendUnitOptions,
   sendMainMenu,
   sendTenantOptions,
+  
+  sendUnitsMenu,
+  promptAddUnit,
+  sendTenantsMenu,
+  promptAddTenant,
+  promptRecordPayment,
+  sendPaymentHistory,
+  sendRemindersMenu,
+  sendSettingsMenu
 };
