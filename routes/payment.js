@@ -61,7 +61,7 @@ router.post(
 
       const payload = JSON.parse(rawBody.toString());
       const event   = payload.event;
-
+      console.log(event);
       if (event === 'payment.link.paid') {
         const contactNumber = payload.payload.payment.entity.contact;
         const phone         = `+91${contactNumber}`;
