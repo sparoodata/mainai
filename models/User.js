@@ -29,7 +29,7 @@ const userSchema = new mongoose.Schema({
   subscription: { 
     type: String, 
     default: 'free',
-    enum: ['free', 'premium', 'enterprise']
+    enum: ['free', 'premium']
   },
   // The date when the user registered
   registrationDate: { 
