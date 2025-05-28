@@ -9,6 +9,8 @@ const router = express.Router();
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 
+// Track conversational context for property/unit flows
+const convoStates = {};
 const registrationStates = {};
 const userResponses = {};
 
