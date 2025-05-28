@@ -159,14 +159,14 @@ router.post('/', async (req, res) => {
         break;
 
 case 'manage_properties':
-  await menuHelpers.sendPropertiesManagementMenu(from);
-  break;
+  await menuHelpers.sendPropertiesManagementMenu(from); break;
 case 'manage_units':
-  await menuHelpers.sendUnitsManagementMenu(from);
-  break;
+  await menuHelpers.sendUnitsManagementMenu(from); break;
 case 'manage_tenants':
-  await menuHelpers.sendTenantsManagementMenu(from);
-  break;
+  await menuHelpers.sendTenantsManagementMenu(from); break;
+case 'standard_reports':
+case 'ai_reports':
+  await menuHelpers.sendReportsMenu(from); break; 
       case 'add_unit':
         await menuHelpers.promptAddUnit(from);
         break;
