@@ -5,6 +5,7 @@ const User = require('../models/User');
 const menuHelpers = require('../helpers/menuHelpers');
 const { sendMessage } = require('../helpers/whatsapp');
 const { askAI }      = require('../helpers/ai');
+const { jsonToTableImage } = require('../helpers/tableImage');
 
 const router = express.Router();
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
@@ -139,6 +140,7 @@ router.post('/', async (req, res) => {
   const interactive = msg?.interactive;
   
   /* ───────── AI queries that start with "\" ───────── */
+/* ───────── AI queries that start with "\" ───────── */
 if (text && text.startsWith('\\')) {
   const aiQuery = text.slice(1).trim();          // strip the back-slash
 
@@ -148,8 +150,38 @@ if (text && text.startsWith('\\')) {
   }
 
   try {
-    const answer = await askAI(aiQuery);         // call the helper
-    await sendMessage(from, answer);             // relay the reply
+    const answer = await askAI(aiQuery);         // ① call the AI
+
+    /* ② Is the reply JSON? */
+    let parsed;
+    try { parsed = JSON.parse(answer); } catch (_) {}
+
+    if (parsed) {
+      /* ③ Build a table image from the JSON */
+      const imgUrl = jsonToTableImage(
+        Array.isArray(parsed) ? parsed : [parsed],
+      );
+
+      /* ④ Send the image back to WhatsApp */
+      await axios.post(
+        WHATSAPP_API_URL,
+        {
+          messaging_product: 'whatsapp',
+          to: from,
+          type: 'image',
+          image: { link: imgUrl },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+    } else {
+      /* Fallback: plain text if it wasn’t JSON */
+      await sendMessage(from, answer);
+    }
   } catch (err) {
     console.error('[AI error]', err);
     await sendMessage(from, '⚠️  Sorry, I could not reach the AI service.');
@@ -157,6 +189,8 @@ if (text && text.startsWith('\\')) {
 
   return res.sendStatus(200);                    // stop further routing
 }
+/* ─────────────────────────────────────────────────── */
+
 /* ─────────────────────────────────────────────────── */
   
   
