@@ -4,6 +4,7 @@ const axios = require('axios');
 const User = require('../models/User');
 const menuHelpers = require('../helpers/menuHelpers');
 const { sendMessage } = require('../helpers/whatsapp');
+const { askAI }      = require('../helpers/ai');
 
 const router = express.Router();
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
@@ -136,6 +137,29 @@ router.post('/', async (req, res) => {
   const phone       = `+${from}`;
   const text        = msg?.text?.body?.trim();
   const interactive = msg?.interactive;
+  
+  /* ───────── AI queries that start with "\" ───────── */
+if (text && text.startsWith('\\')) {
+  const aiQuery = text.slice(1).trim();          // strip the back-slash
+
+  if (!aiQuery) {
+    await sendMessage(from, 'Please type something after “\\”.');
+    return res.sendStatus(200);
+  }
+
+  try {
+    const answer = await askAI(aiQuery);         // call the helper
+    await sendMessage(from, answer);             // relay the reply
+  } catch (err) {
+    console.error('[AI error]', err);
+    await sendMessage(from, '⚠️  Sorry, I could not reach the AI service.');
+  }
+
+  return res.sendStatus(200);                    // stop further routing
+}
+/* ─────────────────────────────────────────────────── */
+  
+  
   if (!from) return res.sendStatus(200);
 
   if (interactive?.button_reply) userResponses[phone] = interactive.button_reply.id;
