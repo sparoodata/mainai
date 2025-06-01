@@ -6,6 +6,8 @@ const menuHelpers = require('../helpers/menuHelpers');
 const { sendMessage } = require('../helpers/whatsapp');
 const { askAI }      = require('../helpers/ai');
 const { jsonToTableImage } = require('../helpers/tableImage');
+const { jsonToTableText }  = require('../helpers/tableText'); 
+const { jsonToTableHTML }  = require('../helpers/tableHtml');
 
 const router = express.Router();
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
@@ -141,8 +143,10 @@ router.post('/', async (req, res) => {
   
   /* ───────── AI queries that start with "\" ───────── */
 /* ───────── AI queries that start with "\" ───────── */
+/* ───────── AI queries that start with "\" ───────── */
+/* ───────── AI queries that start with "\" ───────── */
 if (text && text.startsWith('\\')) {
-  const aiQuery = text.slice(1).trim();          // strip the back-slash
+  const aiQuery = text.slice(1).trim();
 
   if (!aiQuery) {
     await sendMessage(from, 'Please type something after “\\”.');
@@ -150,45 +154,30 @@ if (text && text.startsWith('\\')) {
   }
 
   try {
-    const answer = await askAI(aiQuery);         // ① call the AI
+    const answer = await askAI(aiQuery);           // ① call the AI
 
-    /* ② Is the reply JSON? */
+    /* ② try to parse JSON */
     let parsed;
     try { parsed = JSON.parse(answer); } catch (_) {}
 
-    if (parsed) {
-      /* ③ Build a table image from the JSON */
-      const imgUrl = jsonToTableImage(
-        Array.isArray(parsed) ? parsed : [parsed],
-      );
+    const reply = parsed
+      ? jsonToTableHTML(parsed)                    // ③ JSON → HTML table
+      : answer;                                   // ④ plain text fallback
 
-      /* ④ Send the image back to WhatsApp */
-      await axios.post(
-        WHATSAPP_API_URL,
-        {
-          messaging_product: 'whatsapp',
-          to: from,
-          type: 'image',
-          image: { link: imgUrl },
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
-        },
-      );
-    } else {
-      /* Fallback: plain text if it wasn’t JSON */
-      await sendMessage(from, answer);
-    }
+    await sendMessage(from, reply);                // WhatsApp sends as text
   } catch (err) {
-    console.error('[AI error]', err);
-    await sendMessage(from, '⚠️  Sorry, I could not reach the AI service.');
+    console.error('[AI error]', err.response?.data || err.message);
+    await sendMessage(
+      from,
+      '⚠️  The AI service returned an error. Please try again later.'
+    );
   }
 
-  return res.sendStatus(200);                    // stop further routing
+  return res.sendStatus(200);                      // stop further routing
 }
+/* ─────────────────────────────────────────────────── */
+
+/* ─────────────────────────────────────────────────── */
 /* ─────────────────────────────────────────────────── */
 
 /* ─────────────────────────────────────────────────── */

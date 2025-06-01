@@ -1,36 +1,35 @@
 // helpers/tableImage.js
 /**
- * Turn an array-of-objects into a QuickChart “table” image URL.
+ * Build a QuickChart.io URL that renders an array-of-objects as a table PNG.
  * @param {Object[]} data
- * @returns {string} https:// link WhatsApp can fetch
+ * @returns {string} URL to the rendered image
  */
 function jsonToTableImage(data) {
-  if (!Array.isArray(data) || data.length === 0) {
+  if (!Array.isArray(data) || data.length === 0)
     throw new Error('jsonToTableImage expects a non-empty array');
-  }
 
   const headers = Object.keys(data[0]);
-  const rows    = data.map(obj => headers.map(h => String(obj[h] ?? '')));
+  const rows    = data.map(o => headers.map(h => String(o[h] ?? '')));
 
-  const chartConfig = {
-    type: 'table',
-    data: { header: headers, rows },
+  const cfg = {
+    type:   'table',
+    data:   { header: headers, rows },
     options: {
       plugins: {
         table: {
           headerBackgroundColor: '#4CAF50',
-          headerTextColor:     '#ffffff',
-          borderWidth:         1,
-          borderColor:         '#ddd',
-          striped:             true,
+          headerTextColor:       '#ffffff',
+          borderWidth:           1,
+          borderColor:           '#ddd',
+          striped:               true,
         },
       },
     },
   };
 
-  // Build the QuickChart URL (URL-encode, not base64, and no “auto” height)
-  const cfg = encodeURIComponent(JSON.stringify(chartConfig));
-  return `https://quickchart.io/chart?bkg=white&width=1000&c=${cfg}`;
+  const enc = encodeURIComponent(JSON.stringify(cfg));
+  // width is fixed (pixels); height is automatic
+  return `https://quickchart.io/chart?bkg=white&width=1000&c=${enc}`;
 }
 
 module.exports = { jsonToTableImage };
