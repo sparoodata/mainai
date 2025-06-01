@@ -8,6 +8,8 @@ const { askAI }      = require('../helpers/ai');
 const { jsonToTableImage } = require('../helpers/tableImage');
 const { jsonToTableText }  = require('../helpers/tableText'); 
 const { jsonToTableHTML }  = require('../helpers/tableHtml');
+const { jsonToTablePDF }   = require('../helpers/tablePdf'); 
+const { htmlToPdfBuffer, uploadToWhatsApp } = require('../helpers/pdfHelpers');
 
 const router = express.Router();
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
@@ -145,6 +147,9 @@ router.post('/', async (req, res) => {
 /* ───────── AI queries that start with "\" ───────── */
 /* ───────── AI queries that start with "\" ───────── */
 /* ───────── AI queries that start with "\" ───────── */
+/* ───────── AI queries that start with "\" ───────── */
+/* ───────── AI queries that start with "\" ───────── */
+/* ───────── AI queries that start with "\" ───────── */
 if (text && text.startsWith('\\')) {
   const aiQuery = text.slice(1).trim();
 
@@ -156,15 +161,44 @@ if (text && text.startsWith('\\')) {
   try {
     const answer = await askAI(aiQuery);           // ① call the AI
 
-    /* ② try to parse JSON */
-    let parsed;
+    /* ② parse JSON if possible */
+    let parsed = null;
     try { parsed = JSON.parse(answer); } catch (_) {}
 
-    const reply = parsed
-      ? jsonToTableHTML(parsed)                    // ③ JSON → HTML table
-      : answer;                                   // ④ plain text fallback
+    if (parsed) {
+      /* ③ JSON → HTML table */
+      const html   = jsonToTableHTML(parsed);
 
-    await sendMessage(from, reply);                // WhatsApp sends as text
+      /* ④ HTML → PDF buffer */
+      const pdfBuf = await htmlToPdfBuffer(html);
+
+      /* ⑤ Upload PDF to WhatsApp; get media_id */
+      const mediaId = await uploadToWhatsApp(
+        pdfBuf,
+        'report.pdf',
+        'application/pdf',
+      );
+
+      /* ⑥ Send document message that references the media_id */
+      await axios.post(
+        WHATSAPP_API_URL,
+        {
+          messaging_product: 'whatsapp',
+          to: from,
+          type: 'document',
+          document: { id: mediaId, filename: 'report.pdf' },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+    } else {
+      /* fallback – send whatever the AI returned */
+      await sendMessage(from, answer);
+    }
   } catch (err) {
     console.error('[AI error]', err.response?.data || err.message);
     await sendMessage(
@@ -173,8 +207,14 @@ if (text && text.startsWith('\\')) {
     );
   }
 
-  return res.sendStatus(200);                      // stop further routing
+  return res.sendStatus(200);                       // stop further routing
 }
+/* ─────────────────────────────────────────────────── */
+
+/* ─────────────────────────────────────────────────── */
+
+/* ─────────────────────────────────────────────────── */
+
 /* ─────────────────────────────────────────────────── */
 
 /* ─────────────────────────────────────────────────── */
