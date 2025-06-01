@@ -28,6 +28,7 @@ async function uploadToWhatsApp(buffer, filename, mime) {
   const form = new FormData();
   form.append('file', buffer, { filename, contentType: mime });
   form.append('type', mime);
+  form.append('messaging_product', 'whatsapp');  // ✅ REQUIRED!
 
   const { data } = await axios.post(
     `https://graph.facebook.com/v20.0/${process.env.PHONE_NUMBER_ID}/media`,
