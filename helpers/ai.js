@@ -1,7 +1,9 @@
 // helpers/ai.js
 const axios = require('axios');
 
-const MCP_URL = 'https://misty-hot-country.glitch.me/mcp';
+// Endpoint for the AI service. Previously this pointed to our MCP instance
+// but has been updated to use the new NPIK service.
+const MCP_URL = 'https://getai-npik.onrender.com/prompt';
 
 /**
  * Ask the MCP AI a natural-language database query.
@@ -12,12 +14,14 @@ async function askAI(message) {
   const apiKey = process.env.MCP_API_KEY;
   if (!apiKey) throw new Error('MCP_API_KEY missing');
 
-  const payload = JSON.stringify({ message });
+  // The NPIK API expects a JSON payload with a `prompt` field
+  const payload = JSON.stringify({ prompt: message });
 
+  // Use the API key via `X-API-KEY` header as required by the service
   const { data } = await axios.post(MCP_URL, payload, {
     headers: {
       'Content-Type': 'application/json',
-      'X-MCP-Key': apiKey,
+      'X-API-KEY': apiKey,
     },
   });
 
