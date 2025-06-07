@@ -163,7 +163,18 @@ if (text && text.startsWith('\\')) {
 
     /* ② parse JSON if possible */
     let parsed = null;
-    try { parsed = JSON.parse(answer); } catch (_) {}
+    try {
+      parsed = JSON.parse(answer);
+      // NPIK responses wrap data in { success, data }
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        'data' in parsed &&
+        Array.isArray(parsed.data)
+      ) {
+        parsed = parsed.data;
+      }
+    } catch (_) {}
 
     if (parsed) {
       /* ③ JSON → HTML table */
