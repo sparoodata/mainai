@@ -4,7 +4,12 @@ const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 
 async function shortenUrl(longUrl) {
   try {
-    const response = await axios.post('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(longUrl));
+    // TinyURL provides a simple GET API for shortening links
+    // Use GET instead of POST to avoid unnecessary request body
+    const response = await axios.get(
+      'https://tinyurl.com/api-create.php',
+      { params: { url: longUrl } }
+    );
     return response.data;
   } catch (error) {
     console.error('Error shortening URL:', error);
