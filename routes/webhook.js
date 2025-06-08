@@ -7,9 +7,8 @@ const { sendMessage } = require('../helpers/whatsapp');
 const { askAI }      = require('../helpers/ai');
 const { jsonToTableImage } = require('../helpers/tableImage');
 const { jsonToTableText }  = require('../helpers/tableText'); 
-const { jsonToTableHTML }  = require('../helpers/tableHtml');
-const { jsonToTablePDF }   = require('../helpers/tablePdf'); 
-const { htmlToPdfBuffer, uploadToWhatsApp } = require('../helpers/pdfHelpers');
+const { jsonToTablePDF }   = require('../helpers/tablePdf');
+const { uploadToWhatsApp, fetchBufferFromUrl } = require('../helpers/pdfHelpers');
 
 const router = express.Router();
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
@@ -177,11 +176,11 @@ if (text && text.startsWith('\\')) {
     } catch (_) {}
 
     if (parsed) {
-      /* ③ JSON → HTML table */
-      const html   = jsonToTableHTML(parsed);
+      /* ③ Build QuickChart PDF URL */
+      const pdfUrl = jsonToTablePDF(parsed);
 
-      /* ④ HTML → PDF buffer */
-      const pdfBuf = await htmlToPdfBuffer(html);
+      /* ④ Download PDF buffer */
+      const pdfBuf = await fetchBufferFromUrl(pdfUrl);
 
       /* ⑤ Upload PDF to WhatsApp; get media_id */
       const mediaId = await uploadToWhatsApp(
