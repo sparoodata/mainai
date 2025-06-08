@@ -1,9 +1,11 @@
 // helpers/ai.js
 const axios = require('axios');
 
-// Endpoint for the AI service. Previously this pointed to our MCP instance
-// but has been updated to use the new NPIK service.
-const MCP_URL = 'https://getai-npik.onrender.com/prompt';
+// Endpoint for the AI service.
+// The server expects POST requests with a JSON body containing { prompt } and
+// requires authentication via the `X-API-KEY` header.
+// Update this URL if the service location changes.
+const MCP_URL = 'https://getai-sooty.vercel.app/prompt';
 
 /**
  * Ask the MCP AI a natural-language database query.
@@ -14,7 +16,7 @@ async function askAI(message) {
   const apiKey = process.env.MCP_API_KEY;
   if (!apiKey) throw new Error('MCP_API_KEY missing');
 
-  // The NPIK API expects a JSON payload with a `prompt` field
+  // The service expects a JSON payload with a `prompt` field
   const payload = JSON.stringify({ prompt: message });
 
   // Use the API key via `X-API-KEY` header as required by the service
