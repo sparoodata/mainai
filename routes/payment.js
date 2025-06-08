@@ -65,7 +65,7 @@ router.post(
       if (event === 'payment_link.paid') {
               console.log('In If loop');
         const contactNumber = payload.payload.payment.entity.contact;
-        const phone         = contactNumber;
+        const phone         = `+${contactNumber}`;
               console.log(contactNumber);
       console.log(phone);
 
