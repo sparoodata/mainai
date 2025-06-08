@@ -24,8 +24,10 @@ function jsonToTablePDF(data) {
 
   const enc = encodeURIComponent(JSON.stringify(cfg));
 
-  // Either form works; we’ll use the “.pdf” path variant
-  return `https://quickchart.io/chart.pdf?width=1000&backgroundColor=white&c=${enc}`;
+  // Generate the QuickChart URL for a PDF. Using the `format=pdf` query
+  // parameter is more reliable than relying on the deprecated `.pdf`
+  // path variant, which in some cases produced empty files.
+  return `https://quickchart.io/chart?format=pdf&width=1000&backgroundColor=white&c=${enc}`;
 }
 
 module.exports = { jsonToTablePDF };
