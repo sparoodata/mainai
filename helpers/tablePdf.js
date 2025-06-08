@@ -1,4 +1,7 @@
 // helpers/tablePdf.js
+const axios = require('axios');
+const { jsonToTableHTML } = require('./tableHtml');
+
 function jsonToTablePDF(data) {
   if (!Array.isArray(data) || data.length === 0)
     throw new Error('jsonToTablePDF expects a non-empty array');
@@ -30,4 +33,25 @@ function jsonToTablePDF(data) {
   return `https://quickchart.io/chart?format=pdf&width=1000&backgroundColor=white&c=${enc}`;
 }
 
-module.exports = { jsonToTablePDF };
+/**
+ * Convert JSON data into an HTML table and return a PDF buffer of that table
+ * by using QuickChart's HTML-to-PDF service.
+ * @param {Object[]} data
+ * @returns {Promise<Buffer>}
+ */
+async function jsonToHTMLTablePDF(data) {
+  if (!Array.isArray(data) || data.length === 0)
+    throw new Error('jsonToHTMLTablePDF expects a non-empty array');
+
+  const tableHtml = jsonToTableHTML(data);
+  const html = `<!DOCTYPE html><html><body>${tableHtml}</body></html>`;
+
+  const { data: pdfBuf } = await axios.post(
+    'https://quickchart.io/pdf',
+    { html },
+    { responseType: 'arraybuffer' },
+  );
+  return Buffer.from(pdfBuf);
+}
+
+module.exports = { jsonToTablePDF, jsonToHTMLTablePDF };
