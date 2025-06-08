@@ -207,7 +207,11 @@ if (text && text.startsWith('\\')) {
       await sendMessage(from, answer);
     }
   } catch (err) {
-    console.error('[AI error]', err.response?.data || err.message);
+    const errData = err.response?.data;
+    const errMsg = Buffer.isBuffer(errData)
+      ? errData.toString('utf8')
+      : errData || err.message;
+    console.error('[AI error]', errMsg);
     await sendMessage(
       from,
       '⚠️  The AI service returned an error. Please try again later.'
