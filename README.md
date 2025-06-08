@@ -11,3 +11,8 @@ npm start
 ```
 
 Make sure to provide a `.env` file with your database connection string and API keys.
+
+At minimum the following environment variable is required:
+
+- `MCP_API_KEY` – your API key for the AI service used by `helpers/ai.js`. The
+  server sends prompts to `https://getai-sooty.vercel.app/prompt`.
