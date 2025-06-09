@@ -14,11 +14,12 @@ const MCP_URL = 'https://getai-sooty.vercel.app/prompt';
  */
 async function askAI(message) {
   const apiKey = process.env.MCP_API_KEY;
+  console.log(apiKey);
   if (!apiKey) throw new Error('MCP_API_KEY missing');
 
   // The service expects a JSON payload with a `prompt` field
   const payload = JSON.stringify({ prompt: message });
-
+  
   // Use the API key via `X-API-KEY` header as required by the service
   const { data } = await axios.post(MCP_URL, payload, {
     headers: {
