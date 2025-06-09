@@ -3,10 +3,12 @@ require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
+const morgan = require('morgan');
 const paymentRoutes = require('./routes/payment');
 const { router: whatsappRouter } = require('./routes/webhook');
 
 const app = express();
+app.use(morgan('dev'));
 
 const port = process.env.PORT || 3000;
 
