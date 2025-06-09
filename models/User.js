@@ -33,6 +33,8 @@ const userSchema = new mongoose.Schema({
   },
   // When the current subscription became active
   subscriptionStart: { type: Date },
+  // When the current subscription expires
+  subscriptionEnd: { type: Date },
   // The date when the user registered
   registrationDate: {
     type: Date,
