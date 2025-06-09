@@ -212,10 +212,20 @@ if (text && text.startsWith('\\')) {
       ? errData.toString('utf8')
       : errData || err.message;
     console.error('[AI error]', errMsg);
-    await sendMessage(
-      from,
-      '⚠️  The AI service returned an error. Please try again later.'
-    );
+
+    if (err.response || err.request) {
+      // Only notify the user if the AI service itself failed
+      await sendMessage(
+        from,
+        '⚠️  The AI service returned an error. Please try again later.'
+      );
+    } else {
+      // Generic catch‑all for other unexpected failures
+      await sendMessage(
+        from,
+        '⚠️  An internal error occurred. Please try again later.'
+      );
+    }
   }
 
   return res.sendStatus(200);                       // stop further routing
