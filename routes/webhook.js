@@ -9,18 +9,33 @@ const { jsonToTableImage } = require('../helpers/tableImage');
 const { jsonToTableText }  = require('../helpers/tableText'); 
 const { jsonToHTMLTablePDF } = require('../helpers/tablePdf');
 const { uploadToWhatsApp } = require('../helpers/pdfHelpers');
+const crypto = require('crypto');
+const redis = require('../services/redis');
+const analytics = require('../helpers/analytics');
+const { jobQueue } = require('../services/queue');
 
 const router = express.Router();
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+const WHATSAPP_APP_SECRET = process.env.WHATSAPP_APP_SECRET;
 
 // Track conversational context for property/unit flows
-const convoStates = {};
-const registrationStates = {};
-const userResponses = {};
+async function getState(prefix, phone) {
+  const data = await redis.get(`${prefix}:${phone}`);
+  return data ? JSON.parse(data) : undefined;
+}
+
+async function setState(prefix, phone, value) {
+  await redis.set(`${prefix}:${phone}`, JSON.stringify(value));
+}
+
+async function deleteState(prefix, phone) {
+  await redis.del(`${prefix}:${phone}`);
+}
 
 // Interactive Welcome Menu
 async function sendWelcomeMenu(to) {
+  await analytics.track('welcome_menu', { to });
   const welcome = {
     messaging_product: 'whatsapp',
     to,
@@ -49,6 +64,7 @@ async function sendWelcomeMenu(to) {
 
 // Registration Success
 async function sendRegistrationSuccess(to) {
+  await analytics.track('registration_success', { to });
   const msg = {
     messaging_product: 'whatsapp',
     to,
@@ -135,6 +151,13 @@ router.get('/', (req, res) => {
 
 // Webhook Handler
 router.post('/', async (req, res) => {
+  if (WHATSAPP_APP_SECRET) {
+    const sig = req.headers['x-hub-signature-256'];
+    const expected = 'sha256=' + crypto.createHmac('sha256', WHATSAPP_APP_SECRET)
+      .update(JSON.stringify(req.body))
+      .digest('hex');
+    if (sig !== expected) return res.status(401).send('Invalid signature');
+  }
   const entry       = req.body.entry?.[0];
   const msg         = entry?.changes?.[0]?.value?.messages?.[0];
   const from        = msg?.from;
@@ -157,78 +180,9 @@ if (text && text.startsWith('\\')) {
     return res.sendStatus(200);
   }
 
-  try {
-    const answer = await askAI(aiQuery);           // ① call the AI
-
-    /* ② parse JSON if possible */
-    let parsed = null;
-    try {
-      parsed = JSON.parse(answer);
-      // NPIK responses wrap data in { success, data }
-      if (
-        parsed &&
-        typeof parsed === 'object' &&
-        'data' in parsed &&
-        Array.isArray(parsed.data)
-      ) {
-        parsed = parsed.data;
-      }
-    } catch (_) {}
-
-    if (parsed) {
-      /* ③ Build PDF buffer containing HTML table */
-      const pdfBuf = await jsonToHTMLTablePDF(parsed);
-
-      /* ⑤ Upload PDF to WhatsApp; get media_id */
-      const mediaId = await uploadToWhatsApp(
-        pdfBuf,
-        'report.pdf',
-        'application/pdf',
-      );
-
-      /* ⑥ Send document message that references the media_id */
-      await axios.post(
-        WHATSAPP_API_URL,
-        {
-          messaging_product: 'whatsapp',
-          to: from,
-          type: 'document',
-          document: { id: mediaId, filename: 'report.pdf' },
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
-        },
-      );
-    } else {
-      /* fallback – send whatever the AI returned */
-      await sendMessage(from, answer);
-    }
-  } catch (err) {
-    const errData = err.response?.data;
-    const errMsg = Buffer.isBuffer(errData)
-      ? errData.toString('utf8')
-      : errData || err.message;
-    console.error('[AI error]', errMsg);
-
-    if (err.response || err.request) {
-      // Only notify the user if the AI service itself failed
-      await sendMessage(
-        from,
-        '⚠️  The AI service returned an error. Please try again later.'
-      );
-    } else {
-      // Generic catch‑all for other unexpected failures
-      await sendMessage(
-        from,
-        '⚠️  An internal error occurred. Please try again later.'
-      );
-    }
-  }
-
-  return res.sendStatus(200);                       // stop further routing
+  await jobQueue.add('ai-report', { from, aiQuery });
+  await sendMessage(from, '⏳ Generating your report, please wait...');
+  return res.sendStatus(200);
 }
 /* ─────────────────────────────────────────────────── */
 
@@ -246,9 +200,9 @@ if (text && text.startsWith('\\')) {
   
   if (!from) return res.sendStatus(200);
 
-  if (interactive?.button_reply) userResponses[phone] = interactive.button_reply.id;
-  if (interactive?.list_reply)   userResponses[phone] = interactive.list_reply.id;
-  const selected = userResponses[phone];
+  if (interactive?.button_reply) await setState('resp', phone, interactive.button_reply.id);
+  if (interactive?.list_reply)   await setState('resp', phone, interactive.list_reply.id);
+  const selected = await getState('resp', phone);
 
   const user = await User.findOne({ phoneNumber: phone });
 
@@ -324,12 +278,12 @@ case 'ai_reports':
         await menuHelpers.sendMainMenu(from, user.subscription);
     }
 
-    delete userResponses[phone];
+    await deleteState('resp', phone);
     return res.sendStatus(200);
   }
 
   // Registration flow
-  let reg = registrationStates[phone] || { data: { phoneNumber: phone } };
+  let reg = await getState('reg', phone) || { data: { phoneNumber: phone } };
 
   if (selected === 'start_registration') {
     reg.step = 'language';
@@ -376,11 +330,11 @@ case 'ai_reports':
 
     // Save new user
     await new User(reg.data).save();
-    delete registrationStates[phone];
+    await deleteState('reg', phone);
     await sendRegistrationSuccess(from);
   }
 
-  registrationStates[phone] = reg;
+  await setState('reg', phone, reg);
   return res.sendStatus(200);
 });
 

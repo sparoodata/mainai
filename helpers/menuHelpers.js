@@ -43,6 +43,8 @@ async function sendButtonMenu(to, headerText, bodyText, buttons) {
 
 // Main Menu
 async function sendMainMenu(to) {
+  const { track } = require('./analytics');
+  await track('main_menu', { to });
   const sections = [
     {
       title: 'Manage',
@@ -79,6 +81,8 @@ async function sendMainMenu(to) {
 
 // Settings Menu (includes Upgrade & Delete Account)
 async function sendSettingsMenu(to) {
+  const { track } = require('./analytics');
+  await track('settings_menu', { to });
   const sections = [
     {
       title: 'Settings',
