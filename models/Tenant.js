@@ -26,4 +26,4 @@ const tenantSchema = new mongoose.Schema({
   status: { type: String, default: 'active' },
 }, { timestamps: true });
 
-module.exports = mongoose.model('Tenant', tenantSchema);
+module.exports = mongoose.model('tenants', tenantSchema);
