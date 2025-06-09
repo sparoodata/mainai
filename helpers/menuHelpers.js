@@ -137,12 +137,26 @@ async function sendReportsMenu(to) {
   await sendButtonMenu(to, '📈 Reports', 'Select report type:', buttons);
 }
 
-// Property & Unit pagination and other prompts unchanged\async function sendPropertySelectionMenu(to, properties) { /* ... */ }
-async function sendUnitSelectionMenu(to, units)           { /* ... */ }
-async function promptAddUnit(to)                          { await sendMessage(to, 'Please enter the unit details...'); }
-async function promptAddTenant(to)                        { await sendMessage(to, 'Please enter tenant info...'); }
-async function promptRecordPayment(to)                    { await sendMessage(to, 'Please enter payment details...'); }
-async function sendPaymentHistory(to)                     { /* ... */ }
+// Generic list for selecting a property
+async function sendPropertySelectionMenu(to, properties, prefix, title) {
+  const rows = properties.slice(0, 10).map(p => ({ id: `${prefix}_${p._id}`, title: p.name }));
+  await sendList(to, title, [{ title: 'Properties', rows }], 'Select');
+}
+
+async function promptAddProperty(to) {
+  await sendMessage(to, 'Please enter the property name:');
+}
+
+// Placeholder for unit selection list
+async function sendUnitSelectionMenu(to, units) {
+  const rows = units.slice(0, 10).map(u => ({ id: `unit_${u._id}`, title: u.unitNumber }));
+  await sendList(to, 'Select Unit', [{ title: 'Units', rows }], 'Select');
+}
+
+async function promptAddUnit(to)   { await sendMessage(to, 'Please enter the unit details...'); }
+async function promptAddTenant(to) { await sendMessage(to, 'Please enter tenant info...'); }
+async function promptRecordPayment(to) { await sendMessage(to, 'Please enter payment details...'); }
+async function sendPaymentHistory(to) { /* ... */ }
 
 module.exports = {
   sendMainMenu,
@@ -151,6 +165,8 @@ module.exports = {
   sendUnitsManagementMenu,
   sendTenantsManagementMenu,
   sendReportsMenu,
+  sendPropertySelectionMenu,
+  promptAddProperty,
   sendUnitSelectionMenu,
   promptAddUnit,
   promptAddTenant,
