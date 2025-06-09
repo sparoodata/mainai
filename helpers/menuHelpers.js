@@ -147,10 +147,16 @@ async function promptAddProperty(to) {
   await sendMessage(to, 'Please enter the property name:');
 }
 
-// Placeholder for unit selection list
-async function sendUnitSelectionMenu(to, units) {
-  const rows = units.slice(0, 10).map(u => ({ id: `unit_${u._id}`, title: u.unitNumber }));
-  await sendList(to, 'Select Unit', [{ title: 'Units', rows }], 'Select');
+// Generic list for selecting a unit
+async function sendUnitSelectionMenu(to, units, prefix = 'unit', title = 'Select Unit') {
+  const rows = units.slice(0, 10).map(u => ({ id: `${prefix}_${u._id}`, title: u.unitNumber }));
+  await sendList(to, title, [{ title: 'Units', rows }], 'Select');
+}
+
+// Generic list for selecting a tenant
+async function sendTenantSelectionMenu(to, tenants, prefix = 'tenant', title = 'Select Tenant') {
+  const rows = tenants.slice(0, 10).map(t => ({ id: `${prefix}_${t._id}`, title: t.fullName }));
+  await sendList(to, title, [{ title: 'Tenants', rows }], 'Select');
 }
 
 async function promptAddUnit(to)   { await sendMessage(to, 'Please enter the unit details...'); }
@@ -168,6 +174,7 @@ module.exports = {
   sendPropertySelectionMenu,
   promptAddProperty,
   sendUnitSelectionMenu,
+  sendTenantSelectionMenu,
   promptAddUnit,
   promptAddTenant,
   promptRecordPayment,

@@ -209,6 +209,10 @@ if (text && text.startsWith('\\')) {
 
   const addPropState  = user ? await getState('propAdd', phone) : undefined;
   const editPropState = user ? await getState('propEdit', phone) : undefined;
+  const addUnitState   = user ? await getState('unitAdd', phone) : undefined;
+  const editUnitState  = user ? await getState('unitEdit', phone) : undefined;
+  const addTenantState = user ? await getState('tenantAdd', phone) : undefined;
+  const editTenantState= user ? await getState('tenantEdit', phone) : undefined;
 
   if (user && addPropState && text) {
     const { isValidName, isValidAddress, isValidUnits } = require('../helpers/validators');
@@ -279,6 +283,124 @@ if (text && text.startsWith('\\')) {
     }
   }
 
+  if (user && addUnitState && text) {
+    const Property = require('../models/Property');
+    const Unit = require('../models/Unit');
+    switch (addUnitState.step) {
+      case 'property': {
+        const prop = await Property.findOne({ _id: text, ownerId: user._id });
+        if (!prop) { await sendMessage(from, '⚠️ Invalid property ID. Try again.'); break; }
+        addUnitState.data.property = prop._id;
+        addUnitState.step = 'number';
+        await sendMessage(from, 'Enter unit number:');
+        break; }
+      case 'number':
+        addUnitState.data.unitNumber = text;
+        addUnitState.step = 'rent';
+        await sendMessage(from, 'Enter monthly rent amount:');
+        break;
+      case 'rent': {
+        const rent = parseFloat(text);
+        if (isNaN(rent)) { await sendMessage(from, '⚠️ Invalid rent amount.'); break; }
+        addUnitState.data.rentAmount = rent;
+        await new Unit(addUnitState.data).save();
+        await sendMessage(from, '✅ Unit added successfully.');
+        await deleteState('unitAdd', phone);
+        return res.sendStatus(200); }
+    }
+    await setState('unitAdd', phone, addUnitState);
+    return res.sendStatus(200);
+  }
+
+  if (user && editUnitState && text) {
+    const Unit = require('../models/Unit');
+    const unit = await Unit.findById(editUnitState.unitId).populate('property');
+    if (!unit || String(unit.property.ownerId) !== String(user._id)) {
+      await sendMessage(from, '⚠️ Unit not found.');
+      await deleteState('unitEdit', phone);
+      return res.sendStatus(200);
+    }
+    switch (editUnitState.step) {
+      case 'number':
+        if (text.toLowerCase() !== 'skip') {
+          editUnitState.data.unitNumber = text;
+        }
+        editUnitState.step = 'rent';
+        await sendMessage(from, 'Enter new rent or type "skip":');
+        await setState('unitEdit', phone, editUnitState);
+        return res.sendStatus(200);
+      case 'rent':
+        if (text.toLowerCase() !== 'skip') {
+          const rent = parseFloat(text);
+          if (isNaN(rent)) { await sendMessage(from, '⚠️ Invalid rent.'); return res.sendStatus(200); }
+          editUnitState.data.rentAmount = rent;
+        }
+        await Unit.updateOne({ _id: editUnitState.unitId }, editUnitState.data);
+        await sendMessage(from, '✅ Unit updated successfully.');
+        await deleteState('unitEdit', phone);
+        return res.sendStatus(200);
+    }
+  }
+
+  if (user && addTenantState && text) {
+    const Unit = require('../models/Unit');
+    const Tenant = require('../models/Tenant');
+    switch (addTenantState.step) {
+      case 'unit': {
+        const unit = await Unit.findById(text).populate('property');
+        if (!unit || String(unit.property.ownerId) !== String(user._id)) {
+          await sendMessage(from, '⚠️ Invalid unit ID. Try again.');
+          break;
+        }
+        addTenantState.data.unitAssigned = unit._id;
+        addTenantState.step = 'name';
+        await sendMessage(from, 'Enter tenant full name:');
+        break; }
+      case 'name':
+        addTenantState.data.fullName = text;
+        addTenantState.step = 'phone';
+        await sendMessage(from, 'Enter tenant phone number:');
+        break;
+      case 'phone':
+        addTenantState.data.phoneNumber = text;
+        await new Tenant(addTenantState.data).save();
+        await sendMessage(from, '✅ Tenant added successfully.');
+        await deleteState('tenantAdd', phone);
+        return res.sendStatus(200);
+    }
+    await setState('tenantAdd', phone, addTenantState);
+    return res.sendStatus(200);
+  }
+
+  if (user && editTenantState && text) {
+    const Tenant = require('../models/Tenant');
+    const tenant = await Tenant.findById(editTenantState.tenantId)
+      .populate({ path: 'unitAssigned', populate: { path: 'property' } });
+    if (!tenant || String(tenant.unitAssigned.property.ownerId) !== String(user._id)) {
+      await sendMessage(from, '⚠️ Tenant not found.');
+      await deleteState('tenantEdit', phone);
+      return res.sendStatus(200);
+    }
+    switch (editTenantState.step) {
+      case 'name':
+        if (text.toLowerCase() !== 'skip') {
+          editTenantState.data.fullName = text;
+        }
+        editTenantState.step = 'phone';
+        await sendMessage(from, 'Enter new phone number or type "skip":');
+        await setState('tenantEdit', phone, editTenantState);
+        return res.sendStatus(200);
+      case 'phone':
+        if (text.toLowerCase() !== 'skip') {
+          editTenantState.data.phoneNumber = text;
+        }
+        await Tenant.updateOne({ _id: editTenantState.tenantId }, editTenantState.data);
+        await sendMessage(from, '✅ Tenant updated successfully.');
+        await deleteState('tenantEdit', phone);
+        return res.sendStatus(200);
+    }
+  }
+
   // New user: 'start' or 'help'
   if (!user && (text === 'start' || text === 'help')) {
     await sendWelcomeMenu(from);
@@ -303,8 +425,31 @@ case 'standard_reports':
 case 'ai_reports':
   await menuHelpers.sendReportsMenu(from); break; 
       case 'add_unit':
-        await menuHelpers.promptAddUnit(from);
+        await setState('unitAdd', phone, { step: 'property', data: {} });
+        await sendMessage(from, 'Enter property ID for the unit:');
         break;
+
+      case 'edit_unit': {
+        const Unit = require('../models/Unit');
+        const units = await Unit.find().populate('property');
+        const list = units.filter(u => String(u.property.ownerId) === String(user._id));
+        if (!list.length) {
+          await sendMessage(from, 'No units found.');
+        } else {
+          await menuHelpers.sendUnitSelectionMenu(from, list, 'edit_unit', 'Select unit to edit');
+        }
+        break; }
+
+      case 'remove_unit': {
+        const Unit = require('../models/Unit');
+        const units = await Unit.find().populate('property');
+        const list = units.filter(u => String(u.property.ownerId) === String(user._id));
+        if (!list.length) {
+          await sendMessage(from, 'No units found.');
+        } else {
+          await menuHelpers.sendUnitSelectionMenu(from, list, 'delete_unit', 'Select unit to remove');
+        }
+        break; }
 
       case 'add_property':
         await setState('propAdd', phone, { step: 'name', data: { ownerId: user._id } });
@@ -336,8 +481,31 @@ case 'ai_reports':
         break;
 
       case 'add_tenant':
-        await menuHelpers.promptAddTenant(from);
+        await setState('tenantAdd', phone, { step: 'unit', data: {} });
+        await sendMessage(from, 'Enter unit ID for the tenant:');
         break;
+
+      case 'edit_tenant': {
+        const Tenant = require('../models/Tenant');
+        const tenants = await Tenant.find().populate({ path: 'unitAssigned', populate: { path: 'property' } });
+        const list = tenants.filter(t => String(t.unitAssigned.property.ownerId) === String(user._id));
+        if (!list.length) {
+          await sendMessage(from, 'No tenants found.');
+        } else {
+          await menuHelpers.sendTenantSelectionMenu(from, list, 'edit_tenant', 'Select tenant to edit');
+        }
+        break; }
+
+      case 'remove_tenant': {
+        const Tenant = require('../models/Tenant');
+        const tenants = await Tenant.find().populate({ path: 'unitAssigned', populate: { path: 'property' } });
+        const list = tenants.filter(t => String(t.unitAssigned.property.ownerId) === String(user._id));
+        if (!list.length) {
+          await sendMessage(from, 'No tenants found.');
+        } else {
+          await menuHelpers.sendTenantSelectionMenu(from, list, 'delete_tenant', 'Select tenant to remove');
+        }
+        break; }
 
       case 'record_payment':
         await menuHelpers.promptRecordPayment(from);
@@ -388,6 +556,48 @@ case 'ai_reports':
           const Property = require('../models/Property');
           await Property.deleteOne({ _id: propId, ownerId: user._id });
           await sendMessage(from, '🗑️ Property deleted.');
+        } else if (selected && selected.startsWith('edit_unit_')) {
+          const unitId = selected.replace('edit_unit_', '');
+          await setState('unitEdit', phone, { step: 'number', unitId, data: {} });
+          const Unit = require('../models/Unit');
+          const unit = await Unit.findById(unitId).populate('property');
+          if (unit && String(unit.property.ownerId) === String(user._id)) {
+            await sendMessage(from, `Editing unit ${unit.unitNumber}\nSend new number or type "skip":`);
+          } else {
+            await sendMessage(from, 'Unit not found.');
+          }
+        } else if (selected && selected.startsWith('delete_unit_')) {
+          const unitId = selected.replace('delete_unit_', '');
+          const Unit = require('../models/Unit');
+          const unit = await Unit.findById(unitId).populate('property');
+          if (unit && String(unit.property.ownerId) === String(user._id)) {
+            await Unit.deleteOne({ _id: unitId });
+            await sendMessage(from, '🗑️ Unit deleted.');
+          } else {
+            await sendMessage(from, 'Unit not found.');
+          }
+        } else if (selected && selected.startsWith('edit_tenant_')) {
+          const tenantId = selected.replace('edit_tenant_', '');
+          await setState('tenantEdit', phone, { step: 'name', tenantId, data: {} });
+          const Tenant = require('../models/Tenant');
+          const tenant = await Tenant.findById(tenantId)
+            .populate({ path: 'unitAssigned', populate: { path: 'property' } });
+          if (tenant && String(tenant.unitAssigned.property.ownerId) === String(user._id)) {
+            await sendMessage(from, `Editing ${tenant.fullName}\nSend new name or type "skip":`);
+          } else {
+            await sendMessage(from, 'Tenant not found.');
+          }
+        } else if (selected && selected.startsWith('delete_tenant_')) {
+          const tenantId = selected.replace('delete_tenant_', '');
+          const Tenant = require('../models/Tenant');
+          const tenant = await Tenant.findById(tenantId)
+            .populate({ path: 'unitAssigned', populate: { path: 'property' } });
+          if (tenant && String(tenant.unitAssigned.property.ownerId) === String(user._id)) {
+            await Tenant.deleteOne({ _id: tenantId });
+            await sendMessage(from, '🗑️ Tenant deleted.');
+          } else {
+            await sendMessage(from, 'Tenant not found.');
+          }
         } else {
           await menuHelpers.sendMainMenu(from, user.subscription);
         }
