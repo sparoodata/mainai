@@ -15,6 +15,7 @@ const MCP_URL = 'https://getai-sooty.vercel.app/prompt';
 async function askAI(message) {
   const apiKey = process.env.MCP_API_KEY;
   console.log(apiKey);
+  console.log(MCP_URL);
   if (!apiKey) throw new Error('MCP_API_KEY missing');
 
   // The service expects a JSON payload with a `prompt` field
@@ -27,7 +28,7 @@ async function askAI(message) {
       'X-API-KEY': apiKey,
     },
   });
-
+ console.log(data);
   // assume text reply
   return typeof data === 'string' ? data : JSON.stringify(data);
 }
