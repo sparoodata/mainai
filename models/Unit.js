@@ -18,4 +18,4 @@ const unitSchema = new mongoose.Schema({
   description: { type: String },
 }, { timestamps: true });
 
-module.exports = mongoose.model('Unit', unitSchema);
+module.exports = mongoose.model('units', unitSchema);
