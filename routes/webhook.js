@@ -207,6 +207,78 @@ if (text && text.startsWith('\\')) {
 
   const user = await User.findOne({ phoneNumber: phone });
 
+  const addPropState  = user ? await getState('propAdd', phone) : undefined;
+  const editPropState = user ? await getState('propEdit', phone) : undefined;
+
+  if (user && addPropState && text) {
+    const { isValidName, isValidAddress, isValidUnits } = require('../helpers/validators');
+    switch (addPropState.step) {
+      case 'name':
+        if (!isValidName(text)) { await sendMessage(from, '⚠️ Invalid property name. Try again.'); break; }
+        addPropState.data.name = text;
+        addPropState.step = 'address';
+        await sendMessage(from, 'Enter the property address:');
+        break;
+      case 'address':
+        if (!isValidAddress(text)) { await sendMessage(from, '⚠️ Invalid address. Try again.'); break; }
+        addPropState.data.address = text;
+        addPropState.step = 'units';
+        await sendMessage(from, 'How many units does this property have?');
+        break;
+      case 'units':
+        if (!isValidUnits(text)) { await sendMessage(from, '⚠️ Enter a valid number of units.'); break; }
+        addPropState.data.totalUnits = parseInt(text);
+        const Property = require('../models/Property');
+        await new Property(addPropState.data).save();
+        await sendMessage(from, '✅ Property added successfully.');
+        await deleteState('propAdd', phone);
+        return res.sendStatus(200);
+    }
+    await setState('propAdd', phone, addPropState);
+    return res.sendStatus(200);
+  }
+
+  if (user && editPropState && text) {
+    const { isValidName, isValidAddress, isValidUnits } = require('../helpers/validators');
+    const Property = require('../models/Property');
+    const property = await Property.findOne({ _id: editPropState.propId, ownerId: user._id });
+    if (!property) {
+      await sendMessage(from, '⚠️ Property not found.');
+      await deleteState('propEdit', phone);
+      return res.sendStatus(200);
+    }
+
+    switch (editPropState.step) {
+      case 'name':
+        if (text.toLowerCase() !== 'skip') {
+          if (!isValidName(text)) { await sendMessage(from, '⚠️ Invalid property name. Try again.'); return res.sendStatus(200); }
+          editPropState.data.name = text;
+        }
+        editPropState.step = 'address';
+        await sendMessage(from, 'Enter new address or type "skip":');
+        await setState('propEdit', phone, editPropState);
+        return res.sendStatus(200);
+      case 'address':
+        if (text.toLowerCase() !== 'skip') {
+          if (!isValidAddress(text)) { await sendMessage(from, '⚠️ Invalid address. Try again.'); return res.sendStatus(200); }
+          editPropState.data.address = text;
+        }
+        editPropState.step = 'units';
+        await sendMessage(from, 'Enter new total units or type "skip":');
+        await setState('propEdit', phone, editPropState);
+        return res.sendStatus(200);
+      case 'units':
+        if (text.toLowerCase() !== 'skip') {
+          if (!isValidUnits(text)) { await sendMessage(from, '⚠️ Invalid units.'); return res.sendStatus(200); }
+          editPropState.data.totalUnits = parseInt(text);
+        }
+        await Property.updateOne({ _id: editPropState.propId, ownerId: user._id }, editPropState.data);
+        await sendMessage(from, '✅ Property updated successfully.');
+        await deleteState('propEdit', phone);
+        return res.sendStatus(200);
+    }
+  }
+
   // New user: 'start' or 'help'
   if (!user && (text === 'start' || text === 'help')) {
     await sendWelcomeMenu(from);
@@ -233,6 +305,31 @@ case 'ai_reports':
       case 'add_unit':
         await menuHelpers.promptAddUnit(from);
         break;
+
+      case 'add_property':
+        await setState('propAdd', phone, { step: 'name', data: { ownerId: user._id } });
+        await menuHelpers.promptAddProperty(from);
+        break;
+
+      case 'edit_property': {
+        const Property = require('../models/Property');
+        const props = await Property.find({ ownerId: user._id });
+        if (!props.length) {
+          await sendMessage(from, 'No properties found.');
+        } else {
+          await menuHelpers.sendPropertySelectionMenu(from, props, 'edit_prop', 'Select property to edit');
+        }
+        break; }
+
+      case 'remove_property': {
+        const Property = require('../models/Property');
+        const props = await Property.find({ ownerId: user._id });
+        if (!props.length) {
+          await sendMessage(from, 'No properties found.');
+        } else {
+          await menuHelpers.sendPropertySelectionMenu(from, props, 'delete_prop', 'Select property to remove');
+        }
+        break; }
 
       case 'view_tenants':
         await menuHelpers.sendTenantsMenu(from);
@@ -276,7 +373,24 @@ case 'ai_reports':
         break;
 
       default:
-        await menuHelpers.sendMainMenu(from, user.subscription);
+        if (selected && selected.startsWith('edit_prop_')) {
+          const propId = selected.replace('edit_prop_', '');
+          await setState('propEdit', phone, { step: 'name', propId, data: {} });
+          const Property = require('../models/Property');
+          const prop = await Property.findOne({ _id: propId, ownerId: user._id });
+          if (prop) {
+            await sendMessage(from, `Editing *${prop.name}*\nSend new name or type "skip":`);
+          } else {
+            await sendMessage(from, 'Property not found.');
+          }
+        } else if (selected && selected.startsWith('delete_prop_')) {
+          const propId = selected.replace('delete_prop_', '');
+          const Property = require('../models/Property');
+          await Property.deleteOne({ _id: propId, ownerId: user._id });
+          await sendMessage(from, '🗑️ Property deleted.');
+        } else {
+          await menuHelpers.sendMainMenu(from, user.subscription);
+        }
     }
 
     await deleteState('resp', phone);
