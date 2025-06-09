@@ -68,8 +68,12 @@ router.post(
 
         const user = await User.findOne({ phoneNumber: phone });
         if (user) {
+          const now = new Date();
+          const end = new Date(now);
+          end.setFullYear(end.getFullYear() + 1);
           user.subscription = 'premium';
-          user.subscriptionStart = new Date();
+          user.subscriptionStart = now;
+          user.subscriptionEnd = end;
           await user.save();
 
           await Payment.create({
