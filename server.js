@@ -4,11 +4,27 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 const morgan = require('morgan');
+const helmet = require('helmet');
+const compression = require('compression');
+const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const paymentRoutes = require('./routes/payment');
 const { router: whatsappRouter } = require('./routes/webhook');
+const rateLimiter = require('./middleware/rateLimiter');
+const asyncHandler = require('./middleware/asyncHandler');
+const errorHandler = require('./middleware/errorHandler');
+const Sentry = require('./services/sentry');
 
 const app = express();
 app.use(morgan('dev'));
+if (process.env.SENTRY_DSN) {
+  app.use(Sentry.Handlers.requestHandler());
+}
+app.use(helmet());
+app.use(compression());
+app.use(cors());
+app.use(cookieParser());
+app.use(rateLimiter);
 
 const port = process.env.PORT || 3000;
 
@@ -34,8 +50,14 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use('/webhook', whatsappRouter);
 
 // Root route
-app.get('/', (req, res) => {
+app.get('/', asyncHandler(async (req, res) => {
   res.send('🟢 Teraa Assistant is running...');
-});
+}));
+
+if (process.env.SENTRY_DSN) {
+  app.use(Sentry.Handlers.errorHandler());
+}
+
+app.use(errorHandler);
 
 app.listen(port, () => console.log(`🚀 Server running on http://localhost:${port}`));

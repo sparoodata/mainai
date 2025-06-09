@@ -1,6 +1,8 @@
 const express = require('express');
 const crypto = require('crypto');
 const Razorpay = require('razorpay');
+const { param, validationResult } = require('express-validator');
+const asyncHandler = require('../middleware/asyncHandler');
 const User = require('../models/User');
 const Payment = require('../models/Payment');
 const { sendMessage } = require('../helpers/whatsapp');
@@ -13,7 +15,13 @@ const razorpay = new Razorpay({
 });
 
 // Generate Razorpay Payment Link
-router.get('/pay/:phoneNumber', async (req, res) => {
+router.get('/pay/:phoneNumber',
+  param('phoneNumber').notEmpty(),
+  asyncHandler(async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
   const phoneNumber = decodeURIComponent(req.params.phoneNumber);
   try {
     const paymentLink = await razorpay.paymentLink.create({
@@ -38,7 +46,7 @@ router.get('/pay/:phoneNumber', async (req, res) => {
     console.error('❌ Error creating payment link:', error);
     return res.status(500).json({ success: false, error: 'Payment link error' });
   }
-});
+}));
 
 // Razorpay Webhook Handler (raw-body)
 router.post(
