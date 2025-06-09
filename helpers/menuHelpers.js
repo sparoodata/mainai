@@ -6,7 +6,7 @@ const chunkArray = require('./chunkArray');
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 
-// Generic List Sender for multi-section lists
+// Generic List Sender for multi-section lists (no header shown)
 async function sendList(to, headerText, sections, buttonLabel = 'Choose') {
   const payload = {
     messaging_product: 'whatsapp',
@@ -14,8 +14,7 @@ async function sendList(to, headerText, sections, buttonLabel = 'Choose') {
     type: 'interactive',
     interactive: {
       type: 'list',
-      header: { type: 'text', text: headerText },
-      body: { text: headerText },
+      body: { text: headerText }, // Only body text; header removed
       footer: { text: 'Teraa Assistant' },
       action: { button: buttonLabel, sections }
     }
@@ -25,7 +24,7 @@ async function sendList(to, headerText, sections, buttonLabel = 'Choose') {
   });
 }
 
-// Generic Button Menu
+// Generic Button Menu (no header shown). `headerText` is ignored
 async function sendButtonMenu(to, headerText, bodyText, buttons) {
   const payload = {
     messaging_product: 'whatsapp',
@@ -33,7 +32,6 @@ async function sendButtonMenu(to, headerText, bodyText, buttons) {
     type: 'interactive',
     interactive: {
       type: 'button',
-      header: { type: 'text', text: headerText },
       body: { text: bodyText },
       action: { buttons }
     }
