@@ -12,6 +12,9 @@ app.use(morgan('dev'));
 
 const port = process.env.PORT || 3000;
 
+// Silence Mongoose strictQuery warning for Mongoose >=7
+mongoose.set('strictQuery', false);
+
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
