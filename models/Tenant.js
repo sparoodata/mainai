@@ -26,4 +26,5 @@ const tenantSchema = new mongoose.Schema({
   status: { type: String, default: 'active' },
 }, { timestamps: true });
 
-module.exports = mongoose.model('tenants', tenantSchema);
+// Export as `Tenant` while using the `tenants` collection in MongoDB
+module.exports = mongoose.model('Tenant', tenantSchema, 'tenants');

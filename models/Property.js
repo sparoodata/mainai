@@ -35,4 +35,5 @@ const propertySchema = new mongoose.Schema({
   notes: { type: String },
 }, { timestamps: true });
 
-module.exports = mongoose.model('Property', propertySchema);
+// Export as `Property` while ensuring the MongoDB collection is named `properties`
+module.exports = mongoose.model('Property', propertySchema, 'properties');
