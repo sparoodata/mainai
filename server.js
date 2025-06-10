@@ -16,9 +16,9 @@ const errorHandler = require('./middleware/errorHandler');
 const Sentry = require('./services/sentry');
 
 const app = express();
-// Enable trust proxy if behind a reverse proxy to correctly process
-// the X-Forwarded-For header used by express-rate-limit
-app.set('trust proxy', true);
+// Limit trust of the X-Forwarded-For header to the first proxy
+// to avoid express-rate-limit warnings about a permissive setting
+app.set('trust proxy', 1);
 app.use(morgan('dev'));
 if (process.env.SENTRY_DSN) {
   app.use(Sentry.Handlers.requestHandler());
