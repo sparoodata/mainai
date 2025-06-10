@@ -1,5 +1,8 @@
 // routes/webhook.js
-const express = require('express');
+const express  = require('express');
+require('../models/Unit');
+require('../models/Property');
+require('../models/Tenant');
 const axios = require('axios');
 const User = require('../models/User');
 const menuHelpers = require('../helpers/menuHelpers');
