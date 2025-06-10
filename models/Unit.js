@@ -18,6 +18,7 @@ const unitSchema = new mongoose.Schema({
   description: { type: String },
 }, { timestamps: true });
 
-// Register the model using the singular name `Unit` so that calls to
-// `mongoose.model('Unit')` work correctly throughout the codebase.
-module.exports = mongoose.model('Unit', unitSchema);
+// Explicitly set the collection name to `units` so it matches the
+// MongoDB collection and still allow `mongoose.model('Unit')` to be
+// used throughout the codebase.
+module.exports = mongoose.model('Unit', unitSchema, 'units');
