@@ -4,7 +4,6 @@ const Razorpay = require('razorpay');
 const { param, validationResult } = require('express-validator');
 const asyncHandler = require('../middleware/asyncHandler');
 const User = require('../models/User');
-const Payment = require('../models/Payment');
 const { sendMessage } = require('../helpers/whatsapp');
 
 const router = express.Router();
@@ -70,36 +69,23 @@ router.post(
 
       const payload = JSON.parse(rawBody.toString());
       const event   = payload.event;
+      console.log(event);
       if (event === 'payment_link.paid') {
-        const paymentEntity = payload.payload.payment.entity;
-        const phone = paymentEntity.contact;
+              console.log('In If loop');
+        const contactNumber = payload.payload.payment.entity.contact;
+        const phone         = contactNumber;
+              console.log(contactNumber);
+      console.log(phone);
 
         const user = await User.findOne({ phoneNumber: phone });
+        console.log(user);
         if (user) {
           const now = new Date();
           const end = new Date(now);
           end.setFullYear(end.getFullYear() + 1);
           user.subscription = 'premium';
-          user.subscriptionStart = now;
           user.subscriptionEnd = end;
           await user.save();
-
-          await Payment.create({
-            user: user._id,
-            razorpayPaymentId: paymentEntity.id,
-            amount: paymentEntity.amount,
-            currency: paymentEntity.currency,
-            status: paymentEntity.status,
-            method: paymentEntity.method,
-            captured: paymentEntity.captured,
-            contact: paymentEntity.contact,
-            email: paymentEntity.email,
-            fee: paymentEntity.fee,
-            tax: paymentEntity.tax,
-            description: paymentEntity.description,
-            paymentCreatedAt: new Date(paymentEntity.created_at * 1000),
-            raw: paymentEntity,
-          });
 
           await sendMessage(
             phone,
