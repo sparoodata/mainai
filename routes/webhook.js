@@ -291,6 +291,11 @@ if (text && text.startsWith('\\')) {
     const Unit = require('../models/Unit');
     switch (addUnitState.step) {
       case 'property': {
+        const { isValidObjectId } = require('../helpers/validators');
+        if (!isValidObjectId(text)) {
+          await sendMessage(from, '⚠️ Invalid property ID. Try again.');
+          break;
+        }
         const prop = await Property.findOne({ _id: text, ownerId: user._id });
         if (!prop) { await sendMessage(from, '⚠️ Invalid property ID. Try again.'); break; }
         addUnitState.data.property = prop._id;
@@ -350,6 +355,11 @@ if (text && text.startsWith('\\')) {
     const Tenant = require('../models/Tenant');
     switch (addTenantState.step) {
       case 'unit': {
+        const { isValidObjectId } = require('../helpers/validators');
+        if (!isValidObjectId(text)) {
+          await sendMessage(from, '⚠️ Invalid unit ID. Try again.');
+          break;
+        }
         const unit = await Unit.findById(text).populate('property');
         if (!unit || String(unit.property.ownerId) !== String(user._id)) {
           await sendMessage(from, '⚠️ Invalid unit ID. Try again.');
