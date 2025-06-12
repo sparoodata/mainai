@@ -16,7 +16,6 @@ const crypto = require('crypto');
 const redis = require('../services/redis');
 const analytics = require('../helpers/analytics');
 const { jobQueue } = require('../services/queue');
-const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
@@ -176,7 +175,7 @@ router.get('/', (req, res) => {
 });
 
 // Webhook Handler
-router.post('/', asyncHandler(async (req, res) => {
+router.post('/', async (req, res) => {
   if (WHATSAPP_APP_SECRET) {
     const sig = req.headers['x-hub-signature-256'];
     const expected = 'sha256=' + crypto.createHmac('sha256', WHATSAPP_APP_SECRET)
@@ -703,6 +702,6 @@ case 'ai_reports':
 
   await setState('reg', phone, reg);
   return res.sendStatus(200);
-}));
+});
 
 module.exports = { router };

@@ -34,26 +34,13 @@ const port = process.env.PORT || 3000;
 // Silence Mongoose strictQuery warning for Mongoose >=7
 mongoose.set('strictQuery', false);
 
-// Ensure Mongo URI is provided
-if (!process.env.MONGODB_URI) {
-  console.error('❌ MONGODB_URI not defined');
-  process.exit(1);
-}
-
-async function connectWithRetry(retries = 5) {
-  try {
-    await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
-    console.log('✅ MongoDB connected');
-  } catch (err) {
-    if (retries <= 0) throw err;
-    console.error('❌ MongoDB connection failed. Retrying...', err);
-    await new Promise(res => setTimeout(res, 5000));
-    return connectWithRetry(retries - 1);
-  }
-}
+// MongoDB Connection
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+})
+.then(() => console.log('✅ MongoDB connected'))
+.catch(err => console.error('❌ MongoDB connection error:', err));
 
 // Mount payment routes (Webhook raw-body is handled in paymentRoutes)
 app.use('/', paymentRoutes);
@@ -76,18 +63,4 @@ if (process.env.SENTRY_DSN) {
 
 app.use(errorHandler);
 
-async function startServer() {
-  await connectWithRetry();
-  app.listen(port, () =>
-    console.log(`🚀 Server running on http://localhost:${port}`)
-  );
-}
-
-startServer().catch(err => {
-  console.error('❌ Failed to start server:', err);
-  process.exit(1);
-});
-
-process.on('unhandledRejection', err => {
-  console.error('Unhandled Rejection:', err);
-});
+app.listen(port, () => console.log(`🚀 Server running on http://localhost:${port}`));
