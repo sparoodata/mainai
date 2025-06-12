@@ -1,3 +1,5 @@
+const mongoose = require('mongoose');
+
 function isValidName(name) {
   const regex = /^[a-zA-Z0-9 ]+$/;
   return (
@@ -40,10 +42,15 @@ function isValidDate(dateStr) {
   );
 }
 
+function isValidObjectId(id) {
+  return mongoose.Types.ObjectId.isValid(id);
+}
+
 module.exports = {
   isValidName,
   isValidAddress,
   isValidUnits,
   isValidTotalAmount,
   isValidDate,
+  isValidObjectId,
 };
