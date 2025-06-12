@@ -26,15 +26,17 @@ const userSchema = new mongoose.Schema({
     default: false 
   },
   // The subscription plan (e.g., "free", "premium", "enterprise")
-  subscription: { 
-    type: String, 
+  subscription: {
+    type: String,
     default: 'free',
     enum: ['free', 'premium']
   },
+  // When the current subscription became active
+  subscriptionStart: { type: Date },
   // The date when the user registered
-  registrationDate: { 
-    type: Date, 
-    default: Date.now 
+  registrationDate: {
+    type: Date,
+    default: Date.now
   },
   
 age: Number,
