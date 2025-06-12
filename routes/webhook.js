@@ -37,6 +37,28 @@ async function deleteState(prefix, phone) {
   await redis.del(`${prefix}:${phone}`);
 }
 
+const SESSION_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
+
+async function clearSession(phone) {
+  const prefixes = ['reg', 'resp', 'propAdd', 'propEdit', 'unitAdd', 'unitEdit', 'tenantAdd', 'tenantEdit'];
+  await Promise.all(prefixes.map(p => deleteState(p, phone)));
+}
+
+async function checkTimeout(from, phone) {
+  const last = await redis.get(`last:${from}`);
+  if (last && Date.now() - parseInt(last, 10) > SESSION_TIMEOUT_MS) {
+    await clearSession(phone);
+    await redis.del(`last:${from}`);
+    await sendMessage(from, 'Timedout, please try again');
+    return true;
+  }
+  return false;
+}
+
+async function updateLastActivity(from) {
+  await redis.set(`last:${from}`, Date.now());
+}
+
 // Interactive Welcome Menu
 async function sendWelcomeMenu(to) {
   await analytics.track('welcome_menu', { to });
@@ -168,6 +190,13 @@ router.post('/', asyncHandler(async (req, res) => {
   const phone       = `+${from}`;
   const text        = msg?.text?.body?.trim();
   const interactive = msg?.interactive;
+
+  if (from) {
+    if (await checkTimeout(from, phone)) {
+      return res.sendStatus(200);
+    }
+    await updateLastActivity(from);
+  }
   
   /* ───────── AI queries that start with "\" ───────── */
 /* ───────── AI queries that start with "\" ───────── */
