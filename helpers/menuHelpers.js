@@ -39,31 +39,31 @@ async function sendMainMenu(to) {
   await track('main_menu', { to });
   const sections = [
     {
-      title: 'Manage',
+      title: 'Management',
       rows: [
-        { id: 'manage_properties', title: '🏠 Properties' },
-        { id: 'manage_units',      title: '🏢 Units' },
-        { id: 'manage_tenants',    title: '👥 Tenants' }
+        { id: 'manage_properties', title: '🏠 Property Management' },
+        { id: 'manage_units',      title: '🚪 Unit Management' },
+        { id: 'manage_tenants',    title: '👥 Tenant Management' }
       ]
     },
     {
-      title: 'Reports',
+      title: 'Financials',
+      rows: [
+        { id: 'record_payment',  title: '💳 Record Payment' },
+        { id: 'payment_history', title: '📜 Payment History' }
+      ]
+    },
+    {
+      title: 'Analytics',
       rows: [
         { id: 'standard_reports', title: '📊 Standard Reports' },
         { id: 'ai_reports',       title: '🤖 AI Reports' }
       ]
     },
     {
-      title: 'Payments',
+      title: 'Account & Help',
       rows: [
-        { id: 'record_payment',  title: '💰 Record Payment' },
-        { id: 'payment_history', title: '📜 Payment History' }
-      ]
-    },
-    {
-      title: 'Account',
-      rows: [
-        { id: 'settings',  title: '⚙️ Settings' },
+        { id: 'settings',  title: '⚙️ Account Settings' },
         { id: 'support',   title: '🛠️ Support' }
       ]
     }
@@ -77,7 +77,7 @@ async function sendSettingsMenu(to) {
   await track('settings_menu', { to });
   const sections = [
     {
-      title: 'Settings',
+      title: 'Account Settings',
       rows: [
         { id: 'profile',         title: '👤 Profile' },
         { id: 'notifications',   title: '🔔 Notifications' },
@@ -87,7 +87,7 @@ async function sendSettingsMenu(to) {
       ]
     }
   ];
-  await sendList(to, '⚙️ Settings', sections, 'Choose');
+  await sendList(to, '⚙️ Account Settings', sections, 'Choose');
 }
 
 // Properties Management (buttons)
@@ -97,7 +97,7 @@ async function sendPropertiesManagementMenu(to) {
     { type: 'reply', reply: { id: 'remove_property', title: '🗑️ Remove Property' } },
     { type: 'reply', reply: { id: 'add_property',    title: '➕ Add Property' } }
   ];
-  await sendButtonMenu(to, '🏠 Property Options', 'Choose an action for properties:', buttons);
+  await sendButtonMenu(to, '🏠 Property Management', 'Select an action:', buttons);
 }
 
 // Units Management (buttons)
@@ -107,7 +107,7 @@ async function sendUnitsManagementMenu(to) {
     { type: 'reply', reply: { id: 'remove_unit', title: '🗑️ Remove Unit' } },
     { type: 'reply', reply: { id: 'add_unit',    title: '➕ Add Unit' } }
   ];
-  await sendButtonMenu(to, '🚪 Unit Options', 'Choose an action for units:', buttons);
+  await sendButtonMenu(to, '🚪 Unit Management', 'Select an action:', buttons);
 }
 
 // Tenants Management (buttons)
@@ -117,7 +117,7 @@ async function sendTenantsManagementMenu(to) {
     { type: 'reply', reply: { id: 'remove_tenant', title: '🗑️ Remove Tenant' } },
     { type: 'reply', reply: { id: 'add_tenant',    title: '➕ Add Tenant' } }
   ];
-  await sendButtonMenu(to, '👥 Tenant Options', 'Choose an action for tenants:', buttons);
+  await sendButtonMenu(to, '👥 Tenant Management', 'Select an action:', buttons);
 }
 
 // Reports Menu (buttons)
@@ -126,7 +126,7 @@ async function sendReportsMenu(to) {
     { type: 'reply', reply: { id: 'standard_reports', title: '📊 Standard Reports' } },
     { type: 'reply', reply: { id: 'ai_reports',       title: '🤖 AI Reports' } }
   ];
-  await sendButtonMenu(to, '📈 Reports', 'Select report type:', buttons);
+  await sendButtonMenu(to, '📈 Reports & Analytics', 'Select report type:', buttons);
 }
 
 // Generic list for selecting a property
