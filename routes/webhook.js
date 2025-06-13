@@ -669,10 +669,13 @@ case 'ai_reports':
   } else if (selected && selected.startsWith('state_') && reg.step === 'state') {
     reg.data.state = selected.replace('state_', '');
     reg.step = 'newsletter';
-    await sendMessage(from, 'Receive newsletter? (yes/no)');
+    await menuHelpers.sendYesNoPrompt(from, 'Receive newsletter?');
 
-  } else if (reg.step === 'newsletter' && text) {
-    const ans = text.toLowerCase();
+  } else if (reg.step === 'newsletter' && (selected || text)) {
+    let ans;
+    if (selected === 'newsletter_yes') ans = 'yes';
+    else if (selected === 'newsletter_no') ans = 'no';
+    else if (text) ans = text.toLowerCase();
     if (!['yes', 'no'].includes(ans)) {
       return await sendMessage(from, '⚠️ Reply yes or no.');
     }
