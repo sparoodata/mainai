@@ -1,6 +1,31 @@
 const axios = require('axios');
-const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
+const https = require('https');
+
+const WHATSAPP_API_URL =
+  'https://graph.facebook.com/v20.0/110765315459068/messages';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+
+const agent = new https.Agent({ keepAlive: true });
+
+const api = axios.create({
+  baseURL: WHATSAPP_API_URL,
+  headers: {
+    Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+    'Content-Type': 'application/json',
+  },
+  httpsAgent: agent,
+  timeout: 10000,
+});
+
+async function sendRequest(payload, attempt = 1) {
+  try {
+    await api.post('', payload);
+  } catch (err) {
+    if (attempt < 3) return sendRequest(payload, attempt + 1);
+    console.error('WhatsApp API error:', err.response ? err.response.data : err);
+    throw err;
+  }
+}
 
 async function shortenUrl(longUrl) {
   try {
@@ -18,51 +43,23 @@ async function shortenUrl(longUrl) {
 }
 
 async function sendMessage(phoneNumber, message) {
-  try {
-    await axios.post(
-      WHATSAPP_API_URL,
-      {
-        messaging_product: 'whatsapp',
-        to: phoneNumber,
-        type: 'text',
-        text: { body: message },
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-  } catch (err) {
-    console.error('Error sending WhatsApp message:', err.response ? err.response.data : err);
-  }
+  await sendRequest({
+    messaging_product: 'whatsapp',
+    to: phoneNumber,
+    type: 'text',
+    text: { body: message },
+  });
 }
 
 async function sendImageMessage(phoneNumber, imageUrl, caption) {
   try {
-    const response = await axios.post(
-      WHATSAPP_API_URL,
-      {
-        messaging_product: 'whatsapp',
-        to: phoneNumber,
-        type: 'image',
-        image: {
-          link: imageUrl,
-          caption: caption,
-        },
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-    console.log('Image message sent:', response.data);
+    await sendRequest({
+      messaging_product: 'whatsapp',
+      to: phoneNumber,
+      type: 'image',
+      image: { link: imageUrl, caption },
+    });
   } catch (err) {
-    console.error('Error sending WhatsApp image message:', err.response ? err.response.data : err);
-    // Fallback: Send a text message with the caption
     await sendMessage(phoneNumber, caption);
   }
 }
@@ -93,16 +90,7 @@ async function sendImageOption(phoneNumber, type, entityId) {
       },
     },
   };
-  try {
-    await axios.post(WHATSAPP_API_URL, buttonMenu, {
-      headers: {
-        Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-    });
-  } catch (err) {
-    console.error('Error sending image option:', err.response ? err.response.data : err);
-  }
+  await sendRequest(buttonMenu);
 }
 
 module.exports = {
@@ -110,4 +98,5 @@ module.exports = {
   sendMessage,
   sendImageMessage,
   sendImageOption,
+  api,
 };

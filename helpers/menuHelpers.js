@@ -1,10 +1,6 @@
 // routes/menuHelpers.js
-const axios = require('axios');
-const { sendMessage } = require('./whatsapp');
+const { sendMessage, api: whatsappApi } = require('./whatsapp');
 const chunkArray = require('./chunkArray');
-
-const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
-const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 
 // Generic List Sender for multi-section lists (no header shown)
 async function sendList(to, headerText, sections, buttonLabel = 'Choose') {
@@ -19,9 +15,7 @@ async function sendList(to, headerText, sections, buttonLabel = 'Choose') {
       action: { button: buttonLabel, sections }
     }
   };
-  await axios.post(WHATSAPP_API_URL, payload, {
-    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-  });
+  await whatsappApi.post('', payload);
 }
 
 // Generic Button Menu (no header shown). `headerText` is ignored
@@ -36,9 +30,7 @@ async function sendButtonMenu(to, headerText, bodyText, buttons) {
       action: { buttons }
     }
   };
-  await axios.post(WHATSAPP_API_URL, payload, {
-    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }
-  });
+  await whatsappApi.post('', payload);
 }
 
 // Main Menu
