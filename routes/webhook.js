@@ -6,7 +6,7 @@ require('../models/Tenant');
 const axios = require('axios');
 const User = require('../models/User');
 const menuHelpers = require('../helpers/menuHelpers');
-const { sendMessage } = require('../helpers/whatsapp');
+const { sendMessage, api: whatsappApi } = require('../helpers/whatsapp');
 const { askAI }      = require('../helpers/ai');
 const { jsonToTableImage } = require('../helpers/tableImage');
 const { jsonToTableText }  = require('../helpers/tableText'); 
@@ -16,10 +16,9 @@ const crypto = require('crypto');
 const redis = require('../services/redis');
 const analytics = require('../helpers/analytics');
 const { jobQueue } = require('../services/queue');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
-const WHATSAPP_API_URL = 'https://graph.facebook.com/v20.0/110765315459068/messages';
-const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const WHATSAPP_APP_SECRET = process.env.WHATSAPP_APP_SECRET;
 
 // Track conversational context for property/unit flows
@@ -79,12 +78,7 @@ async function sendWelcomeMenu(to) {
       }
     }
   };
-  await axios.post(WHATSAPP_API_URL, welcome, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json'
-    }
-  });
+  await whatsappApi.post('', welcome);
 }
 
 // Registration Success
@@ -109,12 +103,7 @@ async function sendRegistrationSuccess(to) {
       }
     }
   };
-  await axios.post(WHATSAPP_API_URL, msg, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json'
-    }
-  });
+  await whatsappApi.post('', msg);
 }
 
 // Generic List Sender
@@ -134,12 +123,7 @@ async function sendList(to, type, title, rows) {
       }
     }
   };
-  await axios.post(WHATSAPP_API_URL, message, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json'
-    }
-  });
+  await whatsappApi.post('', message);
 }
 
 const languageRows = [
@@ -175,7 +159,7 @@ router.get('/', (req, res) => {
 });
 
 // Webhook Handler
-router.post('/', async (req, res) => {
+router.post('/', asyncHandler(async (req, res) => {
   if (WHATSAPP_APP_SECRET) {
     const sig = req.headers['x-hub-signature-256'];
     const expected = 'sha256=' + crypto.createHmac('sha256', WHATSAPP_APP_SECRET)
@@ -702,6 +686,6 @@ case 'ai_reports':
 
   await setState('reg', phone, reg);
   return res.sendStatus(200);
-});
+}));
 
 module.exports = { router };
