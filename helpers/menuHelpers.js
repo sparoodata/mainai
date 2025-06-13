@@ -33,6 +33,15 @@ async function sendButtonMenu(to, headerText, bodyText, buttons) {
   await whatsappApi.post('', payload);
 }
 
+// Simple yes/no prompt using buttons
+async function sendYesNoPrompt(to, bodyText, prefix = 'newsletter') {
+  const buttons = [
+    { type: 'reply', reply: { id: `${prefix}_yes`, title: 'Yes' } },
+    { type: 'reply', reply: { id: `${prefix}_no`,  title: 'No'  } }
+  ];
+  await sendButtonMenu(to, '', bodyText, buttons);
+}
+
 // Main Menu
 async function sendMainMenu(to) {
   const { track } = require('./analytics');
@@ -170,5 +179,6 @@ module.exports = {
   promptAddUnit,
   promptAddTenant,
   promptRecordPayment,
-  sendPaymentHistory
+  sendPaymentHistory,
+  sendYesNoPrompt
 };
