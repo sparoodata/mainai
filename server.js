@@ -35,12 +35,22 @@ const port = process.env.PORT || 3000;
 mongoose.set('strictQuery', false);
 
 // MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => console.log('✅ MongoDB connected'))
-.catch(err => console.error('❌ MongoDB connection error:', err));
+async function startServer() {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log('✅ MongoDB connected');
+
+    app.listen(port, () =>
+      console.log(`🚀 Server running on http://localhost:${port}`)
+    );
+  } catch (err) {
+    console.error('❌ MongoDB connection error:', err);
+    process.exit(1);
+  }
+}
 
 // Mount payment routes (Webhook raw-body is handled in paymentRoutes)
 app.use('/', paymentRoutes);
@@ -63,4 +73,4 @@ if (process.env.SENTRY_DSN) {
 
 app.use(errorHandler);
 
-app.listen(port, () => console.log(`🚀 Server running on http://localhost:${port}`));
+startServer();
