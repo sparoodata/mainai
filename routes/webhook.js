@@ -558,6 +558,7 @@ case 'ai_reports':
         }
         break;
 
+      case 'support':
       case 'help_support':
         await sendMessage(
           from,
