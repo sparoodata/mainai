@@ -93,10 +93,24 @@ async function sendImageOption(phoneNumber, type, entityId) {
   await sendRequest(buttonMenu);
 }
 
+async function addTester(phoneNumber) {
+  if (!process.env.WABA_ID) return;
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v20.0/${process.env.WABA_ID}/testers`,
+      { phone: phoneNumber },
+      { headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}` } }
+    );
+  } catch (err) {
+    console.error('Failed to add WhatsApp tester:', err.response?.data || err);
+  }
+}
+
 module.exports = {
   shortenUrl,
   sendMessage,
   sendImageMessage,
   sendImageOption,
+  addTester,
   api,
 };
