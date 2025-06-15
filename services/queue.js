@@ -1,7 +1,8 @@
 const { Queue, Worker } = require('bullmq');
 const redis = require('./redis');
 
-const connection = redis.duplicate();
+// Reuse the same Redis instance to avoid exhausting the connection limit
+const connection = redis;
 
 const jobQueue = new Queue('jobs', { connection });
 
