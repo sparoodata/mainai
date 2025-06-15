@@ -59,7 +59,8 @@ async function sendMainMenu(to) {
       title: 'Financials',
       rows: [
         { id: 'record_payment',  title: '💳 Record Payment' },
-        { id: 'payment_history', title: '📜 Payment History' }
+        { id: 'payment_history', title: '📜 Payment History' },
+        { id: 'setup_reminders', title: '📅 Rent Reminders' }
       ]
     },
     {
@@ -138,6 +139,16 @@ async function sendReportsMenu(to) {
   await sendButtonMenu(to, '📈 Reports & Analytics', 'Select report type:', buttons);
 }
 
+// Reminder Frequency Menu
+async function sendRemindersMenu(to) {
+  const buttons = [
+    { type: 'reply', reply: { id: 'reminder_daily',   title: 'Daily' } },
+    { type: 'reply', reply: { id: 'reminder_weekly',  title: 'Weekly' } },
+    { type: 'reply', reply: { id: 'reminder_monthly', title: 'Monthly' } }
+  ];
+  await sendButtonMenu(to, '📅 Rent Reminders', 'How often should we remind you?', buttons);
+}
+
 // Generic list for selecting a property
 async function sendPropertySelectionMenu(to, properties, prefix, title) {
   const rows = properties.slice(0, 10).map(p => ({ id: `${prefix}_${p._id}`, title: p.name }));
@@ -172,6 +183,7 @@ module.exports = {
   sendUnitsManagementMenu,
   sendTenantsManagementMenu,
   sendReportsMenu,
+  sendRemindersMenu,
   sendPropertySelectionMenu,
   promptAddProperty,
   sendUnitSelectionMenu,

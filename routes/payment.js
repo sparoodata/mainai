@@ -68,17 +68,12 @@ router.post(
       }
 
       const payload = JSON.parse(rawBody.toString());
-      const event   = payload.event;
-      console.log(event);
+      const event = payload.event;
       if (event === 'payment_link.paid') {
-              console.log('In If loop');
         const contactNumber = payload.payload.payment.entity.contact;
-        const phone         = contactNumber;
-              console.log(contactNumber);
-      console.log(phone);
+        const phone = contactNumber;
 
         const user = await User.findOne({ phoneNumber: phone });
-        console.log(user);
         if (user) {
           const now = new Date();
           const end = new Date(now);
