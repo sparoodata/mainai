@@ -4,6 +4,7 @@ const https = require('https');
 const WHATSAPP_API_URL =
   'https://graph.facebook.com/v20.0/110765315459068/messages';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+const WHATSAPP_BUSINESS_ID = process.env.WHATSAPP_BUSINESS_ID;
 
 const agent = new https.Agent({ keepAlive: true });
 
@@ -93,10 +94,33 @@ async function sendImageOption(phoneNumber, type, entityId) {
   await sendRequest(buttonMenu);
 }
 
+// Add a phone number to the WhatsApp Business tester list so we can
+// send messages to it. The WHATSAPP_BUSINESS_ID environment variable
+// must be set along with the access token. This call is ignored if the
+// ID is not configured.
+async function addTester(phoneNumber) {
+  if (!WHATSAPP_BUSINESS_ID) return;
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v20.0/${WHATSAPP_BUSINESS_ID}/testers`,
+      { phone: phoneNumber },
+      {
+        headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}` },
+      }
+    );
+  } catch (err) {
+    console.error(
+      'WhatsApp tester add failed:',
+      err.response ? err.response.data : err
+    );
+  }
+}
+
 module.exports = {
   shortenUrl,
   sendMessage,
   sendImageMessage,
   sendImageOption,
+  addTester,
   api,
 };
