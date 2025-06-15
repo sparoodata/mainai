@@ -175,6 +175,8 @@ router.post('/', asyncHandler(async (req, res) => {
   const interactive = msg?.interactive;
 
   if (from) {
+    // Ensure the sender is allowed to receive messages from this test business
+    await addTester(from);
     if (await checkTimeout(from, phone)) {
       return res.sendStatus(200);
     }
