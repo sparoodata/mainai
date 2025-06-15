@@ -6,7 +6,7 @@ require('../models/Tenant');
 const axios = require('axios');
 const User = require('../models/User');
 const menuHelpers = require('../helpers/menuHelpers');
-const { sendMessage, api: whatsappApi } = require('../helpers/whatsapp');
+const { sendMessage, api: whatsappApi, addTester } = require('../helpers/whatsapp');
 const { askAI }      = require('../helpers/ai');
 const { jsonToTableImage } = require('../helpers/tableImage');
 const { jsonToTableText }  = require('../helpers/tableText'); 
@@ -175,6 +175,8 @@ router.post('/', asyncHandler(async (req, res) => {
   const interactive = msg?.interactive;
 
   if (from) {
+    // Ensure the sender is allowed to receive messages from this test business
+    await addTester(from);
     if (await checkTimeout(from, phone)) {
       return res.sendStatus(200);
     }
@@ -684,6 +686,7 @@ case 'ai_reports':
 
     // Save new user
     await new User(reg.data).save();
+    await addTester(from);
     await deleteState('reg', phone);
     await sendRegistrationSuccess(from);
   }

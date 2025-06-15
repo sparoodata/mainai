@@ -23,3 +23,4 @@ At minimum the following environment variable is required:
 - `REDIS_URL` *(optional)* – connection string for Redis used to store session data.
 - `SENTRY_DSN` *(optional)* – enable Sentry error monitoring.
 - `WHATSAPP_APP_SECRET` *(optional)* – used to verify incoming WhatsApp webhook signatures.
+- `WABA_ID` *(required for adding testers)* – WhatsApp Business Account ID used to automatically add new phone numbers as testers.
