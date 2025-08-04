@@ -47,7 +47,7 @@ async function jsonToHTMLTablePDF(data) {
   const html = `<!DOCTYPE html><html><body>${tableHtml}</body></html>`;
 
   const { data: pdfBuf } = await axios.post(
-    'https://quickchart.io/pdf',
+    'https://quickchart.io/html-to-pdf',
     { html },
     { responseType: 'arraybuffer' },
   );
